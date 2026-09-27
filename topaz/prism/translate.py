@@ -199,7 +199,7 @@ class Translator(nodes.Visitor):
         """The value of `return`, `break` and `next`."""
         if arguments is None:
             return ast.Nil()
-        args = self.call_args(arguments)
+        args = self.call_args(arguments, keywords=False)
         if len(args) == 1:
             return args[0]
         return ast.Array(args)
@@ -379,6 +379,8 @@ class Translator(nodes.Visitor):
         return self.hash(node.elements)
 
     def visit_keyword_hash_node(self, node):
+        # A hash without braces, e.g. in `[k: 1]`; as the last argument of
+        # a call it is keyword arguments instead (see call_args).
         return self.hash(node.elements)
 
     def hash(self, elements):
@@ -610,7 +612,7 @@ class Translator(nodes.Visitor):
             raise self.unsupported(node, "a block argument in an index")
         args = []
         if arguments is not None:
-            args = self.call_args(arguments)
+            args = self.call_args(arguments, keywords=False)
         return ast.Subscript(
             self.expr(receiver), args, self.line_at(opening_loc))
 
@@ -696,15 +698,25 @@ class Translator(nodes.Visitor):
 
     # Calls
 
-    def call_args(self, arguments):
+    def call_args(self, arguments, keywords=True):
+        """The arguments of a call. With `keywords`, a braceless hash in
+        them (`f(k: 1)`, `f(**h)`) is keyword arguments (Ruby 3.0), not an
+        ordinary hash argument."""
         assert isinstance(arguments, nodes.ArgumentsNode)
         args = []
         for arg in arguments.arguments:
+            if keywords and isinstance(arg, nodes.KeywordHashNode):
+                args.append(ast.KeywordHash(self.hash(arg.elements)))
+                continue
             if isinstance(arg, nodes.ForwardingArgumentsNode):
-                # `f(...)` (Ruby 2.7): the positional arguments (which, as
-                # keyword arguments are passed as a trailing hash, include
-                # those too); the block is added by call_block().
+                # `f(...)` (Ruby 2.7): the positional and the keyword
+                # arguments; the block is added by call_block().
+                lineno = self.line(arg)
                 args.append(ast.Splat(self.anonymous_param(arg, "*")))
+                args.append(ast.KeywordHash(ast.Send(
+                    ast.Hash([]), "merge",
+                    [ast.HashSplat(self.anonymous_param(arg, "**"), lineno)],
+                    None, lineno)))
             else:
                 args.append(self.expr(arg))
         return args
@@ -788,7 +800,11 @@ class Translator(nodes.Visitor):
             receiver = ast.Variable(safe_temp, lineno)
         args = []
         if node.arguments is not None:
-            args = self.call_args(node.arguments)
+            # Keyword arguments are not allowed in an index (Ruby 3.4).
+            takes_keywords = not (
+                name == "[]" or
+                node.has_flag(nodes.CALL_NODE_FLAGS_ATTRIBUTE_WRITE))
+            args = self.call_args(node.arguments, keywords=takes_keywords)
         if node.has_flag(nodes.CALL_NODE_FLAGS_ATTRIBUTE_WRITE):
             if safe_temp is not None:
                 raise self.unsupported(node, "&. with an assignment")
@@ -855,14 +871,12 @@ class Translator(nodes.Visitor):
                 kwrest = arg
             else:
                 args.append(arg)
-        if keywords:
+        if keywords or kwrest is not None:
             keywords_hash = ast.Hash(keywords)
             if kwrest is not None:
                 keywords_hash = ast.Send(
                     keywords_hash, "merge", [kwrest], None, lineno)
-            args.append(keywords_hash)
-        elif kwrest is not None:
-            args.append(kwrest)
+            args.append(ast.KeywordHash(keywords_hash))
         block = None
         block_node = node.block
         if block_node is not None:
@@ -1115,10 +1129,12 @@ class Translator(nodes.Visitor):
             self.symtable.declare_argument(name, self.symtable.KW_ARG)
             params.kwrest_arg = name
         elif isinstance(kwrest, nodes.ForwardingParameterNode):
-            # `def f(...)`: keyword arguments arrive as a trailing hash, so
-            # a rest and a block parameter are all `...` needs.
+            # `def f(...)` takes hidden rest, keyword rest and block
+            # parameters, which `g(...)` passes on.
             self.symtable.declare_argument("*", self.symtable.SPLAT_ARG)
             params.splat_arg = "*"
+            self.symtable.declare_argument("**", self.symtable.KW_ARG)
+            params.kwrest_arg = "**"
             self.symtable.declare_argument("&", self.symtable.BLOCK_ARG)
             params.block_arg = "&"
         elif isinstance(kwrest, nodes.NoKeywordsParameterNode):

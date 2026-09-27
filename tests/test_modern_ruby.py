@@ -468,3 +468,43 @@ class TestSetAndWarning(BaseTopazTest):
         return [seen, Warning[:experimental], Warning.categories.include?(:deprecated)]
         """)
         assert self.unwrap(space, w_res) == [["one\ntwo\n"], True, True]
+
+
+class TestKeywordArguments(BaseTopazTest):
+    """Keyword argument separation (Ruby 3.0)."""
+
+    def test_hash_argument_is_positional(self, space):
+        w_res = space.execute("""
+        def g(a, k: 1) = [a, k]
+        def any(*args) = args
+        return [g({k: 2}), g(1, k: 3), g(1, **{k: 4}), any(a: 1), any(**{})]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [{"k": 2}, 1], [1, 3], [1, 4], [{"a": 1}], []]
+
+    def test_hash_does_not_become_keywords(self, space):
+        with self.raises(space, "ArgumentError", "wrong number of arguments (given 2, expected 1)"):
+            space.execute("def g(a, k: 1) = [a, k]; g(1, {k: 2})")
+        with self.raises(space, "ArgumentError", "wrong number of arguments (given 1, expected 0)"):
+            space.execute("def h(**kw) = kw; h({a: 1})")
+
+    def test_ruby2_keywords_and_forwarding(self, space):
+        w_res = space.execute("""
+        class Target; def call(a, b: 0) = [a, b]; end
+        class Proxy
+          def initialize(t) = @t = t
+          def method_missing(name, *args, &blk) = @t.send(name, *args, &blk)
+          ruby2_keywords :method_missing
+        end
+        def g(a, k: 1) = [a, k]
+        def fwd(...) = g(...)
+        return [Proxy.new(Target.new).call(1, b: 2), fwd(5, k: 6), fwd({k: 7})]
+        """)
+        assert self.unwrap(space, w_res) == [[1, 2], [5, 6], [{"k": 7}, 1]]
+
+    def test_blocks(self, space):
+        w_res = space.execute("""
+        blk = proc { |x, k: 0| [x, k] }
+        return [blk.call(1, k: 2), blk.call({k: 3})]
+        """)
+        assert self.unwrap(space, w_res) == [[1, 2], [{"k": 3}, 0]]

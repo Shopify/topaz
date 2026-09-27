@@ -73,6 +73,10 @@ class W_CodeObject(W_BaseObject):
             block_arg_pos = cellvars.index(block_arg)
         self.block_arg_pos = block_arg_pos
 
+        # Set by Module#ruby2_keywords: keyword arguments collected by the
+        # rest parameter stay keywords when splatted into another call.
+        self.ruby2_keywords = False
+
         rvmprof.register_code(self, get_vmprof_name)
 
     def __deepcopy__(self, memo):
@@ -94,6 +98,7 @@ class W_CodeObject(W_BaseObject):
         obj.kw_defaults = self.kw_defaults
         obj.kwrest_pos = self.kwrest_pos
         obj.kwarg_names = self.kwarg_names
+        obj.ruby2_keywords = self.ruby2_keywords
         return obj
 
     def arity(self, negative_defaults=False):

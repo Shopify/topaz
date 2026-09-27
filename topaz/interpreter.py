@@ -8,6 +8,7 @@ from topaz.objects.arrayobject import W_ArrayObject
 from topaz.objects.classobject import W_ClassObject
 from topaz.objects.codeobject import W_CodeObject
 from topaz.objects.functionobject import W_FunctionObject
+from topaz.objects.hashobject import W_HashObject
 from topaz.objects.moduleobject import W_ModuleObject
 from topaz.objects.objectobject import W_Root
 from topaz.objects.procobject import W_ProcObject
@@ -348,6 +349,11 @@ class Interpreter(object):
 
     def BUILD_HASH(self, space, bytecode, frame, pc):
         frame.push(space.newhash())
+
+    def MARK_KEYWORDS(self, space, bytecode, frame, pc):
+        w_hash = frame.peek()
+        if isinstance(w_hash, W_HashObject):
+            w_hash.is_keywords = True
 
     def BUILD_RANGE(self, space, bytecode, frame, pc):
         w_end = frame.pop()

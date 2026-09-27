@@ -1163,6 +1163,17 @@ class Array(Node):
         ConstantString("expression").compile(ctx)
 
 
+class KeywordHash(Node):
+    """Keyword arguments at a call site: a hash marked as such."""
+
+    def __init__(self, value):
+        self.value = value
+
+    def compile(self, ctx):
+        self.value.compile(ctx)
+        ctx.emit(consts.MARK_KEYWORDS)
+
+
 class Hash(Node):
     def __init__(self, items):
         self.items = items

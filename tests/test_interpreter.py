@@ -1386,9 +1386,9 @@ class TestInterpreter(BaseTopazTest):
         def g(a, b, *c)
         end
         """)
-        with self.raises(space, "ArgumentError", "wrong number of arguments (0 for 1)"):
+        with self.raises(space, "ArgumentError", "wrong number of arguments (given 0, expected 1..2)"):
             space.execute("f")
-        with self.raises(space, "ArgumentError", "wrong number of arguments (0 for 2)"):
+        with self.raises(space, "ArgumentError", "wrong number of arguments (given 0, expected 2+)"):
             space.execute("g")
 
     def test_call_too_many_args(self, space):
@@ -1396,7 +1396,7 @@ class TestInterpreter(BaseTopazTest):
         def f
         end
         """)
-        with self.raises(space, "ArgumentError", "wrong number of arguments (3 for 0)"):
+        with self.raises(space, "ArgumentError", "wrong number of arguments (given 3, expected 0)"):
             space.execute("f 1, 2, 3")
 
     def test_call_too_few_args_builtin(self, space):

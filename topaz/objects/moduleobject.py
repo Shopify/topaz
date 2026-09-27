@@ -6,7 +6,7 @@ from rpython.rlib.objectmodel import specialize
 from topaz.celldict import CellDict, VersionTag
 from topaz.coerce import Coerce
 from topaz.module import ClassDef, check_frozen
-from topaz.objects.functionobject import W_FunctionObject
+from topaz.objects.functionobject import W_FunctionObject, W_UserFunction
 from topaz.objects.objectobject import W_RootObject
 from topaz.objects.procobject import W_ProcObject
 from topaz.scope import StaticScope
@@ -519,6 +519,23 @@ class W_ModuleObject(W_RootObject):
                 self.method_attr_reader(space, [w_name])
         else:
             self.method_attr_reader(space, args_w)
+
+    @classdef.method("ruby2_keywords")
+    def method_ruby2_keywords(self, space, args_w):
+        """Keyword arguments that the named methods collect in their rest
+        parameter stay keyword arguments when splatted into another call,
+        the Ruby 2 behaviour delegating methods rely on."""
+        for w_arg in args_w:
+            name = Coerce.symbol(space, w_arg)
+            w_method = self.find_method(space, name)
+            if w_method is None or isinstance(w_method, UndefMethod):
+                cls_name = space.obj_to_s(self)
+                raise space.error(space.w_NameError,
+                    "undefined method '%s' for class '%s'" % (name, cls_name)
+                )
+            if isinstance(w_method, W_UserFunction):
+                w_method.bytecode.ruby2_keywords = True
+        return space.w_nil
 
     @classdef.method("module_function")
     def method_module_function(self, space, args_w):

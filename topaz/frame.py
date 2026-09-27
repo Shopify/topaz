@@ -47,6 +47,17 @@ class Frame(BaseFrame):
         self.cells[pos].set(space, self, pos, w_value)
 
     def handle_block_args(self, space, bytecode, args_w, block):
+        # Keep keyword arguments out of the auto-splatting and trimming of
+        # the positional ones below.
+        w_keywords = None
+        if args_w and (len(bytecode.kwarg_names) > 0 or
+                       bytecode.kwrest_pos != -1):
+            w_last = args_w[-1]
+            if isinstance(w_last, W_HashObject) and w_last.is_keywords:
+                w_keywords = w_last
+                end = len(args_w) - 1
+                assert end >= 0
+                args_w = args_w[:end]
         if (len(args_w) == 1 and (
                 len(bytecode.arg_pos) >= 2 or (
                     len(bytecode.arg_pos) > 0 and
@@ -65,6 +76,8 @@ class Frame(BaseFrame):
         if bytecode.splat_arg_pos == -1:
             if len(args_w) > len(bytecode.arg_pos):
                 del args_w[len(bytecode.arg_pos):]
+        if w_keywords is not None:
+            args_w.append(w_keywords)
         return self.handle_args(space, bytecode, args_w, block)
 
     @jit.unroll_safe
@@ -72,20 +85,24 @@ class Frame(BaseFrame):
         from topaz.interpreter import Interpreter
 
         keywords_hash = None
-        if len(bytecode.kwarg_names) > 0 or bytecode.kwrest_pos != -1:
-            # we only take the hash if we have more than enough arguments
-            min_args = max(len(bytecode.arg_pos) - len(bytecode.defaults), 0)
-            if len(args_w) > min_args:
-                w_obj = args_w[-1]
-                # Only a hash, or something that converts to one, can hold
-                # keyword arguments.
-                if (not space.is_kind_of(w_obj, space.w_hash) and
-                        space.respond_to(w_obj, "to_hash")):
-                    w_obj = space.convert_type(
-                        w_obj, space.w_hash, "to_hash", reraise_error=True)
-                if isinstance(w_obj, W_HashObject):
-                    keywords_hash = space.send(w_obj, "clone")
+        if args_w:
+            w_last = args_w[-1]
+            if isinstance(w_last, W_HashObject) and w_last.is_keywords:
+                # Keyword arguments (Ruby 3.0 semantics: an ordinary hash
+                # argument never binds to keyword parameters).
+                end = len(args_w) - 1
+                assert end >= 0
+                if len(bytecode.kwarg_names) > 0 or bytecode.kwrest_pos != -1:
+                    keywords_hash = space.send(w_last, "clone")
                     assert isinstance(keywords_hash, W_HashObject)
+                    args_w = args_w[:end]
+                elif w_last.size() == 0:
+                    # `f(**{})` passes nothing.
+                    args_w = args_w[:end]
+                elif not bytecode.ruby2_keywords:
+                    # A method without keyword parameters gets them as a
+                    # positional hash.
+                    w_last.is_keywords = False
 
         if (len(bytecode.kw_defaults) < len(bytecode.kwarg_names) and
                 not keywords_hash):
@@ -94,16 +111,22 @@ class Frame(BaseFrame):
                 "missing keywords: %s" % ",".join(bytecode.kwarg_names))
 
         pre = 0
-        post = len(args_w) if keywords_hash is None else len(args_w) - 1
+        post = len(args_w)
 
         if (post < (len(bytecode.arg_pos) - len(bytecode.defaults)) or
                 (bytecode.splat_arg_pos == -1 and
                     post > len(bytecode.arg_pos))):
+            required = len(bytecode.arg_pos) - len(bytecode.defaults)
+            if bytecode.splat_arg_pos != -1:
+                expected = "%d+" % required
+            elif bytecode.defaults:
+                expected = "%d..%d" % (required, len(bytecode.arg_pos))
+            else:
+                expected = "%d" % required
             raise space.error(
                 space.w_ArgumentError,
-                "wrong number of arguments (%d for %d)" % (
-                    len(args_w),
-                    len(bytecode.arg_pos) - len(bytecode.defaults)))
+                "wrong number of arguments (given %d, expected %s)" % (
+                    len(args_w), expected))
 
         if bytecode.default_arg_begin != -1:
             len_pre_args = bytecode.default_arg_begin

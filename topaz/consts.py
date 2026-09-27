@@ -43,6 +43,8 @@ BYTECODES = [
     ("BUILD_ARRAY_SPLAT", 1, ARRAY_EFFECT),
     ("BUILD_STRING", 1, ARRAY_EFFECT),
     ("BUILD_HASH", 0, +1),
+    # Marks the hash on top of the stack as keyword arguments (Ruby 3.0).
+    ("MARK_KEYWORDS", 0, 0),
     ("BUILD_RANGE", 0, -1),
     ("BUILD_RANGE_EXCLUSIVE", 0, -1),
     ("BUILD_FUNCTION", 0, -1),
