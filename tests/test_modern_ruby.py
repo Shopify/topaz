@@ -264,3 +264,69 @@ class TestInspect(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == (
             '{a: 1, "b" => 2, 1 => 3, "+": 4, a?: 5, nil => 6}')
+
+
+class TestPatternMatching(BaseTopazTest):
+    """case/in, `=>` and `in` (Ruby 2.7/3.0)."""
+
+    def test_case_in(self, space):
+        w_res = space.execute("""
+        def m(v)
+          case v
+          in Integer | Float => n if n > 100 then [:big, n]
+          in Integer => n then [:int, n]
+          in [] then :empty
+          in [1, *rest] then [:one, rest]
+          in [Integer => a, String => b] then [:pair, a, b]
+          in [*, :needle, *post] then [:found, post]
+          in {name: String => name, age: Integer => age} then [:person, name, age]
+          in {type: :point, **rest} then [:point, rest]
+          in {} then :empty_hash
+          in nil then :nil
+          in String if v.empty? then :empty_string
+          in /\\A\\d+\\z/ then :digits
+          in ^$pinned then :pinned
+          else [:other, v]
+          end
+        end
+        $pinned = "pin"
+        return [150, 7, [], [1, 2, 3], [5, "x"], [0, :needle, 9, 8],
+                {name: "Al", age: 3}, {type: :point, x: 1}, {}, nil, "",
+                "123", "pin", :sym].map { |v| m(v) }
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["big", 150], ["int", 7], "empty", ["one", [2, 3]],
+            ["pair", 5, "x"], ["found", [9, 8]], ["person", "Al", 3],
+            ["point", {"x": 1}], "empty_hash", "nil", "empty_string",
+            "digits", "pinned", ["other", "sym"],
+        ]
+
+    def test_rightward_and_in(self, space):
+        w_res = space.execute("""
+        [1, [2, 3]] => [a, [b, c]]
+        return [a, b, c, (5 in Integer), ("s" in Integer)]
+        """)
+        assert self.unwrap(space, w_res) == [1, 2, 3, True, False]
+
+    def test_no_match(self, space):
+        with self.raises(space, "NoMatchingPatternError", "1"):
+            space.execute("1 => String")
+        with self.raises(space, "NoMatchingPatternError", "5"):
+            space.execute("case 5; in String then 1; end")
+
+    def test_deconstruct(self, space):
+        w_res = space.execute("""
+        Point = Struct.new(:x, :y)
+        case Point.new(1, 2)
+        in [x, y] then as_array = [x, y]
+        end
+        case Point.new(3, 4)
+        in {x:, y:} then as_hash = [x, y]
+        end
+        exact = case {a: 1, b: 2}
+                in {a: 1, **nil} then :exact
+                in {a: 1} then :subset
+                end
+        return [as_array, as_hash, exact]
+        """)
+        assert self.unwrap(space, w_res) == [[1, 2], [3, 4], "subset"]

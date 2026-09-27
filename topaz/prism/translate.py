@@ -1223,6 +1223,324 @@ class Translator(nodes.Visitor):
         self.save_and_pop_scope(result)
         return result
 
+    # Pattern matching (Ruby 2.7/3.0)
+    #
+    # A pattern becomes an expression that is truthy when the value in a
+    # hidden local variable matches, binding the pattern's variables as a
+    # side effect: `in [Integer => a, *]` is roughly
+    # `v.respond_to?(:deconstruct) && (d = v.deconstruct; true) &&
+    #  Array === d && d.length >= 1 && (e = d[0]; true) &&
+    #  Integer === e && (a = e; true)`.
+
+    def and_all(tests):
+        result = tests[-1]
+        for i in range(len(tests) - 2, -1, -1):
+            result = ast.And(tests[i], result)
+        return result
+    and_all = staticmethod(and_all)
+
+    def set_and_true(self, name, value, lineno):
+        """`(name = value; true)`"""
+        return ast.Block([
+            ast.Statement(ast.Assignment(ast.Variable(name, lineno), value)),
+            ast.Statement(ast.ConstantBool(True)),
+        ])
+
+    def send(self, receiver, name, args, lineno):
+        return ast.Send(receiver, name, args, None, lineno)
+
+    def constant(self, name, lineno):
+        return ast.LookupConstant(None, name, lineno)
+
+    def pattern_test(self, pattern, value_name):
+        """An expression that is truthy if the value in the local
+        `value_name` matches `pattern`."""
+        lineno = self.line(pattern)
+        value = ast.Variable(value_name, lineno)
+        if isinstance(pattern, nodes.LocalVariableTargetNode):
+            self.symtable.declare_write(pattern.name)
+            return self.set_and_true(pattern.name, value, lineno)
+        elif isinstance(pattern, nodes.PinnedVariableNode):
+            return self.send(self.expr(pattern.variable), "===", [value], lineno)
+        elif isinstance(pattern, nodes.PinnedExpressionNode):
+            return self.send(
+                self.expr(pattern.expression), "===", [value], lineno)
+        elif isinstance(pattern, nodes.AlternationPatternNode):
+            return ast.Or(
+                self.pattern_test(pattern.left, value_name),
+                self.pattern_test(pattern.right, value_name))
+        elif isinstance(pattern, nodes.CapturePatternNode):
+            target = pattern.target
+            assert isinstance(target, nodes.LocalVariableTargetNode)
+            test = self.pattern_test(pattern.value, value_name)
+            self.symtable.declare_write(target.name)
+            return ast.And(test, self.set_and_true(target.name, value, lineno))
+        elif isinstance(pattern, nodes.ArrayPatternNode):
+            return self.array_pattern_test(pattern, value_name)
+        elif isinstance(pattern, nodes.FindPatternNode):
+            return self.find_pattern_test(pattern, value_name)
+        elif isinstance(pattern, nodes.HashPatternNode):
+            return self.hash_pattern_test(pattern, value_name)
+        elif isinstance(pattern, nodes.ImplicitNode):
+            return self.pattern_test(pattern.value, value_name)
+        # A value pattern: a literal, constant, range, regexp, lambda, ...
+        return self.send(self.expr(pattern), "===", [value], lineno)
+
+    def element_test(self, pattern, value, lineno):
+        """Match `pattern` against the value of the expression `value`."""
+        if isinstance(pattern, nodes.LocalVariableTargetNode):
+            self.symtable.declare_write(pattern.name)
+            return self.set_and_true(pattern.name, value, lineno)
+        temp = self.new_temp(lineno)
+        return ast.And(
+            self.set_and_true(temp, value, lineno),
+            self.pattern_test(pattern, temp))
+
+    def deconstruct_tests(self, constant, value_name, lineno):
+        """The tests an array or find pattern starts with; returns them and
+        the local holding the deconstructed array."""
+        value = ast.Variable(value_name, lineno)
+        tests = []
+        if constant is not None:
+            tests.append(self.send(self.expr(constant), "===", [value], lineno))
+        tests.append(self.send(
+            value, "respond_to?", [ast.ConstantSymbol("deconstruct")], lineno))
+        array = self.new_temp(lineno)
+        tests.append(self.set_and_true(
+            array, self.send(value, "deconstruct", [], lineno), lineno))
+        tests.append(self.send(
+            self.constant("Array", lineno), "===",
+            [ast.Variable(array, lineno)], lineno))
+        return tests, array
+
+    def array_pattern_test(self, pattern, value_name):
+        lineno = self.line(pattern)
+        tests, array = self.deconstruct_tests(
+            pattern.constant, value_name, lineno)
+        nrequired = len(pattern.requireds)
+        npost = len(pattern.posts)
+        length = self.send(ast.Variable(array, lineno), "length", [], lineno)
+        rest = pattern.rest
+        if rest is None:
+            tests.append(self.send(
+                length, "==", [ast.ConstantInt(nrequired + npost)], lineno))
+        else:
+            tests.append(self.send(
+                length, ">=", [ast.ConstantInt(nrequired + npost)], lineno))
+        for i in range(nrequired):
+            tests.append(self.element_test(
+                pattern.requireds[i],
+                self.send(ast.Variable(array, lineno), "[]",
+                          [ast.ConstantInt(i)], lineno),
+                lineno))
+        if isinstance(rest, nodes.SplatNode) and rest.expression is not None:
+            rest_length = self.send(
+                self.send(ast.Variable(array, lineno), "length", [], lineno),
+                "-", [ast.ConstantInt(nrequired + npost)], lineno)
+            tests.append(self.element_test(
+                rest.expression,
+                self.send(ast.Variable(array, lineno), "[]",
+                          [ast.ConstantInt(nrequired), rest_length], lineno),
+                lineno))
+        for j in range(npost):
+            index = self.send(
+                self.send(ast.Variable(array, lineno), "length", [], lineno),
+                "-", [ast.ConstantInt(npost - j)], lineno)
+            tests.append(self.element_test(
+                pattern.posts[j],
+                self.send(ast.Variable(array, lineno), "[]", [index], lineno),
+                lineno))
+        return self.and_all(tests)
+
+    def find_pattern_test(self, pattern, value_name):
+        """`[*pre, a, b, *post]` tries every position in the array."""
+        lineno = self.line(pattern)
+        tests, array = self.deconstruct_tests(
+            pattern.constant, value_name, lineno)
+        n = len(pattern.requireds)
+        found = self.new_temp(lineno)
+        index = self.new_temp(lineno)
+
+        def arr():
+            return ast.Variable(array, lineno)
+
+        def idx():
+            return ast.Variable(index, lineno)
+
+        element_tests = []
+        for i in range(n):
+            element_tests.append(self.element_test(
+                pattern.requireds[i],
+                self.send(arr(), "[]", [
+                    self.send(idx(), "+", [ast.ConstantInt(i)], lineno)
+                ], lineno),
+                lineno))
+        last_start = self.send(
+            self.send(arr(), "length", [], lineno), "-",
+            [ast.ConstantInt(n)], lineno)
+        loop = ast.While(
+            ast.And(
+                self.send(ast.Variable(found, lineno), "!", [], lineno),
+                self.send(idx(), "<=", [last_start], lineno)),
+            ast.Block([ast.Statement(ast.If(
+                self.and_all(element_tests),
+                ast.Block([ast.Statement(ast.Assignment(
+                    ast.Variable(found, lineno), ast.ConstantBool(True)))]),
+                ast.Block([ast.Statement(ast.Assignment(
+                    idx(), self.send(idx(), "+", [ast.ConstantInt(1)], lineno)))]),
+            ))])
+        )
+        tests.append(ast.Block([
+            ast.Statement(ast.Assignment(
+                ast.Variable(found, lineno), ast.ConstantBool(False))),
+            ast.Statement(ast.Assignment(idx(), ast.ConstantInt(0))),
+            ast.Statement(loop),
+            ast.Statement(ast.Variable(found, lineno)),
+        ]))
+        left = pattern.left
+        if isinstance(left, nodes.SplatNode) and left.expression is not None:
+            tests.append(self.element_test(
+                left.expression,
+                self.send(arr(), "[]", [ast.ConstantInt(0), idx()], lineno),
+                lineno))
+        right = pattern.right
+        if isinstance(right, nodes.SplatNode) and right.expression is not None:
+            after = self.send(idx(), "+", [ast.ConstantInt(n)], lineno)
+            tests.append(self.element_test(
+                right.expression,
+                self.send(arr(), "[]", [
+                    ast.Range(after, ast.Nil(), False)
+                ], lineno),
+                lineno))
+        return self.and_all(tests)
+
+    def hash_pattern_test(self, pattern, value_name):
+        lineno = self.line(pattern)
+        value = ast.Variable(value_name, lineno)
+        tests = []
+        if pattern.constant is not None:
+            tests.append(self.send(
+                self.expr(pattern.constant), "===", [value], lineno))
+        tests.append(self.send(
+            value, "respond_to?", [ast.ConstantSymbol("deconstruct_keys")],
+            lineno))
+        keys = []
+        for element in pattern.elements:
+            assert isinstance(element, nodes.AssocNode)
+            key = element.key
+            if not isinstance(key, nodes.SymbolNode):
+                raise self.unsupported(element, "a non-symbol key in a hash pattern")
+            keys.append(ast.ConstantSymbol(key.unescaped))
+        rest = pattern.rest
+        if isinstance(rest, nodes.AssocSplatNode) and rest.value is not None:
+            # With `**rest` every key is wanted.
+            wanted = ast.Nil()
+        else:
+            wanted = ast.Array(keys)
+        hash = self.new_temp(lineno)
+
+        def h():
+            return ast.Variable(hash, lineno)
+
+        tests.append(self.set_and_true(
+            hash, self.send(value, "deconstruct_keys", [wanted], lineno),
+            lineno))
+        tests.append(self.send(
+            self.constant("Hash", lineno), "===", [h()], lineno))
+        for element in pattern.elements:
+            assert isinstance(element, nodes.AssocNode)
+            key = element.key
+            assert isinstance(key, nodes.SymbolNode)
+            name = key.unescaped
+            tests.append(self.send(
+                h(), "key?", [ast.ConstantSymbol(name)], lineno))
+            tests.append(self.element_test(
+                element.value,
+                self.send(h(), "[]", [ast.ConstantSymbol(name)], lineno),
+                lineno))
+        remaining = self.send(h(), "except", list(keys), lineno)
+        if isinstance(rest, nodes.AssocSplatNode):
+            if rest.value is not None:
+                tests.append(self.element_test(rest.value, remaining, lineno))
+        elif isinstance(rest, nodes.NoKeywordsParameterNode):
+            # `**nil`: no other keys allowed.
+            tests.append(self.send(remaining, "empty?", [], lineno))
+        elif not pattern.elements:
+            # `in {}` only matches an empty hash.
+            tests.append(self.send(h(), "empty?", [], lineno))
+        return self.and_all(tests)
+
+    def in_clause_test(self, pattern, value_name):
+        """The test for one `in` clause, including its guard."""
+        if isinstance(pattern, nodes.IfNode) or isinstance(pattern, nodes.UnlessNode):
+            if isinstance(pattern, nodes.IfNode):
+                guard = pattern.predicate
+                statements = pattern.statements
+            else:
+                assert isinstance(pattern, nodes.UnlessNode)
+                guard = pattern.predicate
+                statements = pattern.statements
+            assert isinstance(statements, nodes.StatementsNode)
+            test = self.pattern_test(statements.body[0], value_name)
+            guard_test = self.expr(guard)
+            if isinstance(pattern, nodes.UnlessNode):
+                guard_test = self.send(guard_test, "!", [], self.line(pattern))
+            return ast.And(test, guard_test)
+        return self.pattern_test(pattern, value_name)
+
+    def no_match_error(self, value_name, lineno):
+        return self.send(ast.Self(lineno), "raise", [
+            self.constant("NoMatchingPatternError", lineno),
+            self.send(ast.Variable(value_name, lineno), "inspect", [], lineno),
+        ], lineno)
+
+    def visit_case_match_node(self, node):
+        lineno = self.line(node)
+        value_name = self.new_temp(lineno)
+        else_clause = node.else_clause
+        if else_clause is not None:
+            assert isinstance(else_clause, nodes.ElseNode)
+            result = self.block(else_clause.statements)
+        else:
+            result = self.no_match_error(value_name, lineno)
+        tests = []
+        bodies = []
+        for condition in node.conditions:
+            assert isinstance(condition, nodes.InNode)
+            tests.append(self.in_clause_test(condition.pattern, value_name))
+            bodies.append(self.block(condition.statements))
+        for i in range(len(tests) - 1, -1, -1):
+            result = ast.If(tests[i], bodies[i], result)
+        return ast.Block([
+            ast.Statement(ast.Assignment(
+                ast.Variable(value_name, lineno), self.expr(node.predicate))),
+            self.as_statement(result),
+        ])
+
+    def visit_match_predicate_node(self, node):
+        # `value in pattern`
+        lineno = self.line(node)
+        value_name = self.new_temp(lineno)
+        return ast.Block([
+            ast.Statement(ast.Assignment(
+                ast.Variable(value_name, lineno), self.expr(node.value))),
+            ast.Statement(ast.If(
+                self.pattern_test(node.pattern, value_name),
+                ast.ConstantBool(True), ast.ConstantBool(False))),
+        ])
+
+    def visit_match_required_node(self, node):
+        # `value => pattern`
+        lineno = self.line(node)
+        value_name = self.new_temp(lineno)
+        return ast.Block([
+            ast.Statement(ast.Assignment(
+                ast.Variable(value_name, lineno), self.expr(node.value))),
+            ast.Statement(ast.If(
+                self.pattern_test(node.pattern, value_name),
+                ast.Nil(), self.no_match_error(value_name, lineno))),
+        ])
+
     # Not (yet) supported, but with a better message than the default.
 
     def visit_redo_node(self, node):

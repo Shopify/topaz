@@ -35,6 +35,7 @@ load_bootstrap.call("top_self.rb")
 load_bootstrap.call("method.rb")
 load_bootstrap.call("rational.rb")
 load_bootstrap.call("file_test.rb")
+load_bootstrap.call("pattern_matching.rb")
 
 # ffi
 load_bootstrap.call("ffitopaz/pointer.rb")
