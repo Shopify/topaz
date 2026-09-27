@@ -97,7 +97,7 @@ class Struct
         raise NameError.new("no member '#{var}' in struct")
       end
     else
-      var = Topaz.convert_type(var, Fixnum, :to_int)
+      var = Topaz.convert_type(var, Topaz::Fixnum, :to_int)
       a_len = self.class::STRUCT_ATTRS.length
       if var > a_len - 1
         raise IndexError.new("offset #{var} too large for struct(size:#{a_len})")
@@ -118,7 +118,7 @@ class Struct
         raise NameError, "no member '#{var}' in struct"
       end
     else
-      var = Topaz.convert_type(var, Fixnum, :to_int)
+      var = Topaz.convert_type(var, Topaz::Fixnum, :to_int)
       a_len = self.class::STRUCT_ATTRS.length
       if var > a_len - 1
         raise IndexError, "offset #{var} too large for struct(size:#{a_len})"

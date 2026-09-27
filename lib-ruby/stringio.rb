@@ -591,7 +591,7 @@ class StringIO
 
     return unless bytes
 
-    if bytes.kind_of? Fixnum
+    if bytes.kind_of? Integer
       bytes = "" << bytes
     else
       bytes = StringValue(bytes)
@@ -677,7 +677,7 @@ class StringIO
 
   def getline(arg_error, sep, limit)
     if limit != Undefined
-      limit = Rubinius::Type.coerce_to limit, Fixnum, :to_int if limit
+      limit = Rubinius::Type.coerce_to limit, Integer, :to_int if limit
       sep = Rubinius::Type.coerce_to sep, String, :to_str if sep
     else
       limit = nil
@@ -685,7 +685,7 @@ class StringIO
       unless sep == $/ or sep.nil?
         osep = sep
         sep = Rubinius::Type.check_convert_type sep, String, :to_str
-        limit = Rubinius::Type.coerce_to osep, Fixnum, :to_int unless sep
+        limit = Rubinius::Type.coerce_to osep, Integer, :to_int unless sep
       end
     end
 

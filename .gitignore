@@ -3,3 +3,5 @@ _build/
 bin/topaz
 bin/topaz.exe
 tests/modules/ffi/build/
+.cache/
+__pycache__/

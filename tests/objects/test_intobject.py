@@ -8,6 +8,47 @@ from ..base import BaseTopazTest
 
 
 class TestFixnumObject(BaseTopazTest):
+    def test_class_is_integer(self, space):
+        w_res = space.execute("""
+        return [1.class, 1.instance_of?(Integer), 1.class.name,
+                1.is_a?(Integer), Integer === 1]
+        """)
+        assert self.unwrap(space, w_res) == [
+            space.w_integer, True, "Integer", True, True
+        ]
+
+    def test_integer_owns_builtin_methods(self, space):
+        w_res = space.execute("""
+        return [Integer.method_defined?(:+), Integer.instance_method(:+).owner,
+                Integer.instance_methods(false).include?(:**)]
+        """)
+        assert self.unwrap(space, w_res) == [True, space.w_integer, True]
+
+    def test_monkeypatch_integer_builtin(self, space):
+        w_res = space.execute("""
+        class Integer
+          alias_method :orig_plus, :+
+          def +(other)
+            orig_plus(other).orig_plus(1)
+          end
+        end
+        small = 1 + 1
+        big = ((2 ** 70) + 1 - 2 ** 70) == 2
+        class Integer
+          remove_method :+
+        end
+        begin
+          1 + 1
+        rescue NoMethodError
+          removed = true
+        end
+        class Integer
+          alias_method :+, :orig_plus
+        end
+        return [small, big, removed, 1 + 1]
+        """)
+        assert self.unwrap(space, w_res) == [3, True, True, 2]
+
     def test_addition(self, space):
         w_res = space.execute("return 1 + 2")
         assert space.int_w(w_res) == 3
@@ -142,7 +183,7 @@ class TestFixnumObject(BaseTopazTest):
         assert space.execute("return 1 <= 1.1") is space.w_true
         assert space.execute("return 1 <= 0.9") is space.w_false
         assert space.execute("return 1 <= '1.1'") is space.w_true
-        with self.raises(space, "ArgumentError", "comparison of Fixnum with String failed"):
+        with self.raises(space, "ArgumentError", "comparison of Integer with String failed"):
             space.execute("1 <= 'a'")
 
     def test_greater(self, space):
@@ -219,7 +260,7 @@ class TestFixnumObject(BaseTopazTest):
 
     def test_ivar(self, space):
         w_res = space.execute("""
-        class Fixnum
+        class Integer
           def set; @foo = -1; end
           def get; @foo; end
         end
@@ -288,7 +329,7 @@ class TestFixnumObject(BaseTopazTest):
         assert self.unwrap(space, w_res) == 2.0
         w_res = space.execute("return 4 ** -0.5")
         assert self.unwrap(space, w_res) == 0.5
-        with self.raises(space, "TypeError", "String can't be coerced into Fixnum"):
+        with self.raises(space, "TypeError", "String can't be coerced into Integer"):
             space.execute("2 ** 'hallo'")
 
     def test_step(self, space):

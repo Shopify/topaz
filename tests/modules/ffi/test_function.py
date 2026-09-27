@@ -47,7 +47,7 @@ class TestFunction__new(BaseFFITest):
         """ % libm))
         with self.raises(
                 space, "TypeError",
-                "can't convert Fixnum into FFI::DynamicLibrary::Symbol"):
+                "can't convert Integer into FFI::DynamicLibrary::Symbol"):
             space.execute(typeformat("""
             FFI::Function.new({void}, [{uint8}], 500)"""))
 

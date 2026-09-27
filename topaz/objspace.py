@@ -58,11 +58,12 @@ from topaz.objects.fileobject import W_FileObject
 from topaz.objects.floatobject import W_FloatObject
 from topaz.objects.functionobject import W_UserFunction
 from topaz.objects.hashobject import W_HashObject, W_HashIterator
+from topaz.objects.integerdispatch import W_IntegerDispatchFunction
 from topaz.objects.integerobject import W_IntegerObject
 from topaz.objects.intobject import W_FixnumObject
 from topaz.objects.ioobject import W_IOObject
 from topaz.objects.methodobject import W_MethodObject, W_UnboundMethodObject
-from topaz.objects.moduleobject import W_ModuleObject
+from topaz.objects.moduleobject import UndefMethod, W_ModuleObject
 from topaz.objects.nilobject import W_NilObject
 from topaz.objects.numericobject import W_NumericObject
 from topaz.objects.objectobject import W_Object, W_BaseObject, W_Root
@@ -124,6 +125,9 @@ class ObjectSpace(object):
         self.w_float = self.getclassfor(W_FloatObject)
         self.w_bignum = self.getclassfor(W_BignumObject)
         self.w_integer = self.getclassfor(W_IntegerObject)
+        # Ruby >= 2.4 has only Integer; the fixnum/bignum classes are hidden.
+        self.w_fixnum.is_hidden = True
+        self.w_bignum.is_hidden = True
         self.w_module = self.getclassfor(W_ModuleObject)
         self.w_string = self.getclassfor(W_StringObject)
         self.w_regexp = self.getclassfor(W_RegexpObject)
@@ -160,7 +164,7 @@ class ObjectSpace(object):
 
         for w_cls in [
             self.w_basicobject, self.w_object, self.w_array, self.w_proc,
-            self.w_numeric, self.w_fixnum, self.w_bignum, self.w_float,
+            self.w_numeric, self.w_float,
             self.w_string, self.w_symbol, self.w_class, self.w_module,
             self.w_hash, self.w_regexp, self.w_method, self.w_unbound_method,
             self.w_io, self.w_binding,
@@ -219,6 +223,11 @@ class ObjectSpace(object):
                 self.str_w(self.send(w_cls, "name")),
                 w_cls
             )
+        # The Fixnum and Bignum constants are gone since Ruby 3.2; the kernel
+        # still needs to name the machine-word class to ask for C-long sized
+        # arguments.
+        self.set_const(self.w_topaz, "Fixnum", self.w_fixnum)
+        self.set_const(self.w_topaz, "Bignum", self.w_bignum)
 
         self.set_const(self.w_basicobject, "BasicObject", self.w_basicobject)
 
@@ -283,6 +292,7 @@ class ObjectSpace(object):
                 break
         self.send(self.w_load_path, "unshift", [self.newstr_fromstr(lib_path)])
         self.load_kernel(kernel_path)
+        self.hide_integer_subclasses()
 
         self.set_const(
             self.w_object,
@@ -319,6 +329,36 @@ class ObjectSpace(object):
             "load",
             [self.newstr_fromstr(os.path.join(kernel_path, "bootstrap.rb"))]
         )
+
+    def hide_integer_subclasses(self):
+        """Make Integer own the methods of its hidden fixnum and bignum
+        classes; see topaz/objects/integerdispatch.py."""
+        w_integer = self.w_integer
+        names = {}
+        for w_sub in [self.w_fixnum, self.w_bignum]:
+            for name in w_sub.methods_w:
+                names[name] = None
+        for name in names:
+            if name in w_integer.methods_w:
+                continue
+            w_fixnum_method = self.w_fixnum.methods_w.get(name, None)
+            if isinstance(w_fixnum_method, UndefMethod):
+                w_fixnum_method = None
+            w_bignum_method = self.w_bignum.methods_w.get(name, None)
+            if isinstance(w_bignum_method, UndefMethod):
+                w_bignum_method = None
+            if w_fixnum_method is None and w_bignum_method is None:
+                continue
+            if w_fixnum_method is not None:
+                visibility = w_fixnum_method.visibility
+            else:
+                visibility = w_bignum_method.visibility
+            w_integer.methods_w[name] = W_IntegerDispatchFunction(
+                name, w_integer, w_fixnum_method, w_bignum_method,
+                visibility=visibility
+            )
+        w_integer.mutated()
+        w_integer.hidden_subclasses = [self.w_fixnum, self.w_bignum]
 
     @specialize.memo()
     def fromcache(self, key):
@@ -569,7 +609,7 @@ class ObjectSpace(object):
     @jit.unroll_safe
     def getnonsingletonclass(self, w_receiver):
         cls = self.getclass(w_receiver)
-        while cls.is_singleton:
+        while cls.is_singleton or cls.is_hidden:
             cls = cls.superclass
         return cls
 

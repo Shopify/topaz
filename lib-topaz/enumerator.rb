@@ -32,7 +32,7 @@ class Enumerator
 
   def with_index(offset = nil, &block)
     return self.enum_for(:with_index, offset) unless block
-    offset = offset ? Topaz.convert_type(offset, Fixnum, :to_int) : 0
+    offset = offset ? Topaz.convert_type(offset, Topaz::Fixnum, :to_int) : 0
 
     i = offset
     self.each do |*e|

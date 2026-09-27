@@ -1,4 +1,4 @@
-class Fixnum < Integer
+class Topaz::Fixnum < Integer
   def next
     succ
   end

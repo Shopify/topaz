@@ -27,7 +27,7 @@ class IO
   end
 
   def each_line(sep = $/, limit = nil)
-    if sep.is_a?(Fixnum) && limit.nil?
+    if sep.is_a?(Integer) && limit.nil?
       limit = sep
       sep = $/
     end
@@ -82,7 +82,7 @@ class IO
     if sep.nil?
       return read
     end
-    if sep.is_a?(Fixnum) && limit.nil?
+    if sep.is_a?(Integer) && limit.nil?
       limit = sep
       sep = $/
     end

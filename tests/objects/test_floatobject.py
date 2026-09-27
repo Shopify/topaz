@@ -138,7 +138,7 @@ class TestFloatObject(BaseTopazTest):
         assert self.unwrap(space, w_res) == 0.25
         w_res = space.execute("return (-2.0) ** -3")
         assert self.unwrap(space, w_res) == -0.125
-        with self.raises(space, "TypeError", "String can't be coerced into Bignum"):
+        with self.raises(space, "TypeError", "String can't be coerced into Integer"):
             space.execute("18446744073709551628 ** 'hallo'")
 
     def test_pow_with_nan(self, space):

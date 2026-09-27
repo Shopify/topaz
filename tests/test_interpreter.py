@@ -101,7 +101,7 @@ class TestInterpreter(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [1, "hello", [2, 3], 4]
 
-        with self.raises(space, "NoMethodError", "undefined method `each' for Fixnum"):
+        with self.raises(space, "NoMethodError", "undefined method `each' for Integer"):
             space.execute("for i in 1; end")
 
         w_res = space.execute("""
@@ -1151,7 +1151,7 @@ class TestInterpreter(BaseTopazTest):
     def test_defined_unscoped_constant(self, space):
         w_res = space.execute("return defined? ::Foobar")
         assert w_res is space.w_nil
-        w_res = space.execute("return defined? ::Fixnum")
+        w_res = space.execute("return defined? ::Integer")
         assert self.unwrap(space, w_res) == "constant"
 
     def test_match(self, space):
@@ -1411,7 +1411,7 @@ class TestInterpreter(BaseTopazTest):
         w_res = space.execute("return 18446744073709551628.to_s")
         assert space.str_w(w_res) == "18446744073709551628"
         w_res = space.execute("return 18446744073709551628.class")
-        assert w_res is space.w_bignum
+        assert w_res is space.w_integer
 
     def test_lambda(self, space):
         w_res = space.execute("return ->{ 1 + 1 }.call")

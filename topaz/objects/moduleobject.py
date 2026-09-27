@@ -154,12 +154,17 @@ class W_ModuleObject(W_RootObject):
     def mutated(self):
         self.version = VersionTag()
 
+    def shadow_hidden_subclasses(self, name):
+        """Called whenever the method `name` is (re)defined or removed here.
+        Overridden by classes with hidden implementation subclasses."""
+
     def define_method(self, space, name, method):
         if (name == "initialize" or name == "initialize_copy" or
             method.visibility == W_FunctionObject.MODULE_FUNCTION):
             method.update_visibility(W_FunctionObject.PRIVATE)
         self.mutated()
         self.methods_w[name] = method
+        self.shadow_hidden_subclasses(name)
         if not space.bootstrap:
             if isinstance(method, UndefMethod):
                 self.method_undefined(space, space.newsymbol(name))
@@ -813,6 +818,7 @@ class W_ModuleObject(W_RootObject):
             )
         del self.methods_w[name]
         self.mutated()
+        self.shadow_hidden_subclasses(name)
         self.method_removed(space, space.newsymbol(name))
         return self
 

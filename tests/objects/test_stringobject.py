@@ -180,7 +180,7 @@ class TestStringObject(BaseTopazTest):
         assert space.int_w(w_res) == 1
         w_res = space.execute("return 'aba'.index /xyz/")
         assert space.int_w(w_res) == -1
-        with self.raises(space, "TypeError", "type mismatch: Fixnum given"):
+        with self.raises(space, "TypeError", "type mismatch: Integer given"):
             space.execute("'a b c'.index 12")
 
     def test_rindex(self, space):
@@ -206,7 +206,7 @@ class TestStringObject(BaseTopazTest):
         assert w_res is space.w_nil
         w_res = space.execute('"hello".rindex("x")')
         assert w_res is space.w_nil
-        with self.raises(space, "TypeError", "type mismatch: Fixnum given"):
+        with self.raises(space, "TypeError", "type mismatch: Integer given"):
             space.execute('"hello".rindex(123)')
 
     def test_split(self, space):
@@ -218,7 +218,7 @@ class TestStringObject(BaseTopazTest):
         assert self.unwrap(space, w_res) == ["a", "b-c"]
         w_res = space.execute("return 'a b c'.split(' ', -1)")
         assert self.unwrap(space, w_res) == ["a", "b", "c"]
-        with self.raises(space, "TypeError", "wrong argument type Fixnum (expected Regexp)"):
+        with self.raises(space, "TypeError", "wrong argument type Integer (expected Regexp)"):
             space.execute("'a b c'.split(12)")
 
     def test_split_regexp(self, space):

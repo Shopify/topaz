@@ -8,7 +8,7 @@ from topaz.objects.objectobject import W_Object
 
 
 class W_ClassObject(W_ModuleObject):
-    _immutable_fields_ = ["superclass?", "is_singleton"]
+    _immutable_fields_ = ["superclass?", "is_singleton", "is_hidden?"]
 
     classdef = ClassDef("Class", W_ModuleObject.classdef)
 
@@ -16,6 +16,13 @@ class W_ClassObject(W_ModuleObject):
         W_ModuleObject.__init__(self, space, name)
         self.superclass = superclass
         self.is_singleton = is_singleton
+        # Hidden classes are implementation details, like the fixnum and
+        # bignum representations of Integer: Kernel#class and friends skip
+        # over them to their superclass, as they skip singleton classes.
+        self.is_hidden = False
+        # Set on a class whose instances are really instances of these hidden
+        # subclasses (Integer); see ObjectSpace.hide_integer_subclasses.
+        self.hidden_subclasses = None
         self.attached = attached
 
         if self.superclass is not None:
@@ -27,9 +34,21 @@ class W_ClassObject(W_ModuleObject):
     def __deepcopy__(self, memo):
         obj = super(W_ClassObject, self).__deepcopy__(memo)
         obj.is_singleton = self.is_singleton
+        obj.is_hidden = self.is_hidden
+        obj.hidden_subclasses = copy.deepcopy(self.hidden_subclasses, memo)
         obj.attached = copy.deepcopy(self.attached, memo)
         obj.superclass = copy.deepcopy(self.superclass, memo)
         return obj
+
+    def shadow_hidden_subclasses(self, name):
+        # A method defined on, or removed from, a class with hidden
+        # implementation subclasses must take effect for their instances
+        # too, so drop those subclasses' own definitions of it.
+        if self.hidden_subclasses is not None:
+            for w_sub in self.hidden_subclasses:
+                if name in w_sub.methods_w:
+                    del w_sub.methods_w[name]
+                    w_sub.mutated()
 
     def getsingletonclass(self, space):
         if self.klass is None or not self.klass.is_singleton:

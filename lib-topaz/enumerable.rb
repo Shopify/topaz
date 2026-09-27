@@ -120,7 +120,7 @@ module Enumerable
   alias member? include?
 
   def drop(n)
-    n = Topaz.convert_type(n, Fixnum, :to_int)
+    n = Topaz.convert_type(n, Topaz::Fixnum, :to_int)
     raise ArgumentError.new("attempt to drop negative size") if n < 0
     result = self.to_a
     return [] if n > result.size
@@ -159,7 +159,7 @@ module Enumerable
   alias find detect
 
   def take(n)
-    n = Topaz.convert_type(n, Fixnum, :to_int)
+    n = Topaz.convert_type(n, Topaz::Fixnum, :to_int)
     raise ArgumentError.new("attempt to take negative size") if n < 0
     result = []
     unless n == 0
@@ -318,7 +318,7 @@ module Enumerable
 
   def each_cons(num, &block)
     return self.enum_for(:each_cons, num) if !block
-    num = Topaz.convert_type(num, Fixnum, :to_int)
+    num = Topaz.convert_type(num, Topaz::Fixnum, :to_int)
     raise ArgumentError.new("invalid size") if num <= 0
     buf = []
     self.each_with_index do |e, i|
@@ -335,7 +335,7 @@ module Enumerable
 
   def each_slice(num, &block)
     return self.enum_for(:each_slice, num) if !block
-    num = Topaz.convert_type(num, Fixnum, :to_int)
+    num = Topaz.convert_type(num, Topaz::Fixnum, :to_int)
     raise ArgumentError.new("invalid slice size") if num <= 0
     buf = []
     self.each_entry do |e|
@@ -400,7 +400,7 @@ module Enumerable
   def cycle(n = nil, &block)
     return self.enum_for(:cycle, n) unless block
     unless n.nil?
-      n = Topaz.convert_type(n, Fixnum, :to_int)
+      n = Topaz.convert_type(n, Topaz::Fixnum, :to_int)
       return nil if n <= 0
     end
 

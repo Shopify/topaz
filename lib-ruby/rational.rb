@@ -2,17 +2,7 @@
 
 warn('lib/rational.rb is deprecated') if $VERBOSE
 
-class Fixnum
-
-  alias quof fdiv
-  alias rdiv quo
-
-  alias power! ** unless method_defined? :power!
-  alias rpower **
-
-end
-
-class Bignum
+class Integer
 
   alias quof fdiv
   alias rdiv quo

@@ -82,7 +82,7 @@ module FFI
     #  @return [0,1]
     #  Set packed attribute.
     def packed=(packed)
-      if packed.is_a?(Fixnum)
+      if packed.is_a?(Integer)
         @alignment = packed
         @packed = packed
       else

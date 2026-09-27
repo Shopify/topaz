@@ -219,7 +219,7 @@ class Hash
   end
 
   def flatten(level = 1)
-    level = Topaz.convert_type(level, Fixnum, :to_int)
+    level = Topaz.convert_type(level, Topaz::Fixnum, :to_int)
     out = []
     Topaz::Array.flatten(self, out, level)
     out

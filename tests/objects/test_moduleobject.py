@@ -74,7 +74,7 @@ class TestModuleObject(BaseTopazTest):
 
     def test_alias_method_builtin(self, space):
         w_res = space.execute("""
-        class Fixnum
+        class Integer
           alias_method :comparator, :<=>
           def <=>(*args)
             comparator(*args)

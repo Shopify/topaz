@@ -7,7 +7,7 @@ class Array
         return self.replace(ary)
       end
     end
-    length = Topaz.convert_type(size_or_arr, Fixnum, :to_int)
+    length = Topaz.convert_type(size_or_arr, Topaz::Fixnum, :to_int)
     raise ArgumentError.new("negative array size") if length < 0
     if block
       # TODO: Emit "block supersedes default value argument" warning
@@ -45,7 +45,7 @@ class Array
   end
 
   def fetch(*args, &block)
-    i = Topaz.convert_type(args[0], Fixnum, :to_int)
+    i = Topaz.convert_type(args[0], Topaz::Fixnum, :to_int)
     if i < -self.length || i >= self.length
       return block.call(args[0]) if block
       return args[1] if args.size > 1
@@ -157,7 +157,7 @@ class Array
   end
 
   def flatten(level = -1)
-    level = Topaz.convert_type(level, Fixnum, :to_int)
+    level = Topaz.convert_type(level, Topaz::Fixnum, :to_int)
     out = self.class.allocate
     Topaz::Array.flatten(self, out, level)
     out
@@ -165,7 +165,7 @@ class Array
 
   def flatten!(level = -1)
     raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
-    level = Topaz.convert_type(level, Fixnum, :to_int)
+    level = Topaz.convert_type(level, Topaz::Fixnum, :to_int)
     out = self.class.allocate
     if Topaz::Array.flatten(self, out, level)
       self.replace(out)
@@ -408,28 +408,28 @@ class Array
 
   def permutation(r = nil, &block)
     return self.enum_for(:permutation, r) unless block
-    r = r ? Topaz.convert_type(r, Fixnum, :to_int) : self.size
+    r = r ? Topaz.convert_type(r, Topaz::Fixnum, :to_int) : self.size
     Topaz::Array.permutation(self, r, &block)
     self
   end
 
   def combination(r = nil, &block)
     return self.enum_for(:combination, r) unless block
-    r = r ? Topaz.convert_type(r, Fixnum, :to_int) : self.size
+    r = r ? Topaz.convert_type(r, Topaz::Fixnum, :to_int) : self.size
     Topaz::Array.combination(self, r, &block)
     self
   end
 
   def repeated_combination(r, &block)
     return self.enum_for(:repeated_combination, r) unless block
-    r = Topaz.convert_type(r, Fixnum, :to_int)
+    r = Topaz.convert_type(r, Topaz::Fixnum, :to_int)
     Topaz::Array.repeated_combination(self, r, &block)
     self
   end
 
   def repeated_permutation(r, &block)
     return self.enum_for(:repeated_permutation, r) unless block
-    r = Topaz.convert_type(r, Fixnum, :to_int)
+    r = Topaz.convert_type(r, Topaz::Fixnum, :to_int)
     Topaz::Array.repeated_permutation(self, r, &block)
     self
   end
@@ -448,22 +448,22 @@ class Array
     if one.kind_of?(Range)
       raise TypeError.new("no implicit conversion of Range into Integer") if two
 
-      left = Topaz.convert_type(one.begin, Fixnum, :to_int)
+      left = Topaz.convert_type(one.begin, Topaz::Fixnum, :to_int)
       left += size if left < 0
       raise RangeError.new("#{one} out of range") if left < 0
 
-      right = Topaz.convert_type(one.end, Fixnum, :to_int)
+      right = Topaz.convert_type(one.end, Topaz::Fixnum, :to_int)
       right += size if right < 0
       right += 1 unless one.exclude_end?
       return self if right <= left
 
     elsif one
-      left = Topaz.convert_type(one, Fixnum, :to_int)
+      left = Topaz.convert_type(one, Topaz::Fixnum, :to_int)
       left += size if left < 0
       left = 0 if left < 0
 
       if two
-        right = Topaz.convert_type(two, Fixnum, :to_int)
+        right = Topaz.convert_type(two, Topaz::Fixnum, :to_int)
         return self if right == 0
         right += left
       else
@@ -524,10 +524,10 @@ class Array
         count = nil
       else
         options = nil
-        count = Topaz.convert_type(arg, Fixnum, :to_int)
+        count = Topaz.convert_type(arg, Topaz::Fixnum, :to_int)
       end
     when 2
-      count = Topaz.convert_type(args[0], Fixnum, :to_int)
+      count = Topaz.convert_type(args[0], Topaz::Fixnum, :to_int)
       options = Topaz.convert_type(args[1], Hash, :to_hash)
     else
       raise ArgumentError.new("wrong number of arguments (#{args.size} for 1)")

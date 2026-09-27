@@ -8,7 +8,8 @@ from topaz.objects.numericobject import W_NumericObject
 
 
 class W_BignumObject(W_IntegerObject):
-    classdef = ClassDef("Bignum", W_IntegerObject.classdef)
+    # Hidden, like the fixnum class; see W_FixnumObject.
+    classdef = ClassDef("Integer", W_IntegerObject.classdef)
     _immutable_fields_ = ["bigint"]
 
     def __init__(self, space, bigint):
@@ -94,7 +95,7 @@ class W_BignumObject(W_IntegerObject):
 
     @classdef.method("fdiv")
     def method_fdiv(self, space, w_other):
-        raise space.error(space.w_NotImplementedError, "Bignum#fdiv")
+        raise space.error(space.w_NotImplementedError, "Integer#fdiv for big integers")
 
     @classdef.method("<<", other="int")
     def method_left_shift(self, space, other):
@@ -143,7 +144,7 @@ class W_BignumObject(W_IntegerObject):
             ])
         else:
             raise space.error(space.w_TypeError,
-                "can't coerce %s to Bignum" %
+                "can't coerce %s to Integer" %
                     space.obj_to_s(space.getclass(w_other))
             )
 
@@ -173,7 +174,7 @@ class W_BignumObject(W_IntegerObject):
         else:
             raise space.error(
                 space.w_TypeError,
-                "%s can't be coerced into Bignum" % (
+                "%s can't be coerced into Integer" % (
                     space.obj_to_s(space.getclass(w_other))
                 )
             )
@@ -193,7 +194,7 @@ class W_BignumObject(W_IntegerObject):
         else:
             raise space.error(
                 space.w_TypeError,
-                "%s can't be coerced into Fixnum" % (
+                "%s can't be coerced into Integer" % (
                     space.obj_to_s(space.getclass(w_other))
                 )
             )
@@ -217,7 +218,7 @@ class W_BignumObject(W_IntegerObject):
         else:
             raise space.error(
                 space.w_TypeError,
-                "%s can't be coerced into Fixnum" % (
+                "%s can't be coerced into Integer" % (
                     space.obj_to_s(space.getclass(w_other))
                 )
             )

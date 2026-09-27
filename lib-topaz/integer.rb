@@ -57,7 +57,7 @@ class Integer < Numeric
     if ndigits.empty?
       return self
     end
-    ndigits = Topaz.convert_type(ndigits[0], Fixnum, :to_int)
+    ndigits = Topaz.convert_type(ndigits[0], Topaz::Fixnum, :to_int)
     if ndigits == 0
       return self
     end

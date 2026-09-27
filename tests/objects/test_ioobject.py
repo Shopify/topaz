@@ -324,13 +324,13 @@ class TestIO(BaseTopazTest):
         assert self.unwrap(space, w_res) == [content, content, ""]
 
     def test_reopen_with_invalid_arg(self, space):
-        with self.raises(space, "TypeError", "can't convert Fixnum into String"):
+        with self.raises(space, "TypeError", "can't convert Integer into String"):
             space.execute("$stderr.reopen(12)")
 
     def test_popen_read(self, space):
         w_res = space.execute("""
         io = IO.popen("echo foo", "r")
-        return io.pid.is_a?(Fixnum), io.read
+        return io.pid.is_a?(Integer), io.read
         """)
         assert self.unwrap(space, w_res) == [True, "foo\n"]
 

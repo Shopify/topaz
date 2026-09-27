@@ -34,7 +34,10 @@ class FixnumStorage(object):
 class W_FixnumObject(W_RootObject):
     _immutable_fields_ = ["intvalue"]
 
-    classdef = ClassDef("Fixnum", W_IntegerObject.classdef)
+    # Since Ruby 2.4 there is a single Integer class. Fixnums keep a class
+    # of their own for their method table, but it is hidden (see
+    # ObjectSpace.getnonsingletonclass) and named after Integer.
+    classdef = ClassDef("Integer", W_IntegerObject.classdef)
 
     def __init__(self, space, intvalue):
         check_regular_int(intvalue)
@@ -211,7 +214,7 @@ class W_FixnumObject(W_RootObject):
             )
         else:
             raise space.error(space.w_TypeError,
-                "%s can't be coerced into Fixnum" % space.obj_to_s(space.getclass(w_other))
+                "%s can't be coerced into Integer" % space.obj_to_s(space.getclass(w_other))
             )
 
     def method_pow_int_impl(self, space, w_other):
@@ -255,7 +258,7 @@ class W_FixnumObject(W_RootObject):
         else:
             raise space.error(
                 space.w_TypeError,
-                "%s can't be coerced into Fixnum" % (
+                "%s can't be coerced into Integer" % (
                     space.obj_to_s(space.getclass(w_other))
                 )
             )
@@ -272,7 +275,7 @@ class W_FixnumObject(W_RootObject):
         else:
             raise space.error(
                 space.w_TypeError,
-                "%s can't be coerced into Fixnum" % (
+                "%s can't be coerced into Integer" % (
                     space.obj_to_s(space.getclass(w_other))
                 )
             )

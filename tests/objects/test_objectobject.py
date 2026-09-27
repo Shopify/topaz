@@ -151,7 +151,7 @@ class TestBaseObject(BaseTopazTest):
 class TestObjectObject(BaseTopazTest):
     def test_class(self, space):
         w_res = space.execute("return 1.class")
-        assert w_res is space.w_fixnum
+        assert w_res is space.w_integer
 
     def test_initialize(self, space):
         w_res = space.execute("""
@@ -319,7 +319,7 @@ class TestObjectObject(BaseTopazTest):
         return $res
         """)
         assert self.unwrap(space, w_res) == ["extended in: A", "included in: Class", "extended in: Class"]
-        with self.raises(space, "TypeError", "wrong argument type Fixnum (expected Module)"):
+        with self.raises(space, "TypeError", "wrong argument type Integer (expected Module)"):
             space.execute("Object.new.extend 1")
         with self.raises(space, "TypeError", "wrong argument type Class (expected Module)"):
             space.execute("Object.new.extend Class.new")

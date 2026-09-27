@@ -60,12 +60,12 @@ module Kernel
     end
 
     raise ArgumentError.new("base specified for non string value") if base
-    return Topaz.convert_type(arg, Fixnum, :to_int) if arg.nil?
+    return Topaz.convert_type(arg, Integer, :to_int) if arg.nil?
 
     if arg.respond_to?(:to_int) && val = arg.to_int
       return val
     end
-    Topaz.convert_type(arg, Fixnum, :to_i)
+    Topaz.convert_type(arg, Integer, :to_i)
   end
 
   module_function :Integer

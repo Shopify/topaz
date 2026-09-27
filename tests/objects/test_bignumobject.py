@@ -4,8 +4,15 @@ from ..base import BaseTopazTest
 
 
 class TestBignumObject(BaseTopazTest):
-    def test_name(self, space):
-        space.execute("Bignum")
+    def test_class_is_integer(self, space):
+        w_res = space.execute("""
+        big = 2 ** 70
+        return [big.class, big.instance_of?(Integer), big.class.name,
+                defined?(Bignum), defined?(Fixnum)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            space.w_integer, True, "Integer", None, None
+        ]
 
     def test_plus(self, space):
         w_res = space.execute("return 18446744073709551628 + 9")
@@ -50,7 +57,7 @@ class TestBignumObject(BaseTopazTest):
         w_res = space.execute("return 18446744073709551628.coerce 18446744073709551628")
         assert self.unwrap(space, w_res) == [rbigint.fromlong(18446744073709551628), rbigint.fromlong(18446744073709551628)]
 
-        with self.raises(space, "TypeError", "can't coerce String to Bignum"):
+        with self.raises(space, "TypeError", "can't coerce String to Integer"):
             space.execute("18446744073709551628.coerce 'hello'")
 
     def test_to_f(self, space):
@@ -66,5 +73,5 @@ class TestBignumObject(BaseTopazTest):
         assert self.unwrap(space, w_res) == 4294967296.0
         w_res = space.execute("return 18446744073709551628 ** -0.5")
         assert self.unwrap(space, w_res) == 2.3283064365386963e-10
-        with self.raises(space, "TypeError", "String can't be coerced into Bignum"):
+        with self.raises(space, "TypeError", "String can't be coerced into Integer"):
             space.execute("18446744073709551628 ** 'hallo'")
