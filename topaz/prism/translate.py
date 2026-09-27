@@ -1360,40 +1360,33 @@ class Translator(nodes.Visitor):
         n = len(pattern.requireds)
         found = self.new_temp(lineno)
         index = self.new_temp(lineno)
-
-        def arr():
-            return ast.Variable(array, lineno)
-
-        def idx():
-            return ast.Variable(index, lineno)
-
         element_tests = []
         for i in range(n):
             element_tests.append(self.element_test(
                 pattern.requireds[i],
-                self.send(arr(), "[]", [
-                    self.send(idx(), "+", [ast.ConstantInt(i)], lineno)
+                self.send(ast.Variable(array, lineno), "[]", [
+                    self.send(ast.Variable(index, lineno), "+", [ast.ConstantInt(i)], lineno)
                 ], lineno),
                 lineno))
         last_start = self.send(
-            self.send(arr(), "length", [], lineno), "-",
+            self.send(ast.Variable(array, lineno), "length", [], lineno), "-",
             [ast.ConstantInt(n)], lineno)
         loop = ast.While(
             ast.And(
                 self.send(ast.Variable(found, lineno), "!", [], lineno),
-                self.send(idx(), "<=", [last_start], lineno)),
+                self.send(ast.Variable(index, lineno), "<=", [last_start], lineno)),
             ast.Block([ast.Statement(ast.If(
                 self.and_all(element_tests),
                 ast.Block([ast.Statement(ast.Assignment(
                     ast.Variable(found, lineno), ast.ConstantBool(True)))]),
                 ast.Block([ast.Statement(ast.Assignment(
-                    idx(), self.send(idx(), "+", [ast.ConstantInt(1)], lineno)))]),
+                    ast.Variable(index, lineno), self.send(ast.Variable(index, lineno), "+", [ast.ConstantInt(1)], lineno)))]),
             ))])
         )
         tests.append(ast.Block([
             ast.Statement(ast.Assignment(
                 ast.Variable(found, lineno), ast.ConstantBool(False))),
-            ast.Statement(ast.Assignment(idx(), ast.ConstantInt(0))),
+            ast.Statement(ast.Assignment(ast.Variable(index, lineno), ast.ConstantInt(0))),
             ast.Statement(loop),
             ast.Statement(ast.Variable(found, lineno)),
         ]))
@@ -1401,14 +1394,14 @@ class Translator(nodes.Visitor):
         if isinstance(left, nodes.SplatNode) and left.expression is not None:
             tests.append(self.element_test(
                 left.expression,
-                self.send(arr(), "[]", [ast.ConstantInt(0), idx()], lineno),
+                self.send(ast.Variable(array, lineno), "[]", [ast.ConstantInt(0), ast.Variable(index, lineno)], lineno),
                 lineno))
         right = pattern.right
         if isinstance(right, nodes.SplatNode) and right.expression is not None:
-            after = self.send(idx(), "+", [ast.ConstantInt(n)], lineno)
+            after = self.send(ast.Variable(index, lineno), "+", [ast.ConstantInt(n)], lineno)
             tests.append(self.element_test(
                 right.expression,
-                self.send(arr(), "[]", [
+                self.send(ast.Variable(array, lineno), "[]", [
                     ast.Range(after, ast.Nil(), False)
                 ], lineno),
                 lineno))
@@ -1438,27 +1431,23 @@ class Translator(nodes.Visitor):
         else:
             wanted = ast.Array(keys)
         hash = self.new_temp(lineno)
-
-        def h():
-            return ast.Variable(hash, lineno)
-
         tests.append(self.set_and_true(
             hash, self.send(value, "deconstruct_keys", [wanted], lineno),
             lineno))
         tests.append(self.send(
-            self.constant("Hash", lineno), "===", [h()], lineno))
+            self.constant("Hash", lineno), "===", [ast.Variable(hash, lineno)], lineno))
         for element in pattern.elements:
             assert isinstance(element, nodes.AssocNode)
             key = element.key
             assert isinstance(key, nodes.SymbolNode)
             name = key.unescaped
             tests.append(self.send(
-                h(), "key?", [ast.ConstantSymbol(name)], lineno))
+                ast.Variable(hash, lineno), "key?", [ast.ConstantSymbol(name)], lineno))
             tests.append(self.element_test(
                 element.value,
-                self.send(h(), "[]", [ast.ConstantSymbol(name)], lineno),
+                self.send(ast.Variable(hash, lineno), "[]", [ast.ConstantSymbol(name)], lineno),
                 lineno))
-        remaining = self.send(h(), "except", list(keys), lineno)
+        remaining = self.send(ast.Variable(hash, lineno), "except", list(keys), lineno)
         if isinstance(rest, nodes.AssocSplatNode):
             if rest.value is not None:
                 tests.append(self.element_test(rest.value, remaining, lineno))
@@ -1467,7 +1456,7 @@ class Translator(nodes.Visitor):
             tests.append(self.send(remaining, "empty?", [], lineno))
         elif not pattern.elements:
             # `in {}` only matches an empty hash.
-            tests.append(self.send(h(), "empty?", [], lineno))
+            tests.append(self.send(ast.Variable(hash, lineno), "empty?", [], lineno))
         return self.and_all(tests)
 
     def in_clause_test(self, pattern, value_name):
