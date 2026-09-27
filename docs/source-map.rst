@@ -43,11 +43,6 @@ This contains logic for exposing RPython functions in Ruby.
 
 This contains the bytecode interpreter itself.
 
-``lexer.py``
--------------
-
-This contains the hand written Ruby lexer.
-
 ``main.py``
 ------------
 
@@ -68,10 +63,14 @@ it is responsible for encoding the behaviors of Ruby, for example it contains
 methods like ``find_const``, ``send``, and methods for creating new Ruby
 objects from RPython ones.
 
-``parser.py``
--------------
+``prism/``
+-----------
 
-This contains the parse rules and actions, built atop ``rply``.
+Parsing. Ruby source is parsed by `Prism <https://github.com/ruby/prism>`_,
+the parser CRuby uses, whose C sources are vendored in ``vendor/prism``.
+``prism/binding.py`` calls it, ``prism/nodes.py`` (generated from Prism's
+``config.yml`` by ``prism/gen.py``) loads the syntax tree it serializes, and
+``prism/translate.py`` turns that into Topaz's AST.
 
 ``modules/``
 ------------
