@@ -8,6 +8,12 @@ class W_TrueObject(W_Object):
     def getsingletonclass(self, space):
         return space.getclassfor(W_TrueObject)
 
+    def get_flag(self, space, name):
+        # Immediate values are always frozen.
+        if name == "frozen?":
+            return space.w_true
+        return W_Object.get_flag(self, space, name)
+
     @classdef.method("inspect")
     @classdef.method("to_s")
     def method_to_s(self, space):
@@ -38,6 +44,12 @@ class W_FalseObject(W_Object):
 
     def getsingletonclass(self, space):
         return space.getclassfor(W_FalseObject)
+
+    def get_flag(self, space, name):
+        # Immediate values are always frozen.
+        if name == "frozen?":
+            return space.w_true
+        return W_Object.get_flag(self, space, name)
 
     @classdef.method("inspect")
     @classdef.method("to_s")

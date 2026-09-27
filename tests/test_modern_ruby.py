@@ -43,3 +43,19 @@ class TestLeadingOperators(BaseTopazTest):
         return android
         """)
         assert self.unwrap(space, w_res) == "android"
+
+
+class TestImmediates(BaseTopazTest):
+    def test_immediates_are_frozen(self, space):
+        w_res = space.execute("""
+        return [nil, true, false, :sym, 1, 2 ** 70, 1.5].map(&:frozen?)
+        """)
+        assert self.unwrap(space, w_res) == [True] * 7
+
+    def test_dup_and_clone_return_self(self, space):
+        # Ruby 2.4
+        w_res = space.execute("""
+        objs = [nil, true, false, :sym, 1, 2 ** 70, 1.5]
+        return objs.map { |o| o.dup.equal?(o) && o.clone.equal?(o) }
+        """)
+        assert self.unwrap(space, w_res) == [True] * 7

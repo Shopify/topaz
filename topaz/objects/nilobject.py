@@ -11,6 +11,12 @@ class W_NilObject(W_Object):
     def getsingletonclass(self, space):
         return space.getclassfor(W_NilObject)
 
+    def get_flag(self, space, name):
+        # Immediate values are always frozen.
+        if name == "frozen?":
+            return space.w_true
+        return W_Object.get_flag(self, space, name)
+
     @classdef.method("nil?")
     def method_nilp(self, space):
         return space.w_true

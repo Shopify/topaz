@@ -91,6 +91,9 @@ class W_FloatObject(W_RootObject):
         storage.unset_flag(space, name)
 
     def get_flag(self, space, name):
+        # Floats are always frozen.
+        if name == "frozen?":
+            return space.w_true
         storage = space.fromcache(FloatStorage).get_or_create(space, self.floatvalue)
         return storage.get_flag(space, name)
 

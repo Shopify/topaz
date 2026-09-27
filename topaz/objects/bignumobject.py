@@ -16,6 +16,12 @@ class W_BignumObject(W_IntegerObject):
         W_IntegerObject.__init__(self, space)
         self.bigint = bigint
 
+    def get_flag(self, space, name):
+        # Integers are always frozen.
+        if name == "frozen?":
+            return space.w_true
+        return W_IntegerObject.get_flag(self, space, name)
+
     @staticmethod
     def newbigint_fromint(space, intvalue):
         return W_BignumObject(space, rbigint.fromint(intvalue))

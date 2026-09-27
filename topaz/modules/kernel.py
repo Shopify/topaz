@@ -22,6 +22,16 @@ from topaz.objects.stringobject import W_StringObject
 from topaz.scope import StaticScope
 
 
+def is_immediate(space, w_obj):
+    """nil, true, false, Symbols, Integers and Floats: always frozen, and
+    since Ruby 2.4 #dup and #clone return the object itself."""
+    return (w_obj is space.w_nil or w_obj is space.w_true or
+            w_obj is space.w_false or
+            space.is_kind_of(w_obj, space.w_symbol) or
+            space.is_kind_of(w_obj, space.w_integer) or
+            space.is_kind_of(w_obj, space.w_float))
+
+
 class Kernel(object):
     moduledef = ModuleDef("Kernel")
 
@@ -333,10 +343,8 @@ class Kernel(object):
 
     @moduledef.method("dup")
     def method_dup(self, space):
-        if (self is space.w_nil or self is space.w_true or
-            self is space.w_false or space.is_kind_of(self, space.w_symbol) or
-            space.is_kind_of(self, space.w_fixnum)):
-            raise space.error(space.w_TypeError, "can't dup %s" % space.getclass(self).name)
+        if is_immediate(space, self):
+            return self
         w_dup = space.send(space.getnonsingletonclass(self), "allocate")
         w_dup.copy_instance_vars(space, self)
         space.infect(w_dup, self, freeze=False)
@@ -345,10 +353,8 @@ class Kernel(object):
 
     @moduledef.method("clone")
     def method_clone(self, space):
-        if (self is space.w_nil or self is space.w_true or
-            self is space.w_false or space.is_kind_of(self, space.w_symbol) or
-            space.is_kind_of(self, space.w_fixnum)):
-            raise space.error(space.w_TypeError, "can't dup %s" % space.getclass(self).name)
+        if is_immediate(space, self):
+            return self
         w_dup = space.send(space.getnonsingletonclass(self), "allocate")
         w_dup.copy_instance_vars(space, self)
         w_dup.copy_singletonclass(space, space.getsingletonclass(self))

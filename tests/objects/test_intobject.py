@@ -279,7 +279,8 @@ class TestFixnumObject(BaseTopazTest):
         res << 2.frozen?
         return res
         """)
-        assert self.unwrap(space, w_res) == [False, True, False]
+        # Numbers are always frozen.
+        assert self.unwrap(space, w_res) == [True, True, True]
 
     def test_succ(self, space):
         w_res = space.execute("return -1.succ")

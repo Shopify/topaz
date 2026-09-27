@@ -86,6 +86,9 @@ class W_FixnumObject(W_RootObject):
         storage.unset_flag(space, name)
 
     def get_flag(self, space, name):
+        # Integers are always frozen.
+        if name == "frozen?":
+            return space.w_true
         storage = space.fromcache(FixnumStorage).get_or_create(space, self.intvalue)
         return storage.get_flag(space, name)
 

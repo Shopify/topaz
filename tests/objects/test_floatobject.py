@@ -238,4 +238,5 @@ class TestFloatObject(BaseTopazTest):
         res << 0.2.frozen?
         return res
         """)
-        assert self.unwrap(space, w_res) == [False, True, False]
+        # Numbers are always frozen.
+        assert self.unwrap(space, w_res) == [True, True, True]

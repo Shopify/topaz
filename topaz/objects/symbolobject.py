@@ -20,6 +20,12 @@ class W_SymbolObject(W_Object):
     def symbol_w(self, space):
         return self.symbol
 
+    def get_flag(self, space, name):
+        # Immediate values are always frozen.
+        if name == "frozen?":
+            return space.w_true
+        return W_Object.get_flag(self, space, name)
+
     def str_w(self, space):
         return self.symbol
 
