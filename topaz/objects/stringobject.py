@@ -31,6 +31,83 @@ RADIX_MAP = {
     "b": 2,
 }
 
+INSPECT_ESCAPES = {
+    "\n": "\\n", "\t": "\\t", "\r": "\\r", "\f": "\\f", "\v": "\\v",
+    "\b": "\\b", "\a": "\\a", "\x1b": "\\e", '"': '\\"', "\\": "\\\\",
+}
+
+HEX_DIGITS = "0123456789ABCDEF"
+
+
+def _utf8_sequence_length(s, i):
+    """The length of the valid UTF-8 sequence starting at s[i], or 0."""
+    c = ord(s[i])
+    if c < 0x80:
+        return 1
+    elif 0xc2 <= c <= 0xdf:
+        length = 2
+    elif 0xe0 <= c <= 0xef:
+        length = 3
+    elif 0xf0 <= c <= 0xf4:
+        length = 4
+    else:
+        return 0
+    if i + length > len(s):
+        return 0
+    for j in range(i + 1, i + length):
+        if not (0x80 <= ord(s[j]) <= 0xbf):
+            return 0
+    c1 = ord(s[i + 1])
+    if c == 0xe0 and c1 < 0xa0:       # overlong
+        return 0
+    if c == 0xed and c1 > 0x9f:       # surrogates
+        return 0
+    if c == 0xf0 and c1 < 0x90:       # overlong
+        return 0
+    if c == 0xf4 and c1 > 0x8f:       # beyond U+10FFFF
+        return 0
+    return length
+
+
+def inspect_string(s):
+    """String#inspect for a UTF-8 string."""
+    result = ['"']
+    i = 0
+    n = len(s)
+    while i < n:
+        c = s[i]
+        if c in INSPECT_ESCAPES:
+            result.append(INSPECT_ESCAPES[c])
+            i += 1
+        elif c == "#" and i + 1 < n and s[i + 1] in "{$@":
+            # Keep "#{" from reading as interpolation.
+            result.append("\\#")
+            i += 1
+        elif ord(c) < 0x20 or ord(c) == 0x7f:
+            code = ord(c)
+            result.append("\\u00")
+            result.append(HEX_DIGITS[code >> 4])
+            result.append(HEX_DIGITS[code & 0xf])
+            i += 1
+        elif ord(c) < 0x80:
+            result.append(c)
+            i += 1
+        else:
+            length = _utf8_sequence_length(s, i)
+            if length == 0:
+                code = ord(c)
+                result.append("\\x")
+                result.append(HEX_DIGITS[code >> 4])
+                result.append(HEX_DIGITS[code & 0xf])
+                i += 1
+            else:
+                end = i + length
+                assert end >= 0
+                result.append(s[i:end])
+                i = end
+    result.append('"')
+    return "".join(result)
+
 
 def create_trans_table(source, replacement, inv=False):
     src = expand_trans_str(source, len(source), inv)
@@ -496,7 +573,7 @@ class W_StringObject(W_Object):
 
     @classdef.method("inspect")
     def method_inspect(self, space):
-        s = space.newstr_fromstr('"%s"' % self.str_w(space))
+        s = space.newstr_fromstr(inspect_string(self.str_w(space)))
         space.infect(s, self)
         return s
 

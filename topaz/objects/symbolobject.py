@@ -1,6 +1,71 @@
 from topaz.module import ClassDef
 from topaz.modules.comparable import Comparable
 from topaz.objects.objectobject import W_Object
+from topaz.objects.stringobject import inspect_string
+
+
+OPERATOR_SYMBOLS = {}
+for _op in ["+", "-", "*", "/", "%", "**", "==", "===", "!=", "=~", "!~",
+            "!", "<=>", "<", "<=", ">", ">=", "<<", ">>", "&", "|", "^", "~",
+            "+@", "-@", "[]", "[]=", "`"]:
+    OPERATOR_SYMBOLS[_op] = None
+del _op
+
+SPECIAL_GLOBALS = "~*$?!@/\\;,.=:<>\"&`'+0"
+
+
+def _is_ident_start(c):
+    return c.isalpha() or c == "_" or ord(c) >= 0x80
+
+
+def _is_ident_char(c):
+    return c.isalnum() or c == "_" or ord(c) >= 0x80
+
+
+def _identifier_end(s, start):
+    """The end of the identifier starting at s[start], or -1."""
+    if start >= len(s) or not _is_ident_start(s[start]):
+        return -1
+    end = start + 1
+    while end < len(s) and _is_ident_char(s[end]):
+        end += 1
+    return end
+
+
+def is_label_symbol(s):
+    """Whether `{s: 1}` is how a Hash with the key :s is inspected (3.4)."""
+    end = _identifier_end(s, 0)
+    if end == -1:
+        return False
+    return end == len(s) or (end == len(s) - 1 and s[end] in "?!")
+
+
+def symbol_needs_quotes(s):
+    """Whether :s must be written as :"s"."""
+    if s in OPERATOR_SYMBOLS:
+        return False
+    if not s:
+        return True
+    start = 0
+    if s[0] == "$":
+        rest = s[1:]
+        if len(rest) == 1 and rest in SPECIAL_GLOBALS:
+            return False
+        if rest.isdigit():
+            return False
+        if len(rest) == 2 and rest[0] == "-" and _is_ident_char(rest[1]):
+            return False
+        start = 1
+    elif s.startswith("@@"):
+        start = 2
+    elif s[0] == "@":
+        start = 1
+    end = _identifier_end(s, start)
+    if end == -1:
+        return True
+    if end == len(s):
+        return False
+    return not (start == 0 and end == len(s) - 1 and s[end] in "?!=")
 
 
 class W_SymbolObject(W_Object):
@@ -44,18 +109,9 @@ class W_SymbolObject(W_Object):
 
     @classdef.method("inspect")
     def method_inspect(self, space):
-        string_format = (not self.symbol or not self.symbol[0].isalpha() or
-            not self.symbol.isalnum())
-        if string_format:
-            result = [":", '"']
-            for c in self.symbol:
-                if c == '"':
-                    result.append("\\")
-                result.append(c)
-            result.append('"')
-            return space.newstr_fromchars(result)
-        else:
-            return space.newstr_fromstr(":%s" % self.symbol)
+        if symbol_needs_quotes(self.symbol):
+            return space.newstr_fromstr(":" + inspect_string(self.symbol))
+        return space.newstr_fromstr(":" + self.symbol)
 
     @classdef.method("length")
     @classdef.method("size")
