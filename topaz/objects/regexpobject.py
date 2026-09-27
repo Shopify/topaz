@@ -138,8 +138,8 @@ class W_RegexpObject(W_Object):
         if source is not None:
             cache = space.fromcache(RegexpCache)
             self.source = source
-            code, flags, groupcount, groupindex, indexgroup, group_offsets = regexp.compile(cache, source, flags)
-            self.code = code
+            pattern, flags, groupcount, groupindex, indexgroup, group_offsets = regexp.compile(cache, source, flags)
+            self.pattern = pattern
             self.flags = flags
             self.groupcount = groupcount
             self.groupindex = groupindex
@@ -149,7 +149,10 @@ class W_RegexpObject(W_Object):
     def make_ctx(self, s, offset=0):
         assert offset >= 0
         endpos = len(s)
-        return rsre_core.StrMatchContext(self.code, s, offset, endpos, self.flags)
+        return rsre_core.StrMatchContext(s, offset, endpos)
+
+    def rsre_search(self, ctx):
+        return rsre_core.search_context(ctx, self.pattern)
 
     def get_match_result(self, space, ctx, target, found):
         if found:
@@ -211,7 +214,7 @@ class W_RegexpObject(W_Object):
             return space.w_nil
         s = Coerce.str(space, w_s)
         ctx = self.make_ctx(s)
-        matched = rsre_core.search_context(ctx)
+        matched = self.rsre_search(ctx)
         self.get_match_result(space, ctx, s, matched)
         if matched:
             return space.newint(ctx.match_start)
@@ -229,13 +232,13 @@ class W_RegexpObject(W_Object):
         else:
             offset = 0
         ctx = self.make_ctx(s, offset)
-        matched = rsre_core.search_context(ctx)
+        matched = self.rsre_search(ctx)
         return self.get_match_result(space, ctx, s, matched)
 
     @classdef.method("===", s="str")
     def method_eqeqeq(self, space, s):
         ctx = self.make_ctx(s)
-        matched = rsre_core.search_context(ctx)
+        matched = self.rsre_search(ctx)
         self.get_match_result(space, ctx, s, matched)
         return space.newbool(matched)
 

@@ -13,8 +13,9 @@ from topaz.utils.ll_file import isdir
 def regexp_match(cache, re, string):
     pos = 0
     endpos = len(string)
-    code, flags, _, _, _, _ = regexp.compile(cache, re)
-    return rsre_core.StrMatchContext(code, string, pos, endpos, flags)
+    pattern, _, _, _, _, _ = regexp.compile(cache, re)
+    ctx = rsre_core.StrMatchContext(string, pos, endpos)
+    return rsre_core.search_context(ctx, pattern)
 
 
 def path_split(string):
@@ -309,8 +310,7 @@ class Match(Node):
         string = os.path.normcase(string)
         if string.startswith(".") and not self.match_dotfiles:
             return False
-        ctx = regexp_match(cache, self.regexp, string)
-        return rsre_core.search_context(ctx)
+        return regexp_match(cache, self.regexp, string)
 
 
 class DirectoryMatch(Match):

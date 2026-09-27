@@ -587,7 +587,7 @@ class W_StringObject(W_Object):
             end_idx = start_idx + len(other_str)
         elif space.is_kind_of(w_idx, space.w_regexp):
             ctx = w_idx.make_ctx(space.str_w(self))
-            if self.search_context(space, ctx):
+            if self.search_context(space, w_idx, ctx):
                 if w_count is None:
                     start_idx = ctx.match_start
                     end_idx = ctx.match_end
@@ -696,9 +696,9 @@ class W_StringObject(W_Object):
             chars += space.str_w(self)
             return space.newstr_fromchars(chars)
 
-    def search_context(self, space, ctx):
+    def search_context(self, space, w_regexp, ctx):
         try:
-            return rsre_core.search_context(ctx)
+            return w_regexp.rsre_search(ctx)
         except rsre_core.Error, e:
             raise space.error(space.w_RuntimeError, e.msg)
 
@@ -711,7 +711,7 @@ class W_StringObject(W_Object):
             return space.newint(space.str_w(self).find(space.str_w(w_sub), offset))
         elif space.is_kind_of(w_sub, space.w_regexp):
             ctx = w_sub.make_ctx(space.str_w(self), offset=offset)
-            if self.search_context(space, ctx):
+            if self.search_context(space, w_sub, ctx):
                 return space.newint(ctx.match_start)
             else:
                 return space.newint(-1)
@@ -736,7 +736,7 @@ class W_StringObject(W_Object):
         elif space.is_kind_of(w_sub, space.w_regexp):
             ctx = w_sub.make_ctx(space.str_w(self))
             idx = -1
-            while self.search_context(space, ctx):
+            while self.search_context(space, w_sub, ctx):
                 if ctx.match_start > end:
                     break
                 else:
@@ -798,7 +798,7 @@ class W_StringObject(W_Object):
             w_match = w_sep.get_match_result(space, ctx, string, found=True)
 
             while limit <= 0 or n + 1 < limit:
-                if not self.search_context(space, ctx):
+                if not self.search_context(space, w_sep, ctx):
                     break
                 elif ctx.match_start == ctx.match_end:
                     if ctx.match_start == ctx.end:
@@ -1080,7 +1080,7 @@ class W_StringObject(W_Object):
         string = space.str_w(self)
         ctx = w_pattern.make_ctx(string)
 
-        while last < len(string) and self.search_context(space, ctx):
+        while last < len(string) and self.search_context(space, w_pattern, ctx):
             w_matchdata = w_pattern.get_match_result(space, ctx, string, found=True)
             if w_matchdata.size() > 1:
                 matches_w = []
@@ -1185,7 +1185,7 @@ class W_StringObject(W_Object):
         if replacement is not None and "\\" in replacement:
             replacement_parts = [s for s in replacement.split("\\") if s]
 
-        while pos < len(string) and self.search_context(space, ctx):
+        while pos < len(string) and self.search_context(space, w_pattern, ctx):
             result += string[pos:ctx.match_start]
             if replacement_parts is not None:
                 result += self.gsub_regexp_subst_string(
