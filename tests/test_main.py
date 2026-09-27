@@ -60,7 +60,7 @@ class TestMain(object):
         out, err = capfd.readouterr()
         [version, out] = out.splitlines()
         assert version.startswith("topaz")
-        assert "2.4.0" in version
+        assert "4.0.0" in version
         assert os.uname()[4] in version
         assert platform.system().lower() in version
         assert subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).rstrip() in version
@@ -118,7 +118,7 @@ class TestMain(object):
         out, _ = capfd.readouterr()
         [version] = out.splitlines()
         assert version.startswith("topaz")
-        assert "2.4.0" in version
+        assert "4.0.0" in version
         assert os.uname()[4] in version
         assert platform.system().lower() in version
         assert subprocess.check_output(["git", "rev-parse", "--short", "HEAD"]).rstrip() in version
@@ -270,6 +270,17 @@ class TestMain(object):
         self.run(space, tmpdir, "puts RUBY_ENGINE")
         out, err = capfd.readouterr()
         assert out == "topaz\n"
+
+    def test_ruby_version_constants(self, space, tmpdir, capfd):
+        self.run(space, tmpdir, """
+        puts RUBY_VERSION, RUBY_ENGINE_VERSION, RUBY_RELEASE_DATE
+        puts RUBY_COPYRIGHT
+        """)
+        out, err = capfd.readouterr()
+        assert out.splitlines() == [
+            "4.0.0", "4.0.0", "2025-12-25",
+            "ruby - Copyright (C) 1993-2025 Yukihiro Matsumoto",
+        ]
 
     def test_ruby_description(self, space, tmpdir, capfd):
         self.run(space, tmpdir, "puts RUBY_DESCRIPTION")

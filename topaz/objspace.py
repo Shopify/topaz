@@ -302,6 +302,16 @@ class ObjectSpace(object):
         self.set_const(
             self.w_object,
             "RUBY_REVISION", self.newstr_fromstr(system.RUBY_REVISION))
+        self.set_const(
+            self.w_object,
+            "RUBY_RELEASE_DATE", self.newstr_fromstr(system.RUBY_RELEASE_DATE))
+        self.set_const(
+            self.w_object,
+            "RUBY_COPYRIGHT", self.newstr_fromstr(system.RUBY_COPYRIGHT))
+        self.set_const(
+            self.w_object,
+            "RUBY_ENGINE_VERSION",
+            self.newstr_fromstr(system.RUBY_ENGINE_VERSION))
 
     def load_kernel(self, kernel_path):
         self.send(

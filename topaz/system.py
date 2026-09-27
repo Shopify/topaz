@@ -27,7 +27,13 @@ else:
 
 RUBY_PLATFORM = "%s-%s" % (cpu, os_name.lower())
 RUBY_ENGINE = "topaz"
-RUBY_VERSION = "2.4.0"
+# The language version Topaz targets.
+RUBY_VERSION = "4.0.0"
 RUBY_PATCHLEVEL = 0
+RUBY_RELEASE_DATE = "2025-12-25"
+RUBY_COPYRIGHT = "ruby - Copyright (C) 1993-2025 Yukihiro Matsumoto"
+# Topaz has never had releases of its own, so it reports the language
+# version it implements, like CRuby does.
+RUBY_ENGINE_VERSION = RUBY_VERSION
 RUBY_DESCRIPTION = "%s (ruby-%sp%d) (git rev %s) [%s]" % (
     RUBY_ENGINE, RUBY_VERSION, RUBY_PATCHLEVEL, RUBY_REVISION, RUBY_PLATFORM)
