@@ -6,7 +6,7 @@ from rpython.rlib.objectmodel import compute_hash
 from rpython.rlib.rarithmetic import ovfcheck_float_to_int
 from rpython.rlib.rbigint import rbigint
 from rpython.rlib.rfloat import (formatd, DTSF_ADD_DOT_0, DTSF_STR_PRECISION,
-    NAN, INFINITY, isfinite, round_away)
+    NAN, INFINITY, isfinite, round_away, round_double)
 
 from topaz.error import RubyError
 from topaz.module import ClassDef
@@ -309,9 +309,26 @@ class W_FloatObject(W_RootObject):
     def method_nan(self, space):
         return space.newbool(math.isnan(self.floatvalue))
 
-    @classdef.method("round")
-    def method_round(self, space):
-        return space.newint(int(round_away(self.floatvalue)))
+    @classdef.method("round", ndigits="int")
+    def method_round(self, space, ndigits=0):
+        if ndigits > 0:
+            if math.isnan(self.floatvalue) or math.isinf(self.floatvalue):
+                return self
+            return space.newfloat(round_double(self.floatvalue, ndigits))
+        if math.isnan(self.floatvalue) or math.isinf(self.floatvalue):
+            raise space.error(
+                space.w_FloatDomainError, self.float_domain_name())
+        if ndigits == 0:
+            return self.float_to_w_int(space, round_away(self.floatvalue))
+        return self.float_to_w_int(
+            space, round_double(self.floatvalue, ndigits))
+
+    def float_domain_name(self):
+        if math.isnan(self.floatvalue):
+            return "NaN"
+        elif self.floatvalue > 0:
+            return "Infinity"
+        return "-Infinity"
 
     @classdef.method("quo")
     def method_quo(self, space):
