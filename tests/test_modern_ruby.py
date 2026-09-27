@@ -508,3 +508,30 @@ class TestKeywordArguments(BaseTopazTest):
         return [blk.call(1, k: 2), blk.call({k: 3})]
         """)
         assert self.unwrap(space, w_res) == [[1, 2], [{"k": 3}, 0]]
+
+
+class TestBreakAndLazy(BaseTopazTest):
+    def test_break_through_a_captured_block(self, space):
+        w_res = space.execute("""
+        e = Enumerator.new { |y| y << 1; y << 2; y << 3 }
+        def m(&b) = [b.call, :after]
+        r = [e.each { |x| break x * 10 if x == 2 }, m { break :broke }]
+        begin
+          proc { break }.call
+        rescue LocalJumpError
+          r << :local_jump_error
+        end
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [20, "broke", "local_jump_error"]
+
+    def test_lazy(self, space):
+        w_res = space.execute("""
+        return [(1..Float::INFINITY).lazy.map { _1 * 2 }.select { _1 % 3 == 0 }.first(3),
+                (1..).lazy.filter_map { _1 * 2 if _1.odd? }.take(3).to_a,
+                (1..).lazy.take_while { _1 < 4 }.to_a,
+                (1..).lazy.uniq { _1 % 3 }.first(3),
+                Enumerator.produce(1) { _1 * 2 }.take(5)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [6, 12, 18], [2, 6, 10], [1, 2, 3], [1, 2, 3], [1, 2, 4, 8, 16]]
