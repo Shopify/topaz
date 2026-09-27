@@ -115,15 +115,14 @@ module Kernel
   end
   private :rand
 
-  def caller(offset=0, limit=nil)
+  def caller(start = 1, length = nil)
     begin
       raise "caller called"
     rescue Exception => e
-      if limit
-        return e.backtrace[(3 + offset), limit]
-      else
-        return e.backtrace[(3 + offset)..-1]
-      end
+      # Leave out this method's own frame: trace[0] is its caller's.
+      trace = e.backtrace[1..-1] || []
+      return trace[start] if start.is_a?(Range)
+      return length ? trace[start, length] : trace[start..-1]
     end
   end
   private :caller
@@ -159,4 +158,12 @@ module Kernel
     p(*args)
   end
   private :pp
+end
+
+module Kernel
+  def sprintf(format, *args)
+    format % args
+  end
+  alias format sprintf
+  private :sprintf, :format
 end
