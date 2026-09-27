@@ -76,7 +76,10 @@ class Frame(BaseFrame):
             min_args = max(len(bytecode.arg_pos) - len(bytecode.defaults), 0)
             if len(args_w) > min_args:
                 w_obj = args_w[-1]
-                if not space.is_kind_of(w_obj, space.w_hash):
+                # Only a hash, or something that converts to one, can hold
+                # keyword arguments.
+                if (not space.is_kind_of(w_obj, space.w_hash) and
+                        space.respond_to(w_obj, "to_hash")):
                     w_obj = space.convert_type(
                         w_obj, space.w_hash, "to_hash", reraise_error=True)
                 if isinstance(w_obj, W_HashObject):
