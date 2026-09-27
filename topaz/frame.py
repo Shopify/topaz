@@ -3,6 +3,7 @@ from rpython.rlib import jit
 from topaz.closure import LocalCell
 from topaz.objects.hashobject import W_HashObject
 from topaz.objects.functionobject import W_FunctionObject
+from topaz.objects.moduleobject import W_ModuleObject
 
 
 class BaseFrame(object):
@@ -281,7 +282,7 @@ class Frame(BaseFrame):
             # Methods defined at the top level are methods of Object.
             return "Object#%s" % name
         w_mod = scope.w_mod
-        if w_mod.name is None:
+        if not isinstance(w_mod, W_ModuleObject) or w_mod.name is None:
             return name
         if self.w_self is w_mod:
             return "%s.%s" % (w_mod.name, name)
