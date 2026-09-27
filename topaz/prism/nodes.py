@@ -109,6 +109,7 @@ class Node(object):
     _attrs_ = ["node_id", "location", "flags"]
 
     TYPE = 0
+    NAME = "Node"
 
     def __init__(self, node_id, location, flags):
         self.node_id = node_id
@@ -142,6 +143,7 @@ class AliasGlobalVariableNode(Node):
     _attrs_ = ["new_name", "old_name", "keyword_loc"]
 
     TYPE = 1
+    NAME = "AliasGlobalVariableNode"
 
     def __init__(self, node_id, location, flags, new_name, old_name, keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -157,6 +159,7 @@ class AliasMethodNode(Node):
     _attrs_ = ["new_name", "old_name", "keyword_loc"]
 
     TYPE = 2
+    NAME = "AliasMethodNode"
 
     def __init__(self, node_id, location, flags, new_name, old_name, keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -172,6 +175,7 @@ class AlternationPatternNode(Node):
     _attrs_ = ["left", "right", "operator_loc"]
 
     TYPE = 3
+    NAME = "AlternationPatternNode"
 
     def __init__(self, node_id, location, flags, left, right, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -187,6 +191,7 @@ class AndNode(Node):
     _attrs_ = ["left", "right", "operator_loc"]
 
     TYPE = 4
+    NAME = "AndNode"
 
     def __init__(self, node_id, location, flags, left, right, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -202,6 +207,7 @@ class ArgumentsNode(Node):
     _attrs_ = ["arguments"]
 
     TYPE = 5
+    NAME = "ArgumentsNode"
 
     def __init__(self, node_id, location, flags, arguments):
         Node.__init__(self, node_id, location, flags)
@@ -215,6 +221,7 @@ class ArrayNode(Node):
     _attrs_ = ["elements", "opening_loc", "closing_loc"]
 
     TYPE = 6
+    NAME = "ArrayNode"
 
     def __init__(self, node_id, location, flags, elements, opening_loc, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -230,6 +237,7 @@ class ArrayPatternNode(Node):
     _attrs_ = ["constant", "requireds", "rest", "posts", "opening_loc", "closing_loc"]
 
     TYPE = 7
+    NAME = "ArrayPatternNode"
 
     def __init__(self, node_id, location, flags, constant, requireds, rest, posts, opening_loc, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -248,6 +256,7 @@ class AssocNode(Node):
     _attrs_ = ["key", "value", "operator_loc"]
 
     TYPE = 8
+    NAME = "AssocNode"
 
     def __init__(self, node_id, location, flags, key, value, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -263,6 +272,7 @@ class AssocSplatNode(Node):
     _attrs_ = ["value", "operator_loc"]
 
     TYPE = 9
+    NAME = "AssocSplatNode"
 
     def __init__(self, node_id, location, flags, value, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -277,6 +287,7 @@ class BackReferenceReadNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 10
+    NAME = "BackReferenceReadNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -290,6 +301,7 @@ class BeginNode(Node):
     _attrs_ = ["begin_keyword_loc", "statements", "rescue_clause", "else_clause", "ensure_clause", "end_keyword_loc"]
 
     TYPE = 11
+    NAME = "BeginNode"
 
     def __init__(self, node_id, location, flags, begin_keyword_loc, statements, rescue_clause, else_clause, ensure_clause, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -308,6 +320,7 @@ class BlockArgumentNode(Node):
     _attrs_ = ["expression", "operator_loc"]
 
     TYPE = 12
+    NAME = "BlockArgumentNode"
 
     def __init__(self, node_id, location, flags, expression, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -322,6 +335,7 @@ class BlockLocalVariableNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 13
+    NAME = "BlockLocalVariableNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -335,6 +349,7 @@ class BlockNode(Node):
     _attrs_ = ["locals", "parameters", "body", "opening_loc", "closing_loc"]
 
     TYPE = 14
+    NAME = "BlockNode"
 
     def __init__(self, node_id, location, flags, locals, parameters, body, opening_loc, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -352,6 +367,7 @@ class BlockParameterNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc"]
 
     TYPE = 15
+    NAME = "BlockParameterNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -367,6 +383,7 @@ class BlockParametersNode(Node):
     _attrs_ = ["parameters", "locals", "opening_loc", "closing_loc"]
 
     TYPE = 16
+    NAME = "BlockParametersNode"
 
     def __init__(self, node_id, location, flags, parameters, locals, opening_loc, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -383,6 +400,7 @@ class BreakNode(Node):
     _attrs_ = ["arguments", "keyword_loc"]
 
     TYPE = 17
+    NAME = "BreakNode"
 
     def __init__(self, node_id, location, flags, arguments, keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -397,6 +415,7 @@ class CallAndWriteNode(Node):
     _attrs_ = ["receiver", "call_operator_loc", "message_loc", "read_name", "write_name", "operator_loc", "value"]
 
     TYPE = 18
+    NAME = "CallAndWriteNode"
 
     def __init__(self, node_id, location, flags, receiver, call_operator_loc, message_loc, read_name, write_name, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -416,6 +435,7 @@ class CallNode(Node):
     _attrs_ = ["receiver", "call_operator_loc", "name", "message_loc", "opening_loc", "arguments", "closing_loc", "equal_loc", "block"]
 
     TYPE = 19
+    NAME = "CallNode"
 
     def __init__(self, node_id, location, flags, receiver, call_operator_loc, name, message_loc, opening_loc, arguments, closing_loc, equal_loc, block):
         Node.__init__(self, node_id, location, flags)
@@ -437,6 +457,7 @@ class CallOperatorWriteNode(Node):
     _attrs_ = ["receiver", "call_operator_loc", "message_loc", "read_name", "write_name", "binary_operator", "binary_operator_loc", "value"]
 
     TYPE = 20
+    NAME = "CallOperatorWriteNode"
 
     def __init__(self, node_id, location, flags, receiver, call_operator_loc, message_loc, read_name, write_name, binary_operator, binary_operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -457,6 +478,7 @@ class CallOrWriteNode(Node):
     _attrs_ = ["receiver", "call_operator_loc", "message_loc", "read_name", "write_name", "operator_loc", "value"]
 
     TYPE = 21
+    NAME = "CallOrWriteNode"
 
     def __init__(self, node_id, location, flags, receiver, call_operator_loc, message_loc, read_name, write_name, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -476,6 +498,7 @@ class CallTargetNode(Node):
     _attrs_ = ["receiver", "call_operator_loc", "name", "message_loc"]
 
     TYPE = 22
+    NAME = "CallTargetNode"
 
     def __init__(self, node_id, location, flags, receiver, call_operator_loc, name, message_loc):
         Node.__init__(self, node_id, location, flags)
@@ -492,6 +515,7 @@ class CapturePatternNode(Node):
     _attrs_ = ["value", "target", "operator_loc"]
 
     TYPE = 23
+    NAME = "CapturePatternNode"
 
     def __init__(self, node_id, location, flags, value, target, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -507,6 +531,7 @@ class CaseMatchNode(Node):
     _attrs_ = ["predicate", "conditions", "else_clause", "case_keyword_loc", "end_keyword_loc"]
 
     TYPE = 24
+    NAME = "CaseMatchNode"
 
     def __init__(self, node_id, location, flags, predicate, conditions, else_clause, case_keyword_loc, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -524,6 +549,7 @@ class CaseNode(Node):
     _attrs_ = ["predicate", "conditions", "else_clause", "case_keyword_loc", "end_keyword_loc"]
 
     TYPE = 25
+    NAME = "CaseNode"
 
     def __init__(self, node_id, location, flags, predicate, conditions, else_clause, case_keyword_loc, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -541,6 +567,7 @@ class ClassNode(Node):
     _attrs_ = ["locals", "class_keyword_loc", "constant_path", "inheritance_operator_loc", "superclass", "body", "end_keyword_loc", "name"]
 
     TYPE = 26
+    NAME = "ClassNode"
 
     def __init__(self, node_id, location, flags, locals, class_keyword_loc, constant_path, inheritance_operator_loc, superclass, body, end_keyword_loc, name):
         Node.__init__(self, node_id, location, flags)
@@ -561,6 +588,7 @@ class ClassVariableAndWriteNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc", "value"]
 
     TYPE = 27
+    NAME = "ClassVariableAndWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -577,6 +605,7 @@ class ClassVariableOperatorWriteNode(Node):
     _attrs_ = ["name", "name_loc", "binary_operator_loc", "value", "binary_operator"]
 
     TYPE = 28
+    NAME = "ClassVariableOperatorWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, binary_operator_loc, value, binary_operator):
         Node.__init__(self, node_id, location, flags)
@@ -594,6 +623,7 @@ class ClassVariableOrWriteNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc", "value"]
 
     TYPE = 29
+    NAME = "ClassVariableOrWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -610,6 +640,7 @@ class ClassVariableReadNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 30
+    NAME = "ClassVariableReadNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -623,6 +654,7 @@ class ClassVariableTargetNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 31
+    NAME = "ClassVariableTargetNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -636,6 +668,7 @@ class ClassVariableWriteNode(Node):
     _attrs_ = ["name", "name_loc", "value", "operator_loc"]
 
     TYPE = 32
+    NAME = "ClassVariableWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, value, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -652,6 +685,7 @@ class ConstantAndWriteNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc", "value"]
 
     TYPE = 33
+    NAME = "ConstantAndWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -668,6 +702,7 @@ class ConstantOperatorWriteNode(Node):
     _attrs_ = ["name", "name_loc", "binary_operator_loc", "value", "binary_operator"]
 
     TYPE = 34
+    NAME = "ConstantOperatorWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, binary_operator_loc, value, binary_operator):
         Node.__init__(self, node_id, location, flags)
@@ -685,6 +720,7 @@ class ConstantOrWriteNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc", "value"]
 
     TYPE = 35
+    NAME = "ConstantOrWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -701,6 +737,7 @@ class ConstantPathAndWriteNode(Node):
     _attrs_ = ["target", "operator_loc", "value"]
 
     TYPE = 36
+    NAME = "ConstantPathAndWriteNode"
 
     def __init__(self, node_id, location, flags, target, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -716,6 +753,7 @@ class ConstantPathNode(Node):
     _attrs_ = ["parent", "name", "delimiter_loc", "name_loc"]
 
     TYPE = 37
+    NAME = "ConstantPathNode"
 
     def __init__(self, node_id, location, flags, parent, name, delimiter_loc, name_loc):
         Node.__init__(self, node_id, location, flags)
@@ -732,6 +770,7 @@ class ConstantPathOperatorWriteNode(Node):
     _attrs_ = ["target", "binary_operator_loc", "value", "binary_operator"]
 
     TYPE = 38
+    NAME = "ConstantPathOperatorWriteNode"
 
     def __init__(self, node_id, location, flags, target, binary_operator_loc, value, binary_operator):
         Node.__init__(self, node_id, location, flags)
@@ -748,6 +787,7 @@ class ConstantPathOrWriteNode(Node):
     _attrs_ = ["target", "operator_loc", "value"]
 
     TYPE = 39
+    NAME = "ConstantPathOrWriteNode"
 
     def __init__(self, node_id, location, flags, target, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -763,6 +803,7 @@ class ConstantPathTargetNode(Node):
     _attrs_ = ["parent", "name", "delimiter_loc", "name_loc"]
 
     TYPE = 40
+    NAME = "ConstantPathTargetNode"
 
     def __init__(self, node_id, location, flags, parent, name, delimiter_loc, name_loc):
         Node.__init__(self, node_id, location, flags)
@@ -779,6 +820,7 @@ class ConstantPathWriteNode(Node):
     _attrs_ = ["target", "operator_loc", "value"]
 
     TYPE = 41
+    NAME = "ConstantPathWriteNode"
 
     def __init__(self, node_id, location, flags, target, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -794,6 +836,7 @@ class ConstantReadNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 42
+    NAME = "ConstantReadNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -807,6 +850,7 @@ class ConstantTargetNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 43
+    NAME = "ConstantTargetNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -820,6 +864,7 @@ class ConstantWriteNode(Node):
     _attrs_ = ["name", "name_loc", "value", "operator_loc"]
 
     TYPE = 44
+    NAME = "ConstantWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, value, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -836,6 +881,7 @@ class DefNode(Node):
     _attrs_ = ["name", "name_loc", "receiver", "parameters", "body", "locals", "def_keyword_loc", "operator_loc", "lparen_loc", "rparen_loc", "equal_loc", "end_keyword_loc"]
 
     TYPE = 45
+    NAME = "DefNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, receiver, parameters, body, locals, def_keyword_loc, operator_loc, lparen_loc, rparen_loc, equal_loc, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -860,6 +906,7 @@ class DefinedNode(Node):
     _attrs_ = ["lparen_loc", "value", "rparen_loc", "keyword_loc"]
 
     TYPE = 46
+    NAME = "DefinedNode"
 
     def __init__(self, node_id, location, flags, lparen_loc, value, rparen_loc, keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -876,6 +923,7 @@ class ElseNode(Node):
     _attrs_ = ["else_keyword_loc", "statements", "end_keyword_loc"]
 
     TYPE = 47
+    NAME = "ElseNode"
 
     def __init__(self, node_id, location, flags, else_keyword_loc, statements, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -891,6 +939,7 @@ class EmbeddedStatementsNode(Node):
     _attrs_ = ["opening_loc", "statements", "closing_loc"]
 
     TYPE = 48
+    NAME = "EmbeddedStatementsNode"
 
     def __init__(self, node_id, location, flags, opening_loc, statements, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -906,6 +955,7 @@ class EmbeddedVariableNode(Node):
     _attrs_ = ["operator_loc", "variable"]
 
     TYPE = 49
+    NAME = "EmbeddedVariableNode"
 
     def __init__(self, node_id, location, flags, operator_loc, variable):
         Node.__init__(self, node_id, location, flags)
@@ -920,6 +970,7 @@ class EnsureNode(Node):
     _attrs_ = ["ensure_keyword_loc", "statements", "end_keyword_loc"]
 
     TYPE = 50
+    NAME = "EnsureNode"
 
     def __init__(self, node_id, location, flags, ensure_keyword_loc, statements, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -935,6 +986,7 @@ class FalseNode(Node):
     _attrs_ = []
 
     TYPE = 51
+    NAME = "FalseNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -947,6 +999,7 @@ class FindPatternNode(Node):
     _attrs_ = ["constant", "left", "requireds", "right", "opening_loc", "closing_loc"]
 
     TYPE = 52
+    NAME = "FindPatternNode"
 
     def __init__(self, node_id, location, flags, constant, left, requireds, right, opening_loc, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -965,6 +1018,7 @@ class FlipFlopNode(Node):
     _attrs_ = ["left", "right", "operator_loc"]
 
     TYPE = 53
+    NAME = "FlipFlopNode"
 
     def __init__(self, node_id, location, flags, left, right, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -980,6 +1034,7 @@ class FloatNode(Node):
     _attrs_ = ["value"]
 
     TYPE = 54
+    NAME = "FloatNode"
 
     def __init__(self, node_id, location, flags, value):
         Node.__init__(self, node_id, location, flags)
@@ -993,6 +1048,7 @@ class ForNode(Node):
     _attrs_ = ["index", "collection", "statements", "for_keyword_loc", "in_keyword_loc", "do_keyword_loc", "end_keyword_loc"]
 
     TYPE = 55
+    NAME = "ForNode"
 
     def __init__(self, node_id, location, flags, index, collection, statements, for_keyword_loc, in_keyword_loc, do_keyword_loc, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1012,6 +1068,7 @@ class ForwardingArgumentsNode(Node):
     _attrs_ = []
 
     TYPE = 56
+    NAME = "ForwardingArgumentsNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -1024,6 +1081,7 @@ class ForwardingParameterNode(Node):
     _attrs_ = []
 
     TYPE = 57
+    NAME = "ForwardingParameterNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -1036,6 +1094,7 @@ class ForwardingSuperNode(Node):
     _attrs_ = ["block"]
 
     TYPE = 58
+    NAME = "ForwardingSuperNode"
 
     def __init__(self, node_id, location, flags, block):
         Node.__init__(self, node_id, location, flags)
@@ -1049,6 +1108,7 @@ class GlobalVariableAndWriteNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc", "value"]
 
     TYPE = 59
+    NAME = "GlobalVariableAndWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1065,6 +1125,7 @@ class GlobalVariableOperatorWriteNode(Node):
     _attrs_ = ["name", "name_loc", "binary_operator_loc", "value", "binary_operator"]
 
     TYPE = 60
+    NAME = "GlobalVariableOperatorWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, binary_operator_loc, value, binary_operator):
         Node.__init__(self, node_id, location, flags)
@@ -1082,6 +1143,7 @@ class GlobalVariableOrWriteNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc", "value"]
 
     TYPE = 61
+    NAME = "GlobalVariableOrWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1098,6 +1160,7 @@ class GlobalVariableReadNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 62
+    NAME = "GlobalVariableReadNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -1111,6 +1174,7 @@ class GlobalVariableTargetNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 63
+    NAME = "GlobalVariableTargetNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -1124,6 +1188,7 @@ class GlobalVariableWriteNode(Node):
     _attrs_ = ["name", "name_loc", "value", "operator_loc"]
 
     TYPE = 64
+    NAME = "GlobalVariableWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, value, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1140,6 +1205,7 @@ class HashNode(Node):
     _attrs_ = ["opening_loc", "elements", "closing_loc"]
 
     TYPE = 65
+    NAME = "HashNode"
 
     def __init__(self, node_id, location, flags, opening_loc, elements, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1155,6 +1221,7 @@ class HashPatternNode(Node):
     _attrs_ = ["constant", "elements", "rest", "opening_loc", "closing_loc"]
 
     TYPE = 66
+    NAME = "HashPatternNode"
 
     def __init__(self, node_id, location, flags, constant, elements, rest, opening_loc, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1172,6 +1239,7 @@ class IfNode(Node):
     _attrs_ = ["if_keyword_loc", "predicate", "then_keyword_loc", "statements", "subsequent", "end_keyword_loc"]
 
     TYPE = 67
+    NAME = "IfNode"
 
     def __init__(self, node_id, location, flags, if_keyword_loc, predicate, then_keyword_loc, statements, subsequent, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1190,6 +1258,7 @@ class ImaginaryNode(Node):
     _attrs_ = ["numeric"]
 
     TYPE = 68
+    NAME = "ImaginaryNode"
 
     def __init__(self, node_id, location, flags, numeric):
         Node.__init__(self, node_id, location, flags)
@@ -1203,6 +1272,7 @@ class ImplicitNode(Node):
     _attrs_ = ["value"]
 
     TYPE = 69
+    NAME = "ImplicitNode"
 
     def __init__(self, node_id, location, flags, value):
         Node.__init__(self, node_id, location, flags)
@@ -1216,6 +1286,7 @@ class ImplicitRestNode(Node):
     _attrs_ = []
 
     TYPE = 70
+    NAME = "ImplicitRestNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -1228,6 +1299,7 @@ class InNode(Node):
     _attrs_ = ["pattern", "statements", "in_loc", "then_loc"]
 
     TYPE = 71
+    NAME = "InNode"
 
     def __init__(self, node_id, location, flags, pattern, statements, in_loc, then_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1244,6 +1316,7 @@ class IndexAndWriteNode(Node):
     _attrs_ = ["receiver", "call_operator_loc", "opening_loc", "arguments", "closing_loc", "block", "operator_loc", "value"]
 
     TYPE = 72
+    NAME = "IndexAndWriteNode"
 
     def __init__(self, node_id, location, flags, receiver, call_operator_loc, opening_loc, arguments, closing_loc, block, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1264,6 +1337,7 @@ class IndexOperatorWriteNode(Node):
     _attrs_ = ["receiver", "call_operator_loc", "opening_loc", "arguments", "closing_loc", "block", "binary_operator", "binary_operator_loc", "value"]
 
     TYPE = 73
+    NAME = "IndexOperatorWriteNode"
 
     def __init__(self, node_id, location, flags, receiver, call_operator_loc, opening_loc, arguments, closing_loc, block, binary_operator, binary_operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1285,6 +1359,7 @@ class IndexOrWriteNode(Node):
     _attrs_ = ["receiver", "call_operator_loc", "opening_loc", "arguments", "closing_loc", "block", "operator_loc", "value"]
 
     TYPE = 74
+    NAME = "IndexOrWriteNode"
 
     def __init__(self, node_id, location, flags, receiver, call_operator_loc, opening_loc, arguments, closing_loc, block, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1305,6 +1380,7 @@ class IndexTargetNode(Node):
     _attrs_ = ["receiver", "opening_loc", "arguments", "closing_loc", "block"]
 
     TYPE = 75
+    NAME = "IndexTargetNode"
 
     def __init__(self, node_id, location, flags, receiver, opening_loc, arguments, closing_loc, block):
         Node.__init__(self, node_id, location, flags)
@@ -1322,6 +1398,7 @@ class InstanceVariableAndWriteNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc", "value"]
 
     TYPE = 76
+    NAME = "InstanceVariableAndWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1338,6 +1415,7 @@ class InstanceVariableOperatorWriteNode(Node):
     _attrs_ = ["name", "name_loc", "binary_operator_loc", "value", "binary_operator"]
 
     TYPE = 77
+    NAME = "InstanceVariableOperatorWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, binary_operator_loc, value, binary_operator):
         Node.__init__(self, node_id, location, flags)
@@ -1355,6 +1433,7 @@ class InstanceVariableOrWriteNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc", "value"]
 
     TYPE = 78
+    NAME = "InstanceVariableOrWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1371,6 +1450,7 @@ class InstanceVariableReadNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 79
+    NAME = "InstanceVariableReadNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -1384,6 +1464,7 @@ class InstanceVariableTargetNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 80
+    NAME = "InstanceVariableTargetNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -1397,6 +1478,7 @@ class InstanceVariableWriteNode(Node):
     _attrs_ = ["name", "name_loc", "value", "operator_loc"]
 
     TYPE = 81
+    NAME = "InstanceVariableWriteNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, value, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1413,6 +1495,7 @@ class IntegerNode(Node):
     _attrs_ = ["value"]
 
     TYPE = 82
+    NAME = "IntegerNode"
 
     def __init__(self, node_id, location, flags, value):
         Node.__init__(self, node_id, location, flags)
@@ -1426,6 +1509,7 @@ class InterpolatedMatchLastLineNode(Node):
     _attrs_ = ["opening_loc", "parts", "closing_loc"]
 
     TYPE = 83
+    NAME = "InterpolatedMatchLastLineNode"
 
     def __init__(self, node_id, location, flags, opening_loc, parts, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1441,6 +1525,7 @@ class InterpolatedRegularExpressionNode(Node):
     _attrs_ = ["opening_loc", "parts", "closing_loc"]
 
     TYPE = 84
+    NAME = "InterpolatedRegularExpressionNode"
 
     def __init__(self, node_id, location, flags, opening_loc, parts, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1456,6 +1541,7 @@ class InterpolatedStringNode(Node):
     _attrs_ = ["opening_loc", "parts", "closing_loc"]
 
     TYPE = 85
+    NAME = "InterpolatedStringNode"
 
     def __init__(self, node_id, location, flags, opening_loc, parts, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1471,6 +1557,7 @@ class InterpolatedSymbolNode(Node):
     _attrs_ = ["opening_loc", "parts", "closing_loc"]
 
     TYPE = 86
+    NAME = "InterpolatedSymbolNode"
 
     def __init__(self, node_id, location, flags, opening_loc, parts, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1486,6 +1573,7 @@ class InterpolatedXStringNode(Node):
     _attrs_ = ["opening_loc", "parts", "closing_loc"]
 
     TYPE = 87
+    NAME = "InterpolatedXStringNode"
 
     def __init__(self, node_id, location, flags, opening_loc, parts, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1501,6 +1589,7 @@ class ItLocalVariableReadNode(Node):
     _attrs_ = []
 
     TYPE = 88
+    NAME = "ItLocalVariableReadNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -1513,6 +1602,7 @@ class ItParametersNode(Node):
     _attrs_ = []
 
     TYPE = 89
+    NAME = "ItParametersNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -1525,6 +1615,7 @@ class KeywordHashNode(Node):
     _attrs_ = ["elements"]
 
     TYPE = 90
+    NAME = "KeywordHashNode"
 
     def __init__(self, node_id, location, flags, elements):
         Node.__init__(self, node_id, location, flags)
@@ -1538,6 +1629,7 @@ class KeywordRestParameterNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc"]
 
     TYPE = 91
+    NAME = "KeywordRestParameterNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1553,6 +1645,7 @@ class LambdaNode(Node):
     _attrs_ = ["locals", "operator_loc", "opening_loc", "closing_loc", "parameters", "body"]
 
     TYPE = 92
+    NAME = "LambdaNode"
 
     def __init__(self, node_id, location, flags, locals, operator_loc, opening_loc, closing_loc, parameters, body):
         Node.__init__(self, node_id, location, flags)
@@ -1571,6 +1664,7 @@ class LocalVariableAndWriteNode(Node):
     _attrs_ = ["name_loc", "operator_loc", "value", "name", "depth"]
 
     TYPE = 93
+    NAME = "LocalVariableAndWriteNode"
 
     def __init__(self, node_id, location, flags, name_loc, operator_loc, value, name, depth):
         Node.__init__(self, node_id, location, flags)
@@ -1588,6 +1682,7 @@ class LocalVariableOperatorWriteNode(Node):
     _attrs_ = ["name_loc", "binary_operator_loc", "value", "name", "binary_operator", "depth"]
 
     TYPE = 94
+    NAME = "LocalVariableOperatorWriteNode"
 
     def __init__(self, node_id, location, flags, name_loc, binary_operator_loc, value, name, binary_operator, depth):
         Node.__init__(self, node_id, location, flags)
@@ -1606,6 +1701,7 @@ class LocalVariableOrWriteNode(Node):
     _attrs_ = ["name_loc", "operator_loc", "value", "name", "depth"]
 
     TYPE = 95
+    NAME = "LocalVariableOrWriteNode"
 
     def __init__(self, node_id, location, flags, name_loc, operator_loc, value, name, depth):
         Node.__init__(self, node_id, location, flags)
@@ -1623,6 +1719,7 @@ class LocalVariableReadNode(Node):
     _attrs_ = ["name", "depth"]
 
     TYPE = 96
+    NAME = "LocalVariableReadNode"
 
     def __init__(self, node_id, location, flags, name, depth):
         Node.__init__(self, node_id, location, flags)
@@ -1637,6 +1734,7 @@ class LocalVariableTargetNode(Node):
     _attrs_ = ["name", "depth"]
 
     TYPE = 97
+    NAME = "LocalVariableTargetNode"
 
     def __init__(self, node_id, location, flags, name, depth):
         Node.__init__(self, node_id, location, flags)
@@ -1651,6 +1749,7 @@ class LocalVariableWriteNode(Node):
     _attrs_ = ["name", "depth", "name_loc", "value", "operator_loc"]
 
     TYPE = 98
+    NAME = "LocalVariableWriteNode"
 
     def __init__(self, node_id, location, flags, name, depth, name_loc, value, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1668,6 +1767,7 @@ class MatchLastLineNode(Node):
     _attrs_ = ["opening_loc", "content_loc", "closing_loc", "unescaped"]
 
     TYPE = 99
+    NAME = "MatchLastLineNode"
 
     def __init__(self, node_id, location, flags, opening_loc, content_loc, closing_loc, unescaped):
         Node.__init__(self, node_id, location, flags)
@@ -1684,6 +1784,7 @@ class MatchPredicateNode(Node):
     _attrs_ = ["value", "pattern", "operator_loc"]
 
     TYPE = 100
+    NAME = "MatchPredicateNode"
 
     def __init__(self, node_id, location, flags, value, pattern, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1699,6 +1800,7 @@ class MatchRequiredNode(Node):
     _attrs_ = ["value", "pattern", "operator_loc"]
 
     TYPE = 101
+    NAME = "MatchRequiredNode"
 
     def __init__(self, node_id, location, flags, value, pattern, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1714,6 +1816,7 @@ class MatchWriteNode(Node):
     _attrs_ = ["call", "targets"]
 
     TYPE = 102
+    NAME = "MatchWriteNode"
 
     def __init__(self, node_id, location, flags, call, targets):
         Node.__init__(self, node_id, location, flags)
@@ -1728,6 +1831,7 @@ class MissingNode(Node):
     _attrs_ = []
 
     TYPE = 103
+    NAME = "MissingNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -1740,6 +1844,7 @@ class ModuleNode(Node):
     _attrs_ = ["locals", "module_keyword_loc", "constant_path", "body", "end_keyword_loc", "name"]
 
     TYPE = 104
+    NAME = "ModuleNode"
 
     def __init__(self, node_id, location, flags, locals, module_keyword_loc, constant_path, body, end_keyword_loc, name):
         Node.__init__(self, node_id, location, flags)
@@ -1758,6 +1863,7 @@ class MultiTargetNode(Node):
     _attrs_ = ["lefts", "rest", "rights", "lparen_loc", "rparen_loc"]
 
     TYPE = 105
+    NAME = "MultiTargetNode"
 
     def __init__(self, node_id, location, flags, lefts, rest, rights, lparen_loc, rparen_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1775,6 +1881,7 @@ class MultiWriteNode(Node):
     _attrs_ = ["lefts", "rest", "rights", "lparen_loc", "rparen_loc", "operator_loc", "value"]
 
     TYPE = 106
+    NAME = "MultiWriteNode"
 
     def __init__(self, node_id, location, flags, lefts, rest, rights, lparen_loc, rparen_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1794,6 +1901,7 @@ class NextNode(Node):
     _attrs_ = ["arguments", "keyword_loc"]
 
     TYPE = 107
+    NAME = "NextNode"
 
     def __init__(self, node_id, location, flags, arguments, keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1808,6 +1916,7 @@ class NilNode(Node):
     _attrs_ = []
 
     TYPE = 108
+    NAME = "NilNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -1820,6 +1929,7 @@ class NoKeywordsParameterNode(Node):
     _attrs_ = ["operator_loc", "keyword_loc"]
 
     TYPE = 109
+    NAME = "NoKeywordsParameterNode"
 
     def __init__(self, node_id, location, flags, operator_loc, keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1834,6 +1944,7 @@ class NumberedParametersNode(Node):
     _attrs_ = ["maximum"]
 
     TYPE = 110
+    NAME = "NumberedParametersNode"
 
     def __init__(self, node_id, location, flags, maximum):
         Node.__init__(self, node_id, location, flags)
@@ -1847,6 +1958,7 @@ class NumberedReferenceReadNode(Node):
     _attrs_ = ["number"]
 
     TYPE = 111
+    NAME = "NumberedReferenceReadNode"
 
     def __init__(self, node_id, location, flags, number):
         Node.__init__(self, node_id, location, flags)
@@ -1860,6 +1972,7 @@ class OptionalKeywordParameterNode(Node):
     _attrs_ = ["name", "name_loc", "value"]
 
     TYPE = 112
+    NAME = "OptionalKeywordParameterNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1875,6 +1988,7 @@ class OptionalParameterNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc", "value"]
 
     TYPE = 113
+    NAME = "OptionalParameterNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc, value):
         Node.__init__(self, node_id, location, flags)
@@ -1891,6 +2005,7 @@ class OrNode(Node):
     _attrs_ = ["left", "right", "operator_loc"]
 
     TYPE = 114
+    NAME = "OrNode"
 
     def __init__(self, node_id, location, flags, left, right, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1906,6 +2021,7 @@ class ParametersNode(Node):
     _attrs_ = ["requireds", "optionals", "rest", "posts", "keywords", "keyword_rest", "block"]
 
     TYPE = 115
+    NAME = "ParametersNode"
 
     def __init__(self, node_id, location, flags, requireds, optionals, rest, posts, keywords, keyword_rest, block):
         Node.__init__(self, node_id, location, flags)
@@ -1925,6 +2041,7 @@ class ParenthesesNode(Node):
     _attrs_ = ["body", "opening_loc", "closing_loc"]
 
     TYPE = 116
+    NAME = "ParenthesesNode"
 
     def __init__(self, node_id, location, flags, body, opening_loc, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1940,6 +2057,7 @@ class PinnedExpressionNode(Node):
     _attrs_ = ["expression", "operator_loc", "lparen_loc", "rparen_loc"]
 
     TYPE = 117
+    NAME = "PinnedExpressionNode"
 
     def __init__(self, node_id, location, flags, expression, operator_loc, lparen_loc, rparen_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1956,6 +2074,7 @@ class PinnedVariableNode(Node):
     _attrs_ = ["variable", "operator_loc"]
 
     TYPE = 118
+    NAME = "PinnedVariableNode"
 
     def __init__(self, node_id, location, flags, variable, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1970,6 +2089,7 @@ class PostExecutionNode(Node):
     _attrs_ = ["statements", "keyword_loc", "opening_loc", "closing_loc"]
 
     TYPE = 119
+    NAME = "PostExecutionNode"
 
     def __init__(self, node_id, location, flags, statements, keyword_loc, opening_loc, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -1986,6 +2106,7 @@ class PreExecutionNode(Node):
     _attrs_ = ["statements", "keyword_loc", "opening_loc", "closing_loc"]
 
     TYPE = 120
+    NAME = "PreExecutionNode"
 
     def __init__(self, node_id, location, flags, statements, keyword_loc, opening_loc, closing_loc):
         Node.__init__(self, node_id, location, flags)
@@ -2002,6 +2123,7 @@ class ProgramNode(Node):
     _attrs_ = ["locals", "statements"]
 
     TYPE = 121
+    NAME = "ProgramNode"
 
     def __init__(self, node_id, location, flags, locals, statements):
         Node.__init__(self, node_id, location, flags)
@@ -2016,6 +2138,7 @@ class RangeNode(Node):
     _attrs_ = ["left", "right", "operator_loc"]
 
     TYPE = 122
+    NAME = "RangeNode"
 
     def __init__(self, node_id, location, flags, left, right, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -2031,6 +2154,7 @@ class RationalNode(Node):
     _attrs_ = ["numerator", "denominator"]
 
     TYPE = 123
+    NAME = "RationalNode"
 
     def __init__(self, node_id, location, flags, numerator, denominator):
         Node.__init__(self, node_id, location, flags)
@@ -2045,6 +2169,7 @@ class RedoNode(Node):
     _attrs_ = []
 
     TYPE = 124
+    NAME = "RedoNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -2057,6 +2182,7 @@ class RegularExpressionNode(Node):
     _attrs_ = ["opening_loc", "content_loc", "closing_loc", "unescaped"]
 
     TYPE = 125
+    NAME = "RegularExpressionNode"
 
     def __init__(self, node_id, location, flags, opening_loc, content_loc, closing_loc, unescaped):
         Node.__init__(self, node_id, location, flags)
@@ -2073,6 +2199,7 @@ class RequiredKeywordParameterNode(Node):
     _attrs_ = ["name", "name_loc"]
 
     TYPE = 126
+    NAME = "RequiredKeywordParameterNode"
 
     def __init__(self, node_id, location, flags, name, name_loc):
         Node.__init__(self, node_id, location, flags)
@@ -2087,6 +2214,7 @@ class RequiredParameterNode(Node):
     _attrs_ = ["name"]
 
     TYPE = 127
+    NAME = "RequiredParameterNode"
 
     def __init__(self, node_id, location, flags, name):
         Node.__init__(self, node_id, location, flags)
@@ -2100,6 +2228,7 @@ class RescueModifierNode(Node):
     _attrs_ = ["expression", "keyword_loc", "rescue_expression"]
 
     TYPE = 128
+    NAME = "RescueModifierNode"
 
     def __init__(self, node_id, location, flags, expression, keyword_loc, rescue_expression):
         Node.__init__(self, node_id, location, flags)
@@ -2115,6 +2244,7 @@ class RescueNode(Node):
     _attrs_ = ["keyword_loc", "exceptions", "operator_loc", "reference", "then_keyword_loc", "statements", "subsequent"]
 
     TYPE = 129
+    NAME = "RescueNode"
 
     def __init__(self, node_id, location, flags, keyword_loc, exceptions, operator_loc, reference, then_keyword_loc, statements, subsequent):
         Node.__init__(self, node_id, location, flags)
@@ -2134,6 +2264,7 @@ class RestParameterNode(Node):
     _attrs_ = ["name", "name_loc", "operator_loc"]
 
     TYPE = 130
+    NAME = "RestParameterNode"
 
     def __init__(self, node_id, location, flags, name, name_loc, operator_loc):
         Node.__init__(self, node_id, location, flags)
@@ -2149,6 +2280,7 @@ class RetryNode(Node):
     _attrs_ = []
 
     TYPE = 131
+    NAME = "RetryNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -2161,6 +2293,7 @@ class ReturnNode(Node):
     _attrs_ = ["keyword_loc", "arguments"]
 
     TYPE = 132
+    NAME = "ReturnNode"
 
     def __init__(self, node_id, location, flags, keyword_loc, arguments):
         Node.__init__(self, node_id, location, flags)
@@ -2175,6 +2308,7 @@ class SelfNode(Node):
     _attrs_ = []
 
     TYPE = 133
+    NAME = "SelfNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -2187,6 +2321,7 @@ class ShareableConstantNode(Node):
     _attrs_ = ["write"]
 
     TYPE = 134
+    NAME = "ShareableConstantNode"
 
     def __init__(self, node_id, location, flags, write):
         Node.__init__(self, node_id, location, flags)
@@ -2200,6 +2335,7 @@ class SingletonClassNode(Node):
     _attrs_ = ["locals", "class_keyword_loc", "operator_loc", "expression", "body", "end_keyword_loc"]
 
     TYPE = 135
+    NAME = "SingletonClassNode"
 
     def __init__(self, node_id, location, flags, locals, class_keyword_loc, operator_loc, expression, body, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -2218,6 +2354,7 @@ class SourceEncodingNode(Node):
     _attrs_ = []
 
     TYPE = 136
+    NAME = "SourceEncodingNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -2230,6 +2367,7 @@ class SourceFileNode(Node):
     _attrs_ = ["filepath"]
 
     TYPE = 137
+    NAME = "SourceFileNode"
 
     def __init__(self, node_id, location, flags, filepath):
         Node.__init__(self, node_id, location, flags)
@@ -2243,6 +2381,7 @@ class SourceLineNode(Node):
     _attrs_ = []
 
     TYPE = 138
+    NAME = "SourceLineNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -2255,6 +2394,7 @@ class SplatNode(Node):
     _attrs_ = ["operator_loc", "expression"]
 
     TYPE = 139
+    NAME = "SplatNode"
 
     def __init__(self, node_id, location, flags, operator_loc, expression):
         Node.__init__(self, node_id, location, flags)
@@ -2269,6 +2409,7 @@ class StatementsNode(Node):
     _attrs_ = ["body"]
 
     TYPE = 140
+    NAME = "StatementsNode"
 
     def __init__(self, node_id, location, flags, body):
         Node.__init__(self, node_id, location, flags)
@@ -2282,6 +2423,7 @@ class StringNode(Node):
     _attrs_ = ["opening_loc", "content_loc", "closing_loc", "unescaped"]
 
     TYPE = 141
+    NAME = "StringNode"
 
     def __init__(self, node_id, location, flags, opening_loc, content_loc, closing_loc, unescaped):
         Node.__init__(self, node_id, location, flags)
@@ -2298,6 +2440,7 @@ class SuperNode(Node):
     _attrs_ = ["keyword_loc", "lparen_loc", "arguments", "rparen_loc", "block"]
 
     TYPE = 142
+    NAME = "SuperNode"
 
     def __init__(self, node_id, location, flags, keyword_loc, lparen_loc, arguments, rparen_loc, block):
         Node.__init__(self, node_id, location, flags)
@@ -2315,6 +2458,7 @@ class SymbolNode(Node):
     _attrs_ = ["opening_loc", "value_loc", "closing_loc", "unescaped"]
 
     TYPE = 143
+    NAME = "SymbolNode"
 
     def __init__(self, node_id, location, flags, opening_loc, value_loc, closing_loc, unescaped):
         Node.__init__(self, node_id, location, flags)
@@ -2331,6 +2475,7 @@ class TrueNode(Node):
     _attrs_ = []
 
     TYPE = 144
+    NAME = "TrueNode"
 
     def __init__(self, node_id, location, flags):
         Node.__init__(self, node_id, location, flags)
@@ -2343,6 +2488,7 @@ class UndefNode(Node):
     _attrs_ = ["names", "keyword_loc"]
 
     TYPE = 145
+    NAME = "UndefNode"
 
     def __init__(self, node_id, location, flags, names, keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -2357,6 +2503,7 @@ class UnlessNode(Node):
     _attrs_ = ["keyword_loc", "predicate", "then_keyword_loc", "statements", "else_clause", "end_keyword_loc"]
 
     TYPE = 146
+    NAME = "UnlessNode"
 
     def __init__(self, node_id, location, flags, keyword_loc, predicate, then_keyword_loc, statements, else_clause, end_keyword_loc):
         Node.__init__(self, node_id, location, flags)
@@ -2375,6 +2522,7 @@ class UntilNode(Node):
     _attrs_ = ["keyword_loc", "do_keyword_loc", "closing_loc", "predicate", "statements"]
 
     TYPE = 147
+    NAME = "UntilNode"
 
     def __init__(self, node_id, location, flags, keyword_loc, do_keyword_loc, closing_loc, predicate, statements):
         Node.__init__(self, node_id, location, flags)
@@ -2392,6 +2540,7 @@ class WhenNode(Node):
     _attrs_ = ["keyword_loc", "conditions", "then_keyword_loc", "statements"]
 
     TYPE = 148
+    NAME = "WhenNode"
 
     def __init__(self, node_id, location, flags, keyword_loc, conditions, then_keyword_loc, statements):
         Node.__init__(self, node_id, location, flags)
@@ -2408,6 +2557,7 @@ class WhileNode(Node):
     _attrs_ = ["keyword_loc", "do_keyword_loc", "closing_loc", "predicate", "statements"]
 
     TYPE = 149
+    NAME = "WhileNode"
 
     def __init__(self, node_id, location, flags, keyword_loc, do_keyword_loc, closing_loc, predicate, statements):
         Node.__init__(self, node_id, location, flags)
@@ -2425,6 +2575,7 @@ class XStringNode(Node):
     _attrs_ = ["opening_loc", "content_loc", "closing_loc", "unescaped"]
 
     TYPE = 150
+    NAME = "XStringNode"
 
     def __init__(self, node_id, location, flags, opening_loc, content_loc, closing_loc, unescaped):
         Node.__init__(self, node_id, location, flags)
@@ -2441,6 +2592,7 @@ class YieldNode(Node):
     _attrs_ = ["keyword_loc", "lparen_loc", "arguments", "rparen_loc"]
 
     TYPE = 151
+    NAME = "YieldNode"
 
     def __init__(self, node_id, location, flags, keyword_loc, lparen_loc, arguments, rparen_loc):
         Node.__init__(self, node_id, location, flags)
@@ -2458,7 +2610,7 @@ class Visitor(object):
     back to visit_default()."""
 
     def visit_default(self, node):
-        raise NotImplementedError(node.__class__.__name__)
+        raise NotImplementedError(node.NAME)
 
     def visit_alias_global_variable_node(self, node):
         return self.visit_default(node)
@@ -3019,6 +3171,7 @@ class Loader(object):
 
     def load_double(self):
         pos = self.pos
+        assert pos >= 0
         self.pos = pos + 8
         return runpack("d", self.data[pos:pos + 8])
 
@@ -3037,6 +3190,7 @@ class Loader(object):
         length = self.load_varuint()
         pos = self.pos
         end = pos + length
+        assert pos >= 0
         assert end >= 0
         self.pos = end
         return self.data[pos:end]
@@ -3046,6 +3200,7 @@ class Loader(object):
         if type == 1:
             start = self.load_varuint()
             end = start + self.load_varuint()
+            assert start >= 0
             assert end >= 0
             return self.source[start:end]
         elif type == 2:
@@ -3070,9 +3225,11 @@ class Loader(object):
         if start & (1 << 31):
             start &= ~(1 << 31)
             end = start + length
+            assert start >= 0
             assert end >= 0
             return self.data[start:end]
         end = start + length
+        assert start >= 0
         assert end >= 0
         return self.source[start:end]
 

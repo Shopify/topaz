@@ -120,6 +120,7 @@ class Node(object):
     _attrs_ = ["node_id", "location", "flags"]
 
     TYPE = 0
+    NAME = "Node"
 
     def __init__(self, node_id, location, flags):
         self.node_id = node_id
@@ -256,6 +257,7 @@ class Loader(object):
 
     def load_double(self):
         pos = self.pos
+        assert pos >= 0
         self.pos = pos + 8
         return runpack("d", self.data[pos:pos + 8])
 
@@ -274,6 +276,7 @@ class Loader(object):
         length = self.load_varuint()
         pos = self.pos
         end = pos + length
+        assert pos >= 0
         assert end >= 0
         self.pos = end
         return self.data[pos:end]
@@ -283,6 +286,7 @@ class Loader(object):
         if type == 1:
             start = self.load_varuint()
             end = start + self.load_varuint()
+            assert start >= 0
             assert end >= 0
             return self.source[start:end]
         elif type == 2:
@@ -307,9 +311,11 @@ class Loader(object):
         if start & (1 << 31):
             start &= ~(1 << 31)
             end = start + length
+            assert start >= 0
             assert end >= 0
             return self.data[start:end]
         end = start + length
+        assert start >= 0
         assert end >= 0
         return self.source[start:end]
 
@@ -375,7 +381,8 @@ def generate(config, version):
         out.append("\n\nclass %s(Node):\n" % node["name"])
         attrs = ", ".join('"%s"' % attr_name(f) for f in fields)
         out.append("    _attrs_ = [%s]\n\n" % attrs)
-        out.append("    TYPE = %d\n\n" % type_id)
+        out.append("    TYPE = %d\n" % type_id)
+        out.append('    NAME = "%s"\n\n' % node["name"])
         if fields:
             out.append("    def __init__(self, node_id, location, flags, %s):\n" % params)
         else:
@@ -390,7 +397,7 @@ def generate(config, version):
     out.append('    """Dispatch target for Node.accept(); every visit method falls\n')
     out.append('    back to visit_default()."""\n\n')
     out.append("    def visit_default(self, node):\n")
-    out.append("        raise NotImplementedError(node.__class__.__name__)\n")
+    out.append("        raise NotImplementedError(node.NAME)\n")
     for node in nodes:
         out.append("\n    def visit_%s(self, node):\n" % snake(node["name"]))
         out.append("        return self.visit_default(node)\n")
