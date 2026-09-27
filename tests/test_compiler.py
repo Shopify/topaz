@@ -1,4 +1,7 @@
+import pytest
+
 from topaz import consts
+from topaz.error import RubyError
 
 
 class TestCompiler(object):
@@ -1245,22 +1248,15 @@ class TestCompiler(object):
         RETURN
         """)
 
-        self.assert_compiles(space, """
-        begin
-            1 / 0
-        else
-            10
-        end
-        """, """
-        LOAD_CONST 0
-        LOAD_CONST 1
-        SEND 2 1
-        JUMP 14
-        LOAD_CONST 3
-        DISCARD_TOP
-
-        RETURN
-        """)
+        # `else` without `rescue` is a syntax error since Ruby 3.4.
+        with pytest.raises(RubyError):
+            space.compile("""
+            begin
+                1 / 0
+            else
+                10
+            end
+            """, "t.rb")
 
     def test_ensure(self, space):
         bc = self.assert_compiles(space, """

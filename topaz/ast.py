@@ -171,10 +171,15 @@ class TryExcept(Node):
         exc = ctx.new_block()
         else_block = ctx.new_block()
         end = ctx.new_block()
+        # `retry` in a rescue clause jumps back here.
+        retry_block = ctx.new_block()
+        ctx.use_next_block(retry_block)
         if self.except_handlers:
             ctx.emit_jump(consts.SETUP_EXCEPT, exc)
         ctx.use_next_block(ctx.new_block())
+        ctx.except_depth += 1
         self.body.compile(ctx)
+        ctx.except_depth -= 1
         if self.except_handlers:
             ctx.emit(consts.POP_BLOCK)
         ctx.emit_jump(consts.JUMP, else_block)
@@ -206,7 +211,10 @@ class TryExcept(Node):
                 handler.target.compile_store(ctx)
             ctx.emit(consts.DISCARD_TOP)
             ctx.emit(consts.DISCARD_TOP)
+            ctx.retry_targets.append(
+                (retry_block, len(ctx.frame_blocks), ctx.except_depth))
             handler.body.compile(ctx)
+            ctx.retry_targets.pop()
             ctx.emit_jump(consts.JUMP, end)
             ctx.use_next_block(next_except)
 
@@ -216,6 +224,22 @@ class TryExcept(Node):
         self.else_body.compile(ctx)
         ctx.emit(consts.DISCARD_TOP)
         ctx.use_next_block(end)
+
+
+class Retry(Node):
+    def compile(self, ctx):
+        if not ctx.retry_targets:
+            raise CompilerError("Invalid retry")
+        target, frame_depth, except_depth = ctx.retry_targets[-1]
+        if (len(ctx.frame_blocks) != frame_depth or
+                ctx.except_depth != except_depth):
+            raise CompilerError(
+                "retry from inside a loop, ensure or begin in a rescue "
+                "clause is not supported")
+        ctx.emit_jump(consts.JUMP, target)
+        # Never reached, but keeps the stack depth consistent for code that
+        # expects an expression here.
+        ctx.emit(consts.LOAD_CONST, ctx.create_const(ctx.space.w_nil))
 
 
 class ExceptHandler(Node):

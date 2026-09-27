@@ -13,7 +13,6 @@ from rpython.rlib.rarithmetic import intmask
 from rpython.rlib.rbigint import rbigint
 from rpython.rtyper.lltypesystem import llmemory, rffi
 
-from rply.errors import ParsingError
 
 from topaz import system
 from topaz.astcompiler import CompilerContext, SymbolTable, CompilerError
@@ -23,7 +22,7 @@ from topaz.error import RubyError, print_traceback
 from topaz.executioncontext import ExecutionContext, ExecutionContextHolder
 from topaz.frame import Frame
 from topaz.interpreter import Interpreter
-from topaz.lexer import LexerError, Lexer
+from topaz.prism import parser as prism_parser
 from topaz.module import ClassCache, ModuleCache
 from topaz.modules.comparable import Comparable
 from topaz.modules.enumerable import Enumerable
@@ -75,7 +74,6 @@ from topaz.objects.stringobject import W_StringObject
 from topaz.objects.symbolobject import W_SymbolObject
 from topaz.objects.threadobject import W_ThreadObject
 from topaz.objects.timeobject import W_TimeObject
-from topaz.parser import Parser
 from topaz.utils.ll_file import isdir
 
 
@@ -369,21 +367,11 @@ class ObjectSpace(object):
     def parse(self, source, initial_lineno=1, symtable=None):
         if symtable is None:
             symtable = SymbolTable()
-        parser = Parser(Lexer(
-            source, initial_lineno=initial_lineno, symtable=symtable))
         try:
-            return parser.parse().getast()
-        except ParsingError as e:
-            source_pos = e.getsourcepos()
-            token = e.message
-            if source_pos is not None:
-                msg = "line %d (unexpected %s)" % (source_pos.lineno, token)
-            else:
-                msg = ""
-            raise self.error(self.w_SyntaxError, msg)
-        except LexerError as e:
+            return prism_parser.parse(source, initial_lineno, symtable)
+        except prism_parser.ParseError as e:
             raise self.error(
-                self.w_SyntaxError, "line %d (%s)" % (e.pos.lineno, e.msg))
+                self.w_SyntaxError, "line %d (%s)" % (e.lineno, e.msg))
 
     def compile(self, source, filepath, initial_lineno=1, symtable=None):
         if symtable is None:

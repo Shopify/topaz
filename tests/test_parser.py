@@ -1023,7 +1023,7 @@ class TestParser(BaseTopazTest):
         assert space.parse('?\\xab') == string("\xab")
         assert space.parse('?\\01') == string("\01")
         assert space.parse('?\\012') == string("\012")
-        assert space.parse('?\\M-\a') == string("\x87")
+        assert space.parse('?\\M-\\a') == string("\x87")
         assert space.parse('?\\M-a') == string("\xe1")
         assert space.parse('?\\C-?') == string("\x7f")
         assert space.parse('?\\c?') == string("\x7f")
@@ -1053,17 +1053,16 @@ class TestParser(BaseTopazTest):
         assert space.parse('"\u{ff}"') == string(u"\u00ff".encode("utf-8"))
         assert space.parse('?\u{ff}') == string(u"\u00ff".encode("utf-8"))
         assert space.parse('"\u{3042 3044 3046 3048}"') == string(u"\u3042\u3044\u3046\u3048".encode("utf-8"))
-        with self.raises(space, "SyntaxError", "line 1 (invalid Unicode escape)"):
+        # As in Ruby 4.0, \u{} is empty and \u{} allows leading spaces.
+        assert space.parse('"\u{}"') == string("")
+        assert space.parse('"\u{ 3042}"') == string(u"\u3042".encode("utf-8"))
+        with self.raises(space, "SyntaxError", "line 1 (invalid Unicode escape sequence)"):
             space.parse('"\u123x"')
-        with self.raises(space, "SyntaxError", "line 1 (invalid Unicode escape)"):
-            space.parse('"\u{}"')
-        with self.raises(space, "SyntaxError", "line 1 (invalid Unicode escape)"):
-            space.parse('"\u{ 3042}"')
-        with self.raises(space, "SyntaxError", "line 1 (unterminated Unicode escape)"):
+        with self.raises(space, "SyntaxError", "line 1 (invalid Unicode escape sequence)"):
             space.parse('"\u{123x}"')
-        with self.raises(space, "SyntaxError", "line 1 (unterminated Unicode escape)"):
+        with self.raises(space, "SyntaxError"):
             space.parse('?\u{3042 3044}')
-        with self.raises(space, "SyntaxError", "line 1 (invalid Unicode codepoint (too large))"):
+        with self.raises(space, "SyntaxError", "line 1 (invalid Unicode escape sequence)"):
             space.parse('"\u{110000}"')
 
     def test_dynamic_string(self, space):
@@ -1206,7 +1205,6 @@ HERE
                 ast.ConstantString("        "),
                 ast.Block([ast.Statement(ast.ConstantBool(False))]),
                 ast.ConstantString("\n"),
-                ast.ConstantString(""),
             ]))
         ]))
 
@@ -1220,7 +1218,6 @@ HERE
                 ast.ConstantString("        abc "),
                 ast.Block([ast.Statement(ast.ConstantInt(123))]),
                 ast.ConstantString("\n"),
-                ast.ConstantString(""),
             ]))
         ]))
 
@@ -1398,12 +1395,12 @@ HERE
             ])), 1))
         ]))
         assert space.parse("f (:a) { |b| 1 }") == ast.Main(ast.Block([
-            ast.Statement(ast.Send(ast.Self(1), "f", [ast.ConstantSymbol("a")], ast.SendBlock(1, [ast.Argument("b")], None, [], [], None, None, ast.Block([
+            ast.Statement(ast.Send(ast.Self(1), "f", [ast.Block([ast.Statement(ast.ConstantSymbol("a"))])], ast.SendBlock(1, [ast.Argument("b")], None, [], [], None, None, ast.Block([
                 ast.Statement(ast.ConstantInt(1)),
             ])), 1))
         ]))
         assert space.parse("a.b (:a) { }") == ast.Main(ast.Block([
-            ast.Statement(ast.Send(ast.Send(ast.Self(1), "a", [], None, 1), "b", [ast.ConstantSymbol("a")], ast.SendBlock(1, [], None, [], [], None, None, ast.Nil()), 1))
+            ast.Statement(ast.Send(ast.Send(ast.Self(1), "a", [], None, 1), "b", [ast.Block([ast.Statement(ast.ConstantSymbol("a"))])], ast.SendBlock(1, [], None, [], [], None, None, ast.Nil()), 1))
         ]))
         assert space.parse("f { |a,| }") == ast.Main(ast.Block([
             ast.Statement(ast.Send(ast.Self(1), "f", [], ast.SendBlock(1, [ast.Argument("a")], "*", [], [], None, None, ast.Nil()), 1))
@@ -1958,20 +1955,15 @@ HERE
                 ast.Nil(),
             ))
         ]))
-        r = space.parse("""
-        begin
-            2
-        else
-            10
-        end
-        """)
-        assert r == ast.Main(ast.Block([
-            ast.Statement(ast.TryExcept(
-                ast.Block([ast.Statement(ast.ConstantInt(2))]),
-                [],
-                ast.Block([ast.Statement(ast.ConstantInt(10))])
-            ))
-        ]))
+        # `else` without `rescue` is a syntax error since Ruby 3.4.
+        with self.raises(space, "SyntaxError"):
+            space.parse("""
+            begin
+                2
+            else
+                10
+            end
+            """)
 
         r = space.parse("""
         begin
@@ -2714,9 +2706,9 @@ HERE
         ]))
 
     def test_custom_lineno(self, space):
-        with self.raises(space, "SyntaxError", "line 1 (unexpected Token(LBRACE_ARG, {))"):
+        with self.raises(space, "SyntaxError", "line 1 (unexpected '{', expecting end-of-input)"):
             assert space.parse("[]{}[]")
-        with self.raises(space, "SyntaxError", "line 10 (unexpected Token(LBRACE_ARG, {))"):
+        with self.raises(space, "SyntaxError", "line 10 (unexpected '{', expecting end-of-input)"):
             assert space.parse("[]{}[]", 10)
 
     def test_lineno(self, space):

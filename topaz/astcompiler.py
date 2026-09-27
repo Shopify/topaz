@@ -99,6 +99,11 @@ class CompilerContext(object):
 
         self.current_block = self.first_block = self.new_block()
         self.frame_blocks = []
+        # For `retry`: (block to jump to, len(frame_blocks), except_depth)
+        # for each rescue clause being compiled.
+        self.retry_targets = []
+        # How many begin/rescue bodies are being compiled.
+        self.except_depth = 0
 
     def create_bytecode(self, lineno=-1, args=None, defaults=None,
                         first_default_arg=None, splat_arg=None, kwargs=None,

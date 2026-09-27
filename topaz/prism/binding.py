@@ -123,7 +123,9 @@ def serialize_options(filepath, lineno, scopes, command_line=0):
     out.append(chr(VERSION_CRUBY_4_0))
     out.append(chr(0))                 # encoding_locked
     out.append(chr(0))                 # main_script
-    out.append(chr(0))                 # partial_script
+    # partial_script: allow `yield`, `break` and `next` outside of a method
+    # or block, like in an eval; they raise LocalJumpError when run.
+    out.append(chr(1))
     out.append(chr(0))                 # freeze
     _u32(len(scopes), out)
     for scope in scopes:
