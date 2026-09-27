@@ -859,11 +859,8 @@ class ObjectSpace(object):
             self.mark_topframe_not_escaped()
             if not raise_error:
                 return self.w_nil
-            src_cls_name = self.obj_to_s(self.getclass(w_obj))
-            w_cls_name = self.obj_to_s(w_cls)
             raise self.error(
-                self.w_TypeError,
-                "can't convert %s into %s" % (src_cls_name, w_cls_name))
+                self.w_TypeError, self.implicit_conversion_message(w_obj, w_cls))
 
         if not w_res or w_res is self.w_nil and not raise_error:
             return self.w_nil
@@ -877,6 +874,22 @@ class ObjectSpace(object):
                     src_cls, w_cls_name, src_cls, method, res_cls))
         else:
             return w_res
+
+    def implicit_conversion_message(self, w_obj, w_cls):
+        """Ruby's TypeError message for an object that does not convert
+        implicitly (to_int, to_str, to_ary, ...) to w_cls."""
+        w_cls_name = self.obj_to_s(w_cls)
+        if w_obj is self.w_nil and w_cls_name == "Integer":
+            return "no implicit conversion from nil to integer"
+        if w_obj is self.w_nil:
+            src = "nil"
+        elif w_obj is self.w_true:
+            src = "true"
+        elif w_obj is self.w_false:
+            src = "false"
+        else:
+            src = self.obj_to_s(self.getnonsingletonclass(w_obj))
+        return "no implicit conversion of %s into %s" % (src, w_cls_name)
 
     def mark_topframe_not_escaped(self):
         self.getexecutioncontext().gettopframe().escaped = False

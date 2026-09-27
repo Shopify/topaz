@@ -324,7 +324,7 @@ class TestIO(BaseTopazTest):
         assert self.unwrap(space, w_res) == [content, content, ""]
 
     def test_reopen_with_invalid_arg(self, space):
-        with self.raises(space, "TypeError", "can't convert Integer into String"):
+        with self.raises(space, "TypeError", "no implicit conversion of Integer into String"):
             space.execute("$stderr.reopen(12)")
 
     def test_popen_read(self, space):

@@ -86,7 +86,7 @@ class TestArrayObject(BaseTopazTest):
     def test_plus(self, space):
         w_res = space.execute("return [1, 2] + [3]")
         assert self.unwrap(space, w_res) == [1, 2, 3]
-        with self.raises(space, "TypeError", "can't convert Symbol into Array"):
+        with self.raises(space, "TypeError", "no implicit conversion of Symbol into Array"):
             space.execute("[1, 2] + :not_an_array")
         w_res = space.execute("""
         class NotAnArray

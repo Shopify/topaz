@@ -40,14 +40,14 @@ class TestDynamicLibrary__new(BaseFFITest):
 
     def test_it_does_not_accept_anything_else_as_lib_name(self, space):
         with self.raises(
-                space, "TypeError", "can't convert Float into String"):
+                space, "TypeError", "no implicit conversion of Float into String"):
             space.execute("FFI::DynamicLibrary.new(3.142, 1)")
 
     def test_it_only_accepts_an_integer_as_flag_parameter(self, space):
         # The next error message is different from the one in ruby 1.9.3.
         # But the meaning is the same.
         with self.raises(
-                space, "TypeError", "can't convert String into Integer"):
+                space, "TypeError", "no implicit conversion of String into Integer"):
             space.execute(
                 "FFI::DynamicLibrary.new('something', 'invalid flag')")
 

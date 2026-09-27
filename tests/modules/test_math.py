@@ -137,7 +137,7 @@ class TestMath(BaseTopazTest):
                          "can't convert String into Float"):
             space.execute("Math.ldexp('1', 2)")
         with self.raises(space, "TypeError",
-                         "can't convert String into Integer"):
+                         "no implicit conversion of String into Integer"):
             space.execute("Math.ldexp(1, '2')")
 
     def test_log(self, space):

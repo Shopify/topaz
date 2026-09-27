@@ -126,10 +126,10 @@ class TestPointer_slice(BaseFFITest):
 
     def test_it_raises_TypeError_on_nonsense_args(self, space):
         with self.raises(space, 'TypeError',
-                         "can't convert String into Integer"):
+                         "no implicit conversion of String into Integer"):
             space.execute("FFI::Pointer.new(0).slice('15', 5)")
         with self.raises(space, 'TypeError',
-                         "can't convert Symbol into Integer"):
+                         "no implicit conversion of Symbol into Integer"):
             space.execute("FFI::Pointer.new(0).slice(0, :bar)")
 
 
