@@ -363,8 +363,17 @@ class Translator(nodes.Visitor):
 
     def visit_splat_node(self, node):
         if node.expression is None:
-            raise self.unsupported(node, "anonymous splat forwarding")
+            # `f(*)` passes on the method's anonymous rest parameter (3.2).
+            return ast.Splat(self.anonymous_param(node, "*"))
         return ast.Splat(self.expr(node.expression))
+
+    def anonymous_param(self, node, name):
+        """The value of an anonymous parameter: `*`, `**` or `&`, or those
+        implied by `...`."""
+        if not self.symtable.is_defined(name):
+            raise self.error("no anonymous %s parameter" % name, node)
+        self.symtable.declare_read(name)
+        return ast.Variable(name, self.line(node))
 
     def visit_hash_node(self, node):
         return self.hash(node.elements)
@@ -377,8 +386,6 @@ class Translator(nodes.Visitor):
         current_hash = None
         for element in elements:
             if isinstance(element, nodes.AssocSplatNode):
-                if element.value is None:
-                    raise self.unsupported(element, "anonymous keyword splat forwarding")
                 lineno = self.line(element)
                 if current_hash is None:
                     current_hash = ast.Hash(items)
@@ -386,10 +393,14 @@ class Translator(nodes.Visitor):
                     current_hash = ast.Send(
                         current_hash, "merge", [ast.Hash(items)], None,
                         lineno)
+                if element.value is None:
+                    # `f(**)` (Ruby 3.2)
+                    value = self.anonymous_param(element, "**")
+                else:
+                    value = self.expr(element.value)
                 current_hash = ast.Send(
-                    current_hash, "merge",
-                    [ast.HashSplat(self.expr(element.value), lineno)], None,
-                    lineno)
+                    current_hash, "merge", [ast.HashSplat(value, lineno)],
+                    None, lineno)
                 items = []
             else:
                 assert isinstance(element, nodes.AssocNode)
@@ -690,16 +701,30 @@ class Translator(nodes.Visitor):
         args = []
         for arg in arguments.arguments:
             if isinstance(arg, nodes.ForwardingArgumentsNode):
-                raise self.unsupported(arg, "argument forwarding (...)")
-            args.append(self.expr(arg))
+                # `f(...)` (Ruby 2.7): the positional arguments (which, as
+                # keyword arguments are passed as a trailing hash, include
+                # those too); the block is added by call_block().
+                args.append(ast.Splat(self.anonymous_param(arg, "*")))
+            else:
+                args.append(self.expr(arg))
         return args
+
+    def forwards_arguments(self, arguments):
+        if arguments is None:
+            return False
+        assert isinstance(arguments, nodes.ArgumentsNode)
+        for arg in arguments.arguments:
+            if isinstance(arg, nodes.ForwardingArgumentsNode):
+                return True
+        return False
 
     def call_block(self, block):
         if block is None:
             return None
         if isinstance(block, nodes.BlockArgumentNode):
             if block.expression is None:
-                raise self.unsupported(block, "anonymous block forwarding")
+                # `f(&)` (Ruby 3.1)
+                return ast.BlockArgument(self.anonymous_param(block, "&"))
             return ast.BlockArgument(self.expr(block.expression))
         assert isinstance(block, nodes.BlockNode)
         return self.send_block(block)
@@ -787,6 +812,8 @@ class Translator(nodes.Visitor):
             return ast.Assignment(
                 ast.Send(receiver, name[:end], [], None, lineno), args[0])
         block = self.call_block(node.block)
+        if block is None and self.forwards_arguments(node.arguments):
+            block = ast.BlockArgument(self.anonymous_param(node, "&"))
         send = ast.Send(receiver, name, args, block, lineno)
         if safe_temp is not None:
             is_nil = ast.Send(
@@ -800,6 +827,8 @@ class Translator(nodes.Visitor):
         if node.arguments is not None:
             args = self.call_args(node.arguments)
         block = self.call_block(node.block)
+        if block is None and self.forwards_arguments(node.arguments):
+            block = ast.BlockArgument(self.anonymous_param(node, "&"))
         return ast.Super(args, block, self.line(node))
 
     def visit_forwarding_super_node(self, node):
@@ -828,7 +857,7 @@ class Translator(nodes.Visitor):
 
     def visit_block_argument_node(self, node):
         if node.expression is None:
-            raise self.unsupported(node, "anonymous block forwarding")
+            return ast.BlockArgument(self.anonymous_param(node, "&"))
         return ast.BlockArgument(self.expr(node.expression))
 
     # Operators and control flow
@@ -1063,7 +1092,12 @@ class Translator(nodes.Visitor):
             self.symtable.declare_argument(name, self.symtable.KW_ARG)
             params.kwrest_arg = name
         elif isinstance(kwrest, nodes.ForwardingParameterNode):
-            raise self.unsupported(kwrest, "argument forwarding (...)")
+            # `def f(...)`: keyword arguments arrive as a trailing hash, so
+            # a rest and a block parameter are all `...` needs.
+            self.symtable.declare_argument("*", self.symtable.SPLAT_ARG)
+            params.splat_arg = "*"
+            self.symtable.declare_argument("&", self.symtable.BLOCK_ARG)
+            params.block_arg = "&"
         elif isinstance(kwrest, nodes.NoKeywordsParameterNode):
             pass
         elif kwrest is not None:
@@ -1073,7 +1107,7 @@ class Translator(nodes.Visitor):
             assert isinstance(block, nodes.BlockParameterNode)
             name = block.name
             if name is None:
-                raise self.unsupported(block, "anonymous block parameters")
+                name = "&"
             self.symtable.declare_argument(name, self.symtable.BLOCK_ARG)
             params.block_arg = name
         return params

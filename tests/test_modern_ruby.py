@@ -198,3 +198,40 @@ class TestNilEndedRanges(BaseTopazTest):
         return x
         """)
         assert self.unwrap(space, w_res) == 1
+
+
+class TestArgumentForwarding(BaseTopazTest):
+    def test_forward_everything(self, space):
+        # Ruby 2.7 (and leading arguments, 3.0)
+        w_res = space.execute("""
+        def target(*args, **kw, &blk)
+          [args, kw, blk ? blk.call : nil]
+        end
+        def fwd(...) = target(...)
+        def fwd_leading(a, ...) = target(a, 0, ...)
+        return [fwd(1, 2, k: 3) { :b }, fwd_leading(1, 2)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [[1, 2], {"k": 3}, "b"], [[1, 0, 2], {}, None]]
+
+    def test_anonymous_parameters(self, space):
+        # Ruby 3.1 (&) and 3.2 (* and **)
+        w_res = space.execute("""
+        def target(*args, **kw, &blk)
+          [args, kw, blk ? blk.call : nil]
+        end
+        def rest(*) = target(*)
+        def kws(**) = target(**)
+        def blk(&) = target(&)
+        return [rest(1, 2), kws(a: 1), blk { :x }]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [[1, 2], {}, None], [[], {"a": 1}, None], [[], {}, "x"]]
+
+    def test_forward_to_super(self, space):
+        w_res = space.execute("""
+        class P; def m(*a, &b) = [a, b.call]; end
+        class C < P; def m(...) = super(...); end
+        return C.new.m(1) { 2 }
+        """)
+        assert self.unwrap(space, w_res) == [[1], 2]
