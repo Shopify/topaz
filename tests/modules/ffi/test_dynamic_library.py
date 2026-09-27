@@ -23,9 +23,9 @@ class TestDynamicLibrary(BaseFFITest):
 class TestDynamicLibrary__new(BaseFFITest):
     def test_it_opens_a_dynamic_library(self, space):
         w_res = space.execute("FFI::DynamicLibrary.new('%s', 1)" % libm)
-        assert w_res.cdll.lib == clibffi.dlopen(rffi.str2charp(libm), 1)
+        assert w_res.cdll.lib == clibffi.dlopen(libm, 1)
         w_res = space.execute("FFI::DynamicLibrary.new('%s', 0)" % libm)
-        assert w_res.cdll.lib == clibffi.dlopen(rffi.str2charp(libm), 0)
+        assert w_res.cdll.lib == clibffi.dlopen(libm, 0)
 
     def test_it_stores_the_name_of_the_opened_lib(self, space):
         w_res = space.execute("FFI::DynamicLibrary.new('%s', 1)" % libm)

@@ -37,7 +37,7 @@ class W_MemoryPointerObject(W_PointerObject):
         with rffi.scoped_view_charp(string) as cstring:
             rffi.c_memcpy(
                 rffi.ptradd(self.ptr, start),
-                rffi.cast(rffi.VOIDP, rffi.ptradd(cstring, str_offset)),
+                rffi.cast(rffi.CONST_VOIDP, rffi.ptradd(cstring, str_offset)),
                 nbytes
             )
 

@@ -42,17 +42,27 @@ class Data(object):
 
 class Closure(object):
     def __init__(self, callback_data):
-        self.heap = clibffi.closureHeap.alloc()
+        # RPython dropped its own closureHeap allocator in favour of libffi's
+        # ffi_closure_alloc(), which hands back a writable closure plus the
+        # separate executable address that C code must call.
+        self.ll_code = lltype.malloc(rffi.VOIDPP.TO, 1, flavor='raw')
+        self.heap = clibffi.c_ffi_closure_alloc(
+            rffi.cast(rffi.SIZE_T, rffi.sizeof(clibffi.FFI_CLOSUREP.TO)),
+            self.ll_code)
         self.callback_data = callback_data
         w_callback_info = self.callback_data.w_callback_info
         space = self.callback_data.space
+        if not self.heap:
+            raise space.error(space.w_RuntimeError,
+                              "libffi failed to allocate a closure")
         self.uid = compute_unique_id(self)
         registration[self.uid] = self
         cls_ptr = rffi.cast(clibffi.FFI_CLOSUREP, self.heap)
-        status = clibffi.c_ffi_prep_closure(cls_ptr,
-                                            w_callback_info.cif_descr.cif,
-                                            invoke,
-                                            rffi.cast(rffi.VOIDP, self.uid))
+        status = clibffi.c_ffi_prep_closure_loc(cls_ptr,
+                                                w_callback_info.cif_descr.cif,
+                                                invoke,
+                                                rffi.cast(rffi.VOIDP, self.uid),
+                                                self.ll_code[0])
         if rffi.cast(lltype.Signed, status) != clibffi.FFI_OK:
             space = self.callback_data.space
             raise space.error(space.w_RuntimeError,
@@ -60,12 +70,16 @@ class Closure(object):
 
     def write(self, data):
         misc.write_raw_unsigned_data(
-            data, rffi.cast(rffi.CCHARP, self.heap),
+            data, rffi.cast(rffi.CCHARP, self.ll_code[0]),
             rffi.sizeof(clibffi.FFI_CLOSUREP))
 
     def __del__(self):
         if self.heap:
-            clibffi.closureHeap.free(self.heap)
+            clibffi.c_ffi_closure_free(self.heap)
+            self.heap = lltype.nullptr(rffi.VOIDP.TO)
+        if self.ll_code:
+            lltype.free(self.ll_code, flavor='raw')
+            self.ll_code = lltype.nullptr(rffi.VOIDPP.TO)
 
 
 @jit.jit_callback("block_callback")
