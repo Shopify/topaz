@@ -174,19 +174,21 @@ class Lexer(object):
                 if (self.state not in [self.EXPR_BEG, self.EXPR_DOT,
                                       self.EXPR_VALUE, self.EXPR_FNAME,
                                       self.EXPR_CLASS] and self.label_state != self.EXPR_LABELED):
-                    while self.peek() in "\r\n \t\f\v":
-                        ch = self.read()
-                        if ch in "\r\n":
-                            self.newline(ch)
-                    if self.peek() in "&.":
-                        space_seen = newline_seen = False
-                        ch = self.read()
-                        ch2 = self.peek()
-                        self.unread()
-                        if ch == "&" and ch2 != ".":
-                            pass
+                    # Skip blank and comment-only lines, then check whether
+                    # the next line continues this expression.
+                    while True:
+                        ch = self.peek()
+                        if ch in "\r\n \t\f\v":
+                            self.read()
+                            if ch in "\r\n":
+                                self.newline(ch)
+                        elif ch == "#":
+                            self.comment(self.read())
                         else:
-                            continue
+                            break
+                    if self.starts_continuation_line():
+                        space_seen = newline_seen = False
+                        continue
                     self.add("\n")
                     self.command_start = True
                     self.state = self.EXPR_BEG
@@ -317,6 +319,39 @@ class Lexer(object):
         assert idx >= 0
         self.idx = idx
         self.columno -= 1
+
+    def peek_at(self, offset):
+        idx = self.idx + offset
+        if 0 <= idx < len(self.source):
+            return self.source[idx]
+        return self.EOF
+
+    def peek_word(self, word):
+        for i in range(len(word)):
+            if self.peek_at(i) != word[i]:
+                return False
+        ch = self.peek_at(len(word))
+        return not (ch.isalnum() or ch == "_" or ord(ch) >= 0x80)
+
+    def starts_continuation_line(self):
+        """Whether the line starting at the current position continues the
+        expression on the previous line: a leading fluent dot (``.foo`` or
+        ``&.foo``, but not a ``..`` range) or, since Ruby 4.0, a leading
+        logical operator (``&&``, ``||``, ``and``, ``or``).
+        """
+        ch = self.peek_at(0)
+        ch2 = self.peek_at(1)
+        if ch == ".":
+            return ch2 != "."
+        elif ch == "&":
+            return ch2 == "." or ch2 == "&"
+        elif ch == "|":
+            return ch2 == "|"
+        elif ch == "a":
+            return self.peek_word("and")
+        elif ch == "o":
+            return self.peek_word("or")
+        return False
 
     def is_label_suffix(self):
         ch = self.read()
