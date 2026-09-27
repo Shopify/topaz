@@ -180,7 +180,7 @@ class W_FixnumObject(W_RootObject):
             try:
                 res = float(self.intvalue) / float(other)
             except ZeroDivisionError:
-                return space.newfloat(rfloat.copysign(rfloat.INFINITY, float(self.intvalue)))
+                return space.newfloat(math.copysign(rfloat.INFINITY, float(self.intvalue)))
             else:
                 return space.newfloat(res)
         elif space.is_kind_of(w_other, space.w_bignum):
@@ -190,7 +190,7 @@ class W_FixnumObject(W_RootObject):
             try:
                 res = float(self.intvalue) / other
             except ZeroDivisionError:
-                return space.newfloat(rfloat.copysign(rfloat.INFINITY, float(self.intvalue)))
+                return space.newfloat(math.copysign(rfloat.INFINITY, float(self.intvalue)))
             else:
                 return space.newfloat(res)
         else:

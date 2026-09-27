@@ -1,3 +1,5 @@
+import math
+
 from rpython.rlib import rfloat
 from rpython.rlib.rstruct.ieee import float_pack
 
@@ -20,7 +22,7 @@ def make_float_packer(size, bigendian):
             try:
                 unsigned = float_pack(doubleval, size)
             except OverflowError:
-                unsigned = float_pack(rfloat.copysign(rfloat.INFINITY, doubleval), size)
+                unsigned = float_pack(math.copysign(rfloat.INFINITY, doubleval), size)
             for i in xrange(size):
                 l[i] = chr((unsigned >> (i * 8)) & 0xff)
             if bigendian:
