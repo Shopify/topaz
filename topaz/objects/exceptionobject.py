@@ -67,10 +67,10 @@ class W_ExceptionObject(W_Object):
         results_w = []
         prev_frame = None
         while frame is not None and frame.has_contents():
-            results_w.append(space.newstr_fromstr("%s:%d:in `%s'" % (
+            results_w.append(space.newstr_fromstr("%s:%d:in '%s'" % (
                 frame.get_filename(),
                 frame.get_lineno(prev_frame),
-                frame.get_code_name(),
+                frame.get_backtrace_label(),
             )))
             prev_frame = frame
             frame = frame.backref()

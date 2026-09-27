@@ -223,10 +223,10 @@ class TestMain(object):
 
         f { 1 / 0}
         """, [
-            "{}:6:in `/': divided by 0 (ZeroDivisionError)",
-            "\tfrom {}:6:in `block in <main>'",
-            "\tfrom {}:3:in `f'",
-            "\tfrom {}:6:in `<main>'",
+            "{}:6:in 'Integer#/': divided by 0 (ZeroDivisionError)",
+            "\tfrom {}:6:in 'block in <main>'",
+            "\tfrom {}:3:in 'Object#f'",
+            "\tfrom {}:6:in '<main>'",
         ])
 
     def test_syntax_error(self, space, tmpdir, capfd):
@@ -240,8 +240,8 @@ class TestMain(object):
         self.assert_traceback(space, tmpdir, capfd, """
         UnknownConst
         """, [
-            "{}:2:in `const_missing': uninitialized constant UnknownConst (NameError)",
-            "\tfrom {}:2:in `<main>'",
+            "{}:2:in 'Module#const_missing': uninitialized constant UnknownConst (NameError)",
+            "\tfrom {}:2:in '<main>'",
         ])
 
     def test_traceback_class(self, space, tmpdir, capfd):
@@ -250,9 +250,9 @@ class TestMain(object):
             1 / 0
         end
         """, [
-            "{}:3:in `/': divided by 0 (ZeroDivisionError)",
-            "\tfrom {}:3:in `<class:X>'",
-            "\tfrom {}:1:in `<main>'",
+            "{}:3:in 'Integer#/': divided by 0 (ZeroDivisionError)",
+            "\tfrom {}:3:in '<class:X>'",
+            "\tfrom {}:1:in '<main>'",
         ])
 
     def test_traceback_default_arg(self, space, tmpdir, capfd):
@@ -261,9 +261,9 @@ class TestMain(object):
         end
         f
         """, [
-            "{}:2:in `/': divided by 0 (ZeroDivisionError)",
-            "\tfrom {}:2:in `f'",
-            "\tfrom {}:4:in `<main>'",
+            "{}:2:in 'Integer#/': divided by 0 (ZeroDivisionError)",
+            "\tfrom {}:2:in 'Object#f'",
+            "\tfrom {}:4:in '<main>'",
         ])
 
     def test_ruby_engine(self, space, tmpdir, capfd):
@@ -308,10 +308,10 @@ class TestMain(object):
             "1",
         ]
         assert err.splitlines() == [
-            "{}:3:in `/': divided by 0 (ZeroDivisionError)".format(f),
-            "\tfrom {}:3:in `block in <main>'".format(f),
-            "{}:5:in `/': divided by 0 (ZeroDivisionError)".format(f),
-            "\tfrom {}:5:in `<main>'".format(f),
+            "{}:3:in 'Integer#/': divided by 0 (ZeroDivisionError)".format(f),
+            "\tfrom {}:3:in 'block in <main>'".format(f),
+            "{}:5:in 'Integer#/': divided by 0 (ZeroDivisionError)".format(f),
+            "\tfrom {}:5:in '<main>'".format(f),
         ]
 
     def test_program_global(self, space, tmpdir, capfd):

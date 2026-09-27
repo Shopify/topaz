@@ -84,10 +84,10 @@ class TestExceptionObject(BaseTopazTest):
         end
         """)
         assert self.unwrap(space, w_res) == [
-            "-e:6:in `/'",
-            "-e:6:in `block in <main>'",
-            "-e:3:in `f'",
-            "-e:6:in `<main>'"
+            "-e:6:in 'Integer#/'",
+            "-e:6:in 'block in <main>'",
+            "-e:3:in 'Object#f'",
+            "-e:6:in '<main>'"
         ]
 
     def test_backtrace_complex(self, space):
@@ -122,10 +122,10 @@ class TestExceptionObject(BaseTopazTest):
         return i.backtrace
         """)
         assert self.unwrap(space, w_res) == [
-            "-e:3:in `/'",
-            "-e:3:in `f'",
-            "-e:9:in `g'",
-            "-e:16:in `h'",
-            "-e:25:in `i'",
-            "-e:29:in `<main>'",
+            "-e:3:in 'Integer#/'",
+            "-e:3:in 'Object#f'",
+            "-e:9:in 'Object#g'",
+            "-e:16:in 'Object#h'",
+            "-e:25:in 'Object#i'",
+            "-e:29:in '<main>'",
         ]

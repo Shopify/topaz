@@ -83,7 +83,7 @@ class W_BuiltinFunction(W_FunctionObject):
     def call(self, space, w_receiver, args_w, block):
         from topaz.frame import BuiltinFrame
 
-        frame = BuiltinFrame(self.name)
+        frame = BuiltinFrame(self.name, self.w_class, w_receiver)
         ec = space.getexecutioncontext()
         ec.invoke_trace_proc(space, "c-call", self.name, self.w_class.name)
         with ec.visit_frame(frame):

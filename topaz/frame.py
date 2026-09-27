@@ -258,11 +258,42 @@ class Frame(BaseFrame):
     def get_code_name(self):
         return self.bytecode.name
 
+    def get_backtrace_label(self):
+        """The label for this frame in a backtrace, as Ruby 3.4 writes
+        them: 'Foo#bar', 'Foo.baz', 'block (2 levels) in Foo#bar',
+        '<main>'."""
+        name = self.bytecode.name
+        levels = 0
+        while name.startswith("block in "):
+            levels += 1
+            name = name[len("block in "):]
+        if not name.startswith("<"):
+            name = self._qualify_method_name(name)
+        if levels == 0:
+            return name
+        elif levels == 1:
+            return "block in %s" % name
+        return "block (%d levels) in %s" % (levels, name)
+
+    def _qualify_method_name(self, name):
+        scope = self.lexical_scope
+        if scope is None:
+            # Methods defined at the top level are methods of Object.
+            return "Object#%s" % name
+        w_mod = scope.w_mod
+        if w_mod.name is None:
+            return name
+        if self.w_self is w_mod:
+            return "%s.%s" % (w_mod.name, name)
+        return "%s#%s" % (w_mod.name, name)
+
 
 class BuiltinFrame(BaseFrame):
-    def __init__(self, name):
+    def __init__(self, name, w_owner=None, w_receiver=None):
         BaseFrame.__init__(self)
         self.name = name
+        self.w_owner = w_owner
+        self.w_receiver = w_receiver
 
     def has_contents(self):
         return self.backref() is not None
@@ -275,3 +306,11 @@ class BuiltinFrame(BaseFrame):
 
     def get_code_name(self):
         return self.name
+
+    def get_backtrace_label(self):
+        w_owner = self.w_owner
+        if w_owner is None or w_owner.name is None:
+            return self.name
+        if self.w_receiver is w_owner:
+            return "%s.%s" % (w_owner.name, self.name)
+        return "%s#%s" % (w_owner.name, self.name)

@@ -203,6 +203,9 @@ class Kernel(object):
                 "exception object expected"
             )
 
+        if w_exc.frame is None:
+            # The backtrace starts at the caller, not at raise itself.
+            w_exc.frame = space.getexecutioncontext().gettoprubyframe()
         raise RubyError(w_exc)
 
     @moduledef.function("exit")
