@@ -1,0 +1,1 @@
+p [%q(a"b).inspect, "a\\b".inspect, "\n\t\e".inspect, "#{1}#".inspect, "\#{x}".inspect, "\u00e9".inspect, "\xff".inspect, :foo_bar.inspect, :+.inspect, :a?.inspect, :"foo bar".inspect, :$g.inspect, :@iv.inspect, :a=.inspect, :[]=.inspect, :"9x".inspect, :$1.inspect, :"".inspect]

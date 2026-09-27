@@ -1,0 +1,1 @@
+["undefined method 'foo' for nil", "undefined method 'foo' for an instance of Integer", "undefined method 'foo' for class Object", "undefined method 'foo' for module Kernel", "undefined method 'nope' for class 'Integer'", "wrong number of arguments (given 0, expected 1..2)", "wrong number of arguments (given 3, expected 1..2)", "no implicit conversion of String into Integer"]

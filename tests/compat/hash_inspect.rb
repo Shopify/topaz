@@ -1,0 +1,1 @@
+h = {}; h[:self] = h; p [{a: 1, "b" => 2, 1 => 3, :+ => 4, :a? => 5, :b! => 6, :c= => 7, :A => 8, :@iv => 9, :"foo bar" => 10, :$g => 11, nil => 12, :_x => 13, :[] => 14}.inspect, {}.inspect, h.inspect, {a: {b: 1}}.inspect]
