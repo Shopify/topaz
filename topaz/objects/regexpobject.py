@@ -311,8 +311,19 @@ class W_MatchDataObject(W_Object):
         space.send(res, "freeze")
         return res
 
-    @classdef.method("[]", n="int")
-    def method_subscript(self, space, n):
+    @classdef.method("[]")
+    def method_subscript(self, space, w_n):
+        if (space.is_kind_of(w_n, space.w_symbol) or
+                space.is_kind_of(w_n, space.w_string)):
+            # A named capture.
+            name = space.str_w(w_n)
+            if name not in self.regexp.groupindex:
+                raise space.error(
+                    space.w_IndexError,
+                    "undefined group name reference: %s" % name)
+            n = self.regexp.groupindex[name]
+        else:
+            n = Coerce.int(space, w_n)
         if n == 0:
             start, end = self.ctx.match_start, self.ctx.match_end
         elif 1 <= n < self.size():
