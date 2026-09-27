@@ -22,6 +22,11 @@ class W_ProcObject(W_Object):
         self.top_parent_interp = top_parent_interp
         self.regexp_match_cell = regexp_match_cell
         self.is_lambda = is_lambda
+        # Set for procs made by Kernel#proc and Proc.new: the call their
+        # block was given to has returned, so `break` in them is an error.
+        # A block captured with &blk breaks out of the method it was given
+        # to, even when called with Proc#call.
+        self.orphan_break = False
 
     def copy(self, space, w_self=None, lexical_scope=None, is_lambda=False):
         return W_ProcObject(
@@ -33,13 +38,18 @@ class W_ProcObject(W_Object):
             is_lambda or self.is_lambda
         )
 
+    def orphan_copy(self, space):
+        w_proc = self.copy(space)
+        w_proc.orphan_break = True
+        return w_proc
+
     @classdef.singleton_method("new")
     def method_new(self, space, block):
         if block is None:
             block = space.getexecutioncontext().gettoprubyframe().block
         if block is None:
             raise space.error(space.w_ArgumentError, "tried to create Proc object without a block")
-        return block.copy(space)
+        return block.orphan_copy(space)
 
     method_allocate = classdef.undefine_allocator()
 
@@ -58,10 +68,16 @@ class W_ProcObject(W_Object):
             else:
                 raise
         except RaiseBreak as e:
+            if e.parent_interp is not self.parent_interp:
+                # A break from a block nested in this proc, headed for a
+                # frame further out.
+                raise
             if self.is_lambda:
                 return e.w_value
-            else:
+            elif self.orphan_break:
                 raise space.error(space.w_LocalJumpError, "break from proc-closure")
+            else:
+                raise
 
     @classdef.method("lambda?")
     def method_lambda(self, space):

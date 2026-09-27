@@ -103,7 +103,7 @@ class Kernel(object):
             raise space.error(space.w_ArgumentError,
                 "tried to create Proc object without a block"
             )
-        return block.copy(space)
+        return block.orphan_copy(space)
 
     @staticmethod
     def find_feature(space, path):
