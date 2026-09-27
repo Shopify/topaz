@@ -436,6 +436,8 @@ class TestExec(BaseTopazTest):
         out = self.fork_and_wait(space, capfd, "exec 'echo $0'")
         assert out == "sh\n"
 
+    @pytest.mark.skipif(not os.path.exists("/bin/echo"),
+                        reason="needs /bin/echo (absent on e.g. NixOS)")
     def test_exec_directly(self, space, capfd):
         out = self.fork_and_wait(space, capfd, "exec '/bin/echo', '$0'")
         assert out == "$0\n"
