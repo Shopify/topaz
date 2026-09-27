@@ -142,6 +142,12 @@ class Hash
   # TODO: Emit "warning: Hash#index is deprecated; use Hash#key" warning
   alias index key
 
+  def except(*keys)
+    result = dup
+    keys.each { |key| result.delete(key) }
+    result
+  end
+
   def invert
     res = {}
     each do |k, v|
