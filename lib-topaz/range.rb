@@ -5,6 +5,15 @@ class Range
       raise TypeError.new("can't iterate from #{self.begin.class}")
     end
 
+    if self.end.nil?
+      # An endless range (Ruby 2.6).
+      i = self.begin
+      while true
+        yield i
+        i = i.succ
+      end
+    end
+
     case self.begin
     when String
       self.begin.upto(self.end, self.exclude_end?, &block)
@@ -34,7 +43,9 @@ class Range
     first = self.begin
     last = self.end
 
-    if step_size.kind_of? Float or first.kind_of? Float or last.kind_of? Float
+    if last.nil? && step_size.kind_of?(Float)
+      first = Float(first)
+    elsif step_size.kind_of? Float or first.kind_of? Float or last.kind_of? Float
       # if any are floats they all must be
       begin
         step_size = Float(from = step_size)
@@ -52,7 +63,7 @@ class Range
       raise ArgumentError, "step can't be 0"
     end
 
-    if first.kind_of?(Float)
+    if first.kind_of?(Float) && !last.nil?
       err = (first.abs + last.abs + (last - first).abs) / step_size.abs * Float::EPSILON
       err = 0.5 if err > 0.5
       if self.exclude_end?
@@ -71,7 +82,7 @@ class Range
       end
     elsif first.kind_of?(Numeric)
       d = first
-      while self.exclude_end? ? d < last : d <= last
+      while last.nil? || (self.exclude_end? ? d < last : d <= last)
         yield d
         d += step_size
       end
@@ -87,6 +98,9 @@ class Range
   end
 
   def first(*args)
+    if self.begin.nil?
+      raise RangeError.new("cannot get the first element of beginless range")
+    end
     if args.empty?
       self.begin
     else
@@ -95,11 +109,45 @@ class Range
   end
 
   def last(*args)
+    if self.end.nil?
+      raise RangeError.new("cannot get the last element of endless range")
+    end
     args.empty? ? self.end : self.to_a.last(*args)
   end
 
+  def to_a
+    if self.end.nil?
+      raise RangeError.new("cannot convert endless range to an array")
+    end
+    super
+  end
+  alias entries to_a
+
+  def size
+    b = self.begin
+    unless b.kind_of?(Integer)
+      raise TypeError.new("can't iterate from #{b.class}") if b.nil? || b.kind_of?(Float)
+      return nil
+    end
+    e = self.end
+    return Float::INFINITY if e.nil?
+    return nil unless e.kind_of?(Numeric)
+    last = e.floor
+    last -= 1 if self.exclude_end? && last == e
+    last < b ? 0 : last - b + 1
+  end
+
+  def count(*args, &block)
+    return Float::INFINITY if args.empty? && !block && self.end.nil?
+    super
+  end
+
   def min(&block)
+    if self.begin.nil?
+      raise RangeError.new("cannot get the minimum of beginless range")
+    end
     return super(&block) if block
+    return self.begin if self.end.nil?
     if (self.end < self.begin) || (self.exclude_end? && (self.end == self.begin))
       return nil
     end
@@ -107,6 +155,10 @@ class Range
   end
 
   def max(&block)
+    if self.end.nil?
+      raise RangeError.new("cannot get the maximum of endless range")
+    end
+    return self.end if self.begin.nil? && !self.exclude_end?
     return super(&block) if block || (self.exclude_end? && !self.end.kind_of?(Numeric))
     if (self.end < self.begin) || (self.exclude_end? && (self.end == self.begin))
       return nil
@@ -129,19 +181,14 @@ class Range
   end
 
   def include?(value)
-    beg_compare = self.begin <=> value
-    if !beg_compare
-      return false
+    unless self.begin.nil?
+      beg_compare = self.begin <=> value
+      return false if !beg_compare || beg_compare > 0
     end
-    if beg_compare <= 0
-      end_compare = value <=> self.end
-      if self.exclude_end?
-        return true if end_compare < 0
-      else
-        return true if end_compare <= 0
-      end
-    end
-    return false
+    return true if self.end.nil?
+    end_compare = value <=> self.end
+    return false if !end_compare
+    self.exclude_end? ? end_compare < 0 : end_compare <= 0
   end
   alias cover? include?
   alias member? include?
@@ -151,13 +198,19 @@ class Range
     return false unless other.kind_of?(Range)
 
     return self.exclude_end? == other.exclude_end? &&
-           self.first == other.first &&
-           self.last == other.last
+           self.begin == other.begin &&
+           self.end == other.end
   end
 
   alias eql? ==
 
   def to_s
     "#{self.begin}#{self.exclude_end? ? '...' : '..'}#{self.end}"
+  end
+
+  def inspect
+    b = (self.begin.nil? && !self.end.nil?) ? "" : self.begin.inspect
+    e = (self.end.nil? && !self.begin.nil?) ? "" : self.end.inspect
+    "#{b}#{self.exclude_end? ? '...' : '..'}#{e}"
   end
 end

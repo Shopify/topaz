@@ -148,3 +148,53 @@ class TestPrismSyntax(BaseTopazTest):
     def test_symbol_array(self, space):
         w_res = space.execute("return %i[a b]")
         assert self.unwrap(space, w_res) == ["a", "b"]
+
+
+class TestNilEndedRanges(BaseTopazTest):
+    """Endless (Ruby 2.6) and beginless (Ruby 2.7) ranges."""
+
+    def test_indexing(self, space):
+        w_res = space.execute("""
+        a = [1, 2, 3, 4, 5]
+        return [a[2..], a[..1], a[1...], "hello"[1..], "hello"[..-2]]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [3, 4, 5], [1, 2], [2, 3, 4, 5], "ello", "hell"]
+
+    def test_iteration(self, space):
+        w_res = space.execute("""
+        seen = []
+        (1..).each { |i| seen << i; break if i >= 3 }
+        return [seen, (1..).first(2), (1..).step(3).first(3)]
+        """)
+        assert self.unwrap(space, w_res) == [[1, 2, 3], [1, 2], [1, 4, 7]]
+
+    def test_membership(self, space):
+        w_res = space.execute("""
+        size = case 5 when (..3) then :small when (4..) then :large end
+        return [(1..).include?(10 ** 6), (..5).cover?(6), (1...).include?(0),
+                size]
+        """)
+        assert self.unwrap(space, w_res) == [True, False, False, "large"]
+
+    def test_inspect_and_size(self, space):
+        w_res = space.execute("""
+        return [(1..).inspect, (..5).inspect, (nil..nil).inspect, (1..).size]
+        """)
+        [a, b, c, d] = self.unwrap(space, w_res)
+        assert [a, b, c] == ["1..", "..5", "nil..nil"]
+        assert d == float("inf")
+
+    def test_errors(self, space):
+        with self.raises(space, "RangeError", "cannot convert endless range to an array"):
+            space.execute("(1..).to_a")
+        with self.raises(space, "TypeError", "can't iterate from NilClass"):
+            space.execute("(..1).each {}")
+
+    def test_leading_range_is_not_a_line_continuation(self, space):
+        w_res = space.execute("""
+        x = 1
+        ..2
+        return x
+        """)
+        assert self.unwrap(space, w_res) == 1

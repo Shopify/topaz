@@ -802,11 +802,19 @@ class ObjectSpace(object):
         nil = False
 
         if isinstance(w_idx, W_RangeObject) and not w_count:
-            start = self.int_w(self.convert_type(
-                w_idx.w_start, self.w_fixnum, "to_int"))
-            end = self.int_w(self.convert_type(
-                w_idx.w_end, self.w_fixnum, "to_int"))
-            inclusive = not w_idx.exclusive
+            # A nil begin or end (Ruby 2.6/2.7) stands for the start or the
+            # end of the sequence.
+            if w_idx.w_start is self.w_nil:
+                start = 0
+            else:
+                start = self.int_w(self.convert_type(
+                    w_idx.w_start, self.w_fixnum, "to_int"))
+            if w_idx.w_end is self.w_nil:
+                end = length
+            else:
+                end = self.int_w(self.convert_type(
+                    w_idx.w_end, self.w_fixnum, "to_int"))
+                inclusive = not w_idx.exclusive
             as_range = True
         else:
             start = self.int_w(self.convert_type(

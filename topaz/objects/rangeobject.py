@@ -22,7 +22,9 @@ class W_RangeObject(W_Object):
     def method_initialize(self, space, w_start, w_end, excl=False):
         if self.w_start is not None or self.w_end is not None:
             raise space.error(space.w_NameError, "`initialize' called twice")
-        if space.send(w_start, "<=>", [w_end]) is space.w_nil:
+        # Either end may be nil (Ruby 2.6/2.7).
+        if (w_start is not space.w_nil and w_end is not space.w_nil and
+                space.send(w_start, "<=>", [w_end]) is space.w_nil):
             raise space.error(space.w_ArgumentError, "bad value for range")
 
         self.w_start = w_start
