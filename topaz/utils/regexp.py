@@ -390,7 +390,8 @@ class Property(RegexpBase):
 
     def compile(self, ctx):
         ctx.emit(OPCODE_CATEGORY)
-        ctx.emit(self.value)
+        # Each CATEGORY_NOT_* code is its positive category's code plus one.
+        ctx.emit(self.value if self.positive else self.value ^ 1)
 
 
 class Range(RegexpBase):
@@ -882,7 +883,11 @@ POSITION_ESCAPES = {
 }
 CHARSET_ESCAPES = {
     "d": Property(CATEGORY_DIGIT),
+    "D": Property(CATEGORY_NOT_DIGIT),
     "w": Property(CATEGORY_WORD),
+    "W": Property(CATEGORY_NOT_WORD),
+    "s": Property(CATEGORY_SPACE),
+    "S": Property(CATEGORY_NOT_SPACE),
 }
 PROPERTIES = {
     "alnum": CATEGORY_WORD,
@@ -1217,6 +1222,12 @@ def _parse_escape(source, info, in_set):
         return AtPosition(AT_BEGINNING)
     elif ch in "pP":
         return _parse_property(source, info, ch == "p", in_set)
+    elif ch in "hH":
+        # A hexadecimal digit, or not one.
+        return SetUnion(info, [
+            Range(ord("0"), ord("9")), Range(ord("a"), ord("f")),
+            Range(ord("A"), ord("F")),
+        ], positive=(ch == "h"))
     elif ch.isalpha():
         if not in_set:
             if ch in POSITION_ESCAPES:
@@ -1361,7 +1372,7 @@ def _parse_posix_class(source, info):
     if not source.match(":]"):
         raise ParseError
     try:
-        return Property(PROPERTIES[name], negate)
+        return Property(PROPERTIES[name], positive=not negate)
     except KeyError:
         try:
             return _posix_class_as_set(name, negate, info)
