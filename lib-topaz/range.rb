@@ -214,3 +214,40 @@ class Range
     "#{b}#{self.exclude_end? ? '...' : '..'}#{e}"
   end
 end
+
+class Range
+  def sum(init = 0, &block)
+    b = self.begin
+    e = self.end
+    if !block && b.is_a?(Integer) && e.is_a?(Integer) && init.is_a?(Integer)
+      e -= 1 if exclude_end?
+      return init if e < b
+      return init + (b + e) * (e - b + 1) / 2
+    end
+    super
+  end
+
+  # Ruby 3.3
+  def overlap?(other)
+    raise TypeError.new("wrong argument type #{other.class} (expected Range)") unless other.is_a?(Range)
+    return false if empty_range?(self) || empty_range?(other)
+    starts_before_other_ends = other.end.nil? || self.begin.nil? ||
+      (other.exclude_end? ? (self.begin <=> other.end) < 0 : (self.begin <=> other.end) <= 0)
+    other_starts_before_self_ends = self.end.nil? || other.begin.nil? ||
+      (exclude_end? ? (other.begin <=> self.end) < 0 : (other.begin <=> self.end) <= 0)
+    starts_before_other_ends && other_starts_before_self_ends
+  end
+
+  # Ruby 3.0
+  def %(step)
+    step(step)
+  end
+
+  private
+
+  def empty_range?(range)
+    return false if range.begin.nil? || range.end.nil?
+    cmp = range.begin <=> range.end
+    cmp.nil? || cmp > 0 || (cmp == 0 && range.exclude_end?)
+  end
+end

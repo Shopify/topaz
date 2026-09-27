@@ -270,3 +270,98 @@ class String
     self
   end
 end
+
+class String
+  # Ruby 2.4
+  def match?(pattern, pos = 0)
+    pattern = Regexp.new(Regexp.escape(pattern)) if pattern.is_a?(String)
+    !pattern.match(self, pos).nil?
+  end
+
+  # Ruby 2.5
+  def delete_prefix(prefix)
+    start_with?(prefix) ? self[prefix.size..] : dup
+  end
+
+  def delete_prefix!(prefix)
+    return nil unless start_with?(prefix)
+    replace(self[prefix.size..])
+  end
+
+  def delete_suffix(suffix)
+    return dup if suffix.empty? || !end_with?(suffix)
+    self[0, size - suffix.size]
+  end
+
+  def delete_suffix!(suffix)
+    return nil if suffix.empty? || !end_with?(suffix)
+    replace(self[0, size - suffix.size])
+  end
+
+  # Ruby 2.4
+  def casecmp?(other)
+    return nil unless other.is_a?(String)
+    downcase == other.downcase
+  end
+
+  def squeeze(*sets)
+    result = ""
+    previous = nil
+    each_char do |char|
+      squeezable = sets.empty? || sets.all? { |set| set.include?(char) }
+      result << char unless char == previous && squeezable
+      previous = char
+    end
+    result
+  end
+
+  def squeeze!(*sets)
+    squeezed = squeeze(*sets)
+    squeezed == self ? nil : replace(squeezed)
+  end
+
+  def lines(separator = $/)
+    each_line(separator).to_a
+  end
+
+  def sum(bits = 16)
+    total = 0
+    each_byte { |byte| total += byte }
+    bits > 0 ? total & ((1 << bits) - 1) : total
+  end
+
+  def hex
+    str = strip
+    negative = str.start_with?("-")
+    str = str[1..] if negative || str.start_with?("+")
+    str = str[2..] if str.start_with?("0x", "0X")
+    value = str.to_i(16)
+    negative ? -value : value
+  end
+
+  def oct
+    str = strip
+    negative = str.start_with?("-")
+    str = str[1..] if negative || str.start_with?("+")
+    value = if str.start_with?("0x", "0X")
+      str[2..].to_i(16)
+    elsif str.start_with?("0b", "0B")
+      str[2..].to_i(2)
+    elsif str.start_with?("0o", "0O")
+      str[2..].to_i(8)
+    else
+      str.to_i(8)
+    end
+    negative ? -value : value
+  end
+
+  # Ruby 2.3: +"str" is a mutable string and -"str" a frozen one.
+  def +@
+    frozen? ? dup : self
+  end
+
+  def -@
+    frozen? ? self : dup.freeze
+  end
+  alias dedup -@
+end

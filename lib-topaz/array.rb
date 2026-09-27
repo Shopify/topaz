@@ -563,3 +563,89 @@ class Array
     Topaz.try_convert_type(arg, Array, :to_ary)
   end
 end
+
+class Array
+  # (Defined with def rather than alias: Enumerable's methods are not loaded
+  # yet when this file is.)
+  def filter(&block)
+    select(&block)
+  end
+
+  def filter!(&block)
+    select!(&block)
+  end
+
+  def append(*values)
+    push(*values)
+  end
+
+  def prepend(*values)
+    unshift(*values)
+  end
+
+  # Ruby 2.6
+  def union(*arrays)
+    arrays.inject(self | []) { |result, array| result | array }
+  end
+
+  # Ruby 2.6
+  def difference(*arrays)
+    arrays.inject(dup) { |result, array| result - array }
+  end
+
+  # Ruby 2.7
+  def intersection(*arrays)
+    arrays.inject(self & self) { |result, array| result & array }
+  end
+
+  # Ruby 3.1
+  def intersect?(other)
+    !(self & other).empty?
+  end
+
+  # Ruby 2.3
+  def dig(index, *rest)
+    item = self[index]
+    rest.empty? || item.nil? ? item : item.dig(*rest)
+  end
+
+  # Ruby 3.4
+  def fetch_values(*indexes, &block)
+    indexes.map { |index| fetch(index, &block) }
+  end
+
+  # Ruby 4.0
+  def rfind(ifnone = nil)
+    return enum_for(:rfind, ifnone) unless block_given?
+    reverse_each { |value| return value if yield(value) }
+    ifnone ? ifnone.call : nil
+  end
+
+  def bsearch(&block)
+    return enum_for(:bsearch) unless block
+    low = 0
+    high = size
+    found = nil
+    while low < high
+      mid = low + (high - low) / 2
+      value = self[mid]
+      result = yield(value)
+      if result == true
+        found = value
+        high = mid
+      elsif result == false || result.nil?
+        low = mid + 1
+      elsif result.is_a?(Numeric)
+        return value if result == 0
+        if result < 0
+          high = mid
+        else
+          low = mid + 1
+        end
+      else
+        raise TypeError.new("wrong argument type #{result.class} (must be numeric, true, false or nil)")
+      end
+    end
+    found
+  end
+end

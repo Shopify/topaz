@@ -330,3 +330,72 @@ class TestPatternMatching(BaseTopazTest):
         return [as_array, as_hash, exact]
         """)
         assert self.unwrap(space, w_res) == [[1, 2], [3, 4], "subset"]
+
+
+class TestCoreMethods(BaseTopazTest):
+    """Core methods added between Ruby 2.2 and 4.0."""
+
+    def test_kernel(self, space):
+        w_res = space.execute("return [5.then { |x| x + 1 }, 3.itself]")
+        assert self.unwrap(space, w_res) == [6, 3]
+
+    def test_enumerable(self, space):
+        w_res = space.execute("""
+        return [[1, 2, 3].sum, [0.1, 0.2, 0.3].sum, (1..100).sum,
+                [1, 2, 3].filter_map { |x| x * 2 if x.odd? },
+                %w[a b a].tally, [[1, 2]].to_h, [1, 2].to_h { |x| [x, -x] },
+                [1, 2, 4, 5].slice_when { |a, b| b != a + 1 }.to_a,
+                [1, nil].compact]
+        """)
+        assert self.unwrap(space, w_res) == [
+            6, 0.6, 5050, [2, 6], {"a": 2, "b": 1}, {1: 2}, {1: -1, 2: -2},
+            [[1, 2], [4, 5]], [1]]
+
+    def test_array(self, space):
+        w_res = space.execute("""
+        return [[1, 2].union([2, 3]), [1, 2, 3].difference([2]),
+                [1, 2].intersection([2, 3]), [1, 2].intersect?([3]),
+                [1, [2, [3]]].dig(1, 1, 0), [1, 2, 3, 4].rfind(&:odd?),
+                [1, 3, 5, 7].bsearch { |x| x >= 4 }, [1].append(2)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 2, 3], [1, 3], [2], False, 3, 3, 5, [1, 2]]
+
+    def test_hash(self, space):
+        w_res = space.execute("""
+        h = {a: 1, b: nil}
+        return [h.transform_values(&:to_s), h.transform_keys(&:to_s),
+                h.slice(:a), h.compact, {a: {b: 2}}.dig(:a, :b),
+                h.except(:b), h.filter { |k, v| v }]
+        """)
+        assert self.unwrap(space, w_res) == [
+            {"a": "1", "b": ""}, {"a": 1, "b": None}, {"a": 1}, {"a": 1},
+            2, {"a": 1}, {"a": 1}]
+
+    def test_string(self, space):
+        w_res = space.execute("""
+        return ["hello".match?(/ll/), "pre-x".delete_prefix("pre-"),
+                "x.rb".delete_suffix(".rb"), "ABC".casecmp?("abc"),
+                "aaabbb".squeeze, "0x1A".hex, "0b101".oct, (-"y").frozen?]
+        """)
+        assert self.unwrap(space, w_res) == [
+            True, "x", "x", True, "ab", 26, 5, True]
+
+    def test_numeric(self, space):
+        w_res = space.execute("""
+        return [1234.digits, 2.pow(100, 1000), 7.ceildiv(2), 12.gcd(18),
+                Integer.sqrt(10 ** 20), 15.clamp(1, 10), 5.clamp(..3),
+                1.23456.round(2), 1234.5.round(-2), Math.log1p(0.0)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [4, 3, 2, 1], 376, 4, 6, 10 ** 10, 10, 3, 1.23, 1200, 0.0]
+
+    def test_proc_composition(self, space):
+        w_res = space.execute("""
+        double = proc { |x| x * 2 }
+        inc = ->(x) { x + 1 }
+        add = ->(a, b) { a + b }
+        return [(double >> inc).call(3), (double << inc).call(3),
+                add.curry[1][2], 5.method(:+).curry[3]]
+        """)
+        assert self.unwrap(space, w_res) == [7, 8, 3, 8]

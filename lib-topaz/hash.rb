@@ -241,3 +241,72 @@ class Hash
     Topaz.try_convert_type(arg, Hash, :to_hash)
   end
 end
+
+class Hash
+  alias filter select
+  alias filter! select!
+
+  # Ruby 2.4
+  def transform_values(&block)
+    return enum_for(:transform_values) unless block
+    result = {}
+    each_pair { |key, value| result[key] = yield(value) }
+    result
+  end
+
+  def transform_values!(&block)
+    return enum_for(:transform_values!) unless block
+    each_pair { |key, value| self[key] = yield(value) }
+    self
+  end
+
+  # Ruby 2.5; the hash argument is Ruby 3.0
+  def transform_keys(mapping = nil, &block)
+    return enum_for(:transform_keys) unless block || mapping
+    result = {}
+    each_pair do |key, value|
+      if mapping && mapping.key?(key)
+        result[mapping[key]] = value
+      elsif block
+        result[yield(key)] = value
+      else
+        result[key] = value
+      end
+    end
+    result
+  end
+
+  def transform_keys!(mapping = nil, &block)
+    return enum_for(:transform_keys!) unless block || mapping
+    replace(transform_keys(mapping, &block))
+  end
+
+  # Ruby 2.5
+  def slice(*keys)
+    result = {}
+    keys.each { |key| result[key] = self[key] if key?(key) }
+    result
+  end
+
+  # Ruby 2.3
+  def dig(key, *rest)
+    item = self[key]
+    rest.empty? || item.nil? ? item : item.dig(*rest)
+  end
+
+  # Ruby 2.4
+  def compact
+    reject { |key, value| value.nil? }
+  end
+
+  def compact!
+    size_before = size
+    delete_if { |key, value| value.nil? }
+    size_before == size ? nil : self
+  end
+
+  # Ruby 2.3
+  def fetch_values(*keys, &block)
+    keys.map { |key| fetch(key, &block) }
+  end
+end

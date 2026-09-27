@@ -40,3 +40,19 @@ class Symbol
     other.instance_of?(Symbol) ? self.to_s.casecmp(other.to_s) : nil
   end
 end
+
+class Symbol
+  # Ruby 2.7
+  def start_with?(*prefixes)
+    to_s.start_with?(*prefixes)
+  end
+
+  def end_with?(*suffixes)
+    to_s.end_with?(*suffixes)
+  end
+
+  # Ruby 3.0
+  def name
+    to_s.freeze
+  end
+end

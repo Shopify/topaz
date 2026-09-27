@@ -502,3 +502,113 @@ module Enumerable
     end
   end
 end
+
+module Enumerable
+  alias filter select
+
+  # Ruby 2.4. Floats are added with Kahan-Babuska summation, like Ruby.
+  def sum(init = 0)
+    total = init
+    compensation = nil
+    each do |*values|
+      value = values.size == 1 ? values[0] : values
+      value = yield(value) if block_given?
+      if compensation.nil? && total.is_a?(Numeric) && value.is_a?(Float)
+        total = total.to_f
+        compensation = 0.0
+      end
+      if compensation && value.is_a?(Numeric)
+        value = value.to_f
+        t = total + value
+        if total.abs >= value.abs
+          compensation += (total - t) + value
+        else
+          compensation += (value - t) + total
+        end
+        total = t
+      else
+        if compensation
+          total += compensation
+          compensation = nil
+        end
+        total += value
+      end
+    end
+    total += compensation if compensation
+    total
+  end
+
+  # Ruby 2.7
+  def filter_map(&block)
+    return enum_for(:filter_map) unless block
+    result = []
+    each do |*values|
+      value = yield(*values)
+      result << value if value
+    end
+    result
+  end
+
+  # Ruby 2.7
+  def tally(hash = {})
+    each do |*values|
+      value = values.size == 1 ? values[0] : values
+      hash[value] = hash.fetch(value, 0) + 1
+    end
+    hash
+  end
+
+  def to_h(*args, &block)
+    result = {}
+    each(*args) do |*values|
+      value = values.size == 1 ? values[0] : values
+      pair = block ? yield(value) : value
+      pair = Topaz.convert_type(pair, Array, :to_ary)
+      if pair.size != 2
+        raise ArgumentError.new("element has wrong array length (expected 2, was #{pair.size})")
+      end
+      result[pair[0]] = pair[1]
+    end
+    result
+  end
+
+  # Ruby 2.2
+  def slice_when(&block)
+    enum = self
+    Enumerator.new do |yielder|
+      current = nil
+      previous = nil
+      enum.each do |value|
+        if current.nil?
+          current = [value]
+        elsif block.call(previous, value)
+          yielder << current
+          current = [value]
+        else
+          current << value
+        end
+        previous = value
+      end
+      yielder << current unless current.nil?
+    end
+  end
+
+  # Ruby 2.3
+  def chunk_while(&block)
+    slice_when { |a, b| !block.call(a, b) }
+  end
+
+  # Ruby 3.1
+  def compact
+    result = []
+    each do |*values|
+      value = values.size == 1 ? values[0] : values
+      result << value unless value.nil?
+    end
+    result
+  end
+
+  def uniq(&block)
+    to_a.uniq(&block)
+  end
+end

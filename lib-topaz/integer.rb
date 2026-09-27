@@ -85,3 +85,89 @@ class Integer < Numeric
     Math.log(self < 0 ? -self : self + 1, 2).ceil
   end
 end
+
+class Integer
+  # Ruby 2.4
+  def digits(base = 10)
+    raise Math::DomainError.new("out of domain") if self < 0
+    raise ArgumentError.new("negative radix") if base < 0
+    raise ArgumentError.new("invalid radix #{base}") if base < 2
+    return [0] if self == 0
+    result = []
+    n = self
+    while n > 0
+      result << n % base
+      n /= base
+    end
+    result
+  end
+
+  # Ruby 2.5
+  def pow(exponent, modulus = nil)
+    return self ** exponent if modulus.nil?
+    raise RangeError.new("Integer#pow() 2nd argument not allowed to be negative when 1st argument is negative") if exponent < 0
+    result = 1 % modulus
+    base = self % modulus
+    while exponent > 0
+      result = (result * base) % modulus if exponent.odd?
+      base = (base * base) % modulus
+      exponent >>= 1
+    end
+    result
+  end
+
+  # Ruby 2.5
+  def allbits?(mask)
+    (self & mask) == mask
+  end
+
+  def anybits?(mask)
+    (self & mask) != 0
+  end
+
+  def nobits?(mask)
+    (self & mask) == 0
+  end
+
+  # Ruby 3.2
+  def ceildiv(other)
+    -(-self).div(other)
+  end
+
+  def gcd(other)
+    a = abs
+    b = other.abs
+    a, b = b, a % b while b != 0
+    a
+  end
+
+  def lcm(other)
+    return 0 if self == 0 || other == 0
+    (self * other).abs / gcd(other)
+  end
+
+  def gcdlcm(other)
+    [gcd(other), lcm(other)]
+  end
+
+  # Ruby 2.5
+  def self.sqrt(n)
+    n = Topaz.convert_type(n, Integer, :to_int)
+    raise Math::DomainError.new('Numerical argument is out of domain - "isqrt"') if n < 0
+    return n if n < 2
+    x = n
+    y = (x + n / x) / 2
+    while y < x
+      x = y
+      y = (x + n / x) / 2
+    end
+    x
+  end
+
+  # Ruby 3.1
+  def self.try_convert(obj)
+    return obj if obj.is_a?(Integer)
+    return nil unless obj.respond_to?(:to_int)
+    obj.to_int
+  end
+end

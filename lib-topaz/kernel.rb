@@ -140,3 +140,23 @@ module Kernel
     File.dirname(File.expand_path(caller_file))
   end
 end
+
+module Kernel
+  # Ruby 2.5/2.6
+  def then
+    return enum_for(:then) unless block_given?
+    yield self
+  end
+  alias yield_self then
+
+  # Ruby 2.2
+  def itself
+    self
+  end
+
+  # Ruby 2.5: pp works without requiring "pp".
+  def pp(*args)
+    p(*args)
+  end
+  private :pp
+end
