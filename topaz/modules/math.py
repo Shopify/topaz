@@ -80,6 +80,25 @@ class Math(object):
     def method_exp(self, space, value):
         return space.newfloat(math.exp(value))
 
+    # Ruby 4.0
+    @moduledef.function("expm1", value="strictfloat")
+    def method_expm1(self, space, value):
+        try:
+            res = math.expm1(value)
+        except OverflowError:
+            res = rfloat.INFINITY
+        return space.newfloat(res)
+
+    @moduledef.function("log1p", value="strictfloat")
+    def method_log1p(self, space, value):
+        if value == -1.0:
+            return space.newfloat(-rfloat.INFINITY)
+        try:
+            res = math.log1p(value)
+        except ValueError:
+            raise space.error(space.getclassfor(W_DomainError), 'Numerical argument is out of domain - "log1p"')
+        return space.newfloat(res)
+
     @moduledef.function("frexp", value="strictfloat")
     def method_frexp(self, space, value):
         mant, exp = math.frexp(value)
