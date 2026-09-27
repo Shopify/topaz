@@ -63,9 +63,11 @@ def getspace(config):
 
 
 def get_topaz_config_options():
+    # Note: "translation.jit_opencoder_model" is gone from RPython; the
+    # opencoder now uses a variable-width encoding, so there is no longer a
+    # "big" model to select.
     return {
         "translation.continuation": True,
-        "translation.jit_opencoder_model": "big",
     }
 
 
