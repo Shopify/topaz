@@ -309,9 +309,9 @@ class TestPatternMatching(BaseTopazTest):
         assert self.unwrap(space, w_res) == [1, 2, 3, True, False]
 
     def test_no_match(self, space):
-        with self.raises(space, "NoMatchingPatternError", "1"):
+        with self.raises(space, "NoMatchingPatternError", "1: String === 1 does not return true"):
             space.execute("1 => String")
-        with self.raises(space, "NoMatchingPatternError", "5"):
+        with self.raises(space, "NoMatchingPatternError", "5: String === 5 does not return true"):
             space.execute("case 5; in String then 1; end")
 
     def test_deconstruct(self, space):

@@ -1516,10 +1516,43 @@ class Translator(nodes.Visitor):
             return ast.And(test, guard_test)
         return self.pattern_test(pattern, value_name)
 
-    def no_match_error(self, value_name, lineno):
+    def value_pattern_expr(self, pattern):
+        """For a pattern that is matched with a single `===` (the last one
+        tried, for an alternation), the expression on the left of it."""
+        while isinstance(pattern, nodes.AlternationPatternNode):
+            pattern = pattern.right
+        if isinstance(pattern, nodes.PinnedVariableNode):
+            return self.expr(pattern.variable)
+        elif isinstance(pattern, nodes.PinnedExpressionNode):
+            return self.expr(pattern.expression)
+        elif (isinstance(pattern, nodes.LocalVariableTargetNode) or
+              isinstance(pattern, nodes.ArrayPatternNode) or
+              isinstance(pattern, nodes.FindPatternNode) or
+              isinstance(pattern, nodes.HashPatternNode) or
+              isinstance(pattern, nodes.CapturePatternNode) or
+              isinstance(pattern, nodes.ImplicitNode) or
+              isinstance(pattern, nodes.IfNode) or
+              isinstance(pattern, nodes.UnlessNode)):
+            return None
+        return self.expr(pattern)
+
+    def no_match_error(self, value_name, lineno, pattern):
+        """`raise NoMatchingPatternError`, with Ruby's message for a value
+        pattern: "5: String === 5 does not return true"."""
+        inspected = self.send(ast.Variable(value_name, lineno), "inspect", [], lineno)
+        message = inspected
+        if pattern is not None:
+            expr = self.value_pattern_expr(pattern)
+            if expr is not None:
+                message = ast.DynamicString([
+                    inspected, ast.ConstantString(": "),
+                    self.send(expr, "inspect", [], lineno),
+                    ast.ConstantString(" === "),
+                    self.send(ast.Variable(value_name, lineno), "inspect", [], lineno),
+                    ast.ConstantString(" does not return true"),
+                ])
         return self.send(ast.Self(lineno), "raise", [
-            self.constant("NoMatchingPatternError", lineno),
-            self.send(ast.Variable(value_name, lineno), "inspect", [], lineno),
+            self.constant("NoMatchingPatternError", lineno), message,
         ], lineno)
 
     def visit_case_match_node(self, node):
@@ -1530,7 +1563,12 @@ class Translator(nodes.Visitor):
             assert isinstance(else_clause, nodes.ElseNode)
             result = self.block(else_clause.statements)
         else:
-            result = self.no_match_error(value_name, lineno)
+            last_pattern = None
+            if node.conditions:
+                last = node.conditions[len(node.conditions) - 1]
+                assert isinstance(last, nodes.InNode)
+                last_pattern = last.pattern
+            result = self.no_match_error(value_name, lineno, last_pattern)
         tests = []
         bodies = []
         for condition in node.conditions:
@@ -1566,7 +1604,8 @@ class Translator(nodes.Visitor):
                 ast.Variable(value_name, lineno), self.expr(node.value))),
             ast.Statement(ast.If(
                 self.pattern_test(node.pattern, value_name),
-                ast.Nil(), self.no_match_error(value_name, lineno))),
+                ast.Nil(),
+                self.no_match_error(value_name, lineno, node.pattern))),
         ])
 
     # Not (yet) supported, but with a better message than the default.
