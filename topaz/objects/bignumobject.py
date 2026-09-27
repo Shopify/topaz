@@ -152,7 +152,7 @@ class W_BignumObject(W_IntegerObject):
         if space.getclass(w_other) is space.w_fixnum or space.getclass(w_other) is space.w_bignum:
             exp = space.bigint_w(w_other)
             negative_exponent = False
-            if exp.sign < 0:
+            if exp.get_sign() < 0:
                 negative_exponent = True
                 exp = exp.abs()
             result = self.bigint.pow(exp, None)
