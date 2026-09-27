@@ -848,10 +848,14 @@ class Super(BaseSend):
         return BaseSend.get_block(self) or LoadBlock()
 
     def method_name_const(self, ctx):
-        if ctx.code_name == "<main>":
+        name = ctx.code_name
+        # `super` in a block calls the super method of the enclosing method.
+        while name.startswith("block in "):
+            name = name[len("block in "):]
+        if name == "<main>":
             return ctx.create_const(ctx.space.w_nil)
         else:
-            return ctx.create_symbol_const(ctx.code_name)
+            return ctx.create_symbol_const(name)
 
 
 class Splat(Node):

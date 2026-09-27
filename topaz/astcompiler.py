@@ -8,8 +8,9 @@ class BaseSymbolTable(object):
 
     NORMAL_ARG = 0
     SPLAT_ARG = 1
-    KW_ARG = 2
+    KW_ARG = 2            # **rest
     BLOCK_ARG = 3
+    KEYWORD_ARG = 4       # a named keyword, `k:` or `k: default`
 
     def __init__(self, parent_symtable=None):
         self.parent_symtable = parent_symtable

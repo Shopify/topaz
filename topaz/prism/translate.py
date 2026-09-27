@@ -832,16 +832,37 @@ class Translator(nodes.Visitor):
         return ast.Super(args, block, self.line(node))
 
     def visit_forwarding_super_node(self, node):
-        # `super` without arguments passes on the method's own arguments.
+        # `super` without arguments passes on the method's own arguments,
+        # also from inside a block in the method.
         lineno = self.line(node)
+        method_symtable = self.symtable
+        while (isinstance(method_symtable, BlockSymbolTable) and
+                method_symtable.parent_symtable is not None):
+            method_symtable = method_symtable.parent_symtable
         args = []
-        for name, tp in self.symtable.arguments:
-            if tp == self.symtable.BLOCK_ARG:
+        keywords = []
+        kwrest = None
+        for name, tp in method_symtable.arguments:
+            if tp == method_symtable.BLOCK_ARG:
                 continue
+            self.symtable.declare_read(name)
             arg = ast.Variable(name, lineno)
-            if tp == self.symtable.SPLAT_ARG:
-                arg = ast.Splat(arg)
-            args.append(arg)
+            if tp == method_symtable.SPLAT_ARG:
+                args.append(ast.Splat(arg))
+            elif tp == method_symtable.KEYWORD_ARG:
+                keywords.append((ast.ConstantSymbol(name), arg))
+            elif tp == method_symtable.KW_ARG:
+                kwrest = arg
+            else:
+                args.append(arg)
+        if keywords:
+            keywords_hash = ast.Hash(keywords)
+            if kwrest is not None:
+                keywords_hash = ast.Send(
+                    keywords_hash, "merge", [kwrest], None, lineno)
+            args.append(keywords_hash)
+        elif kwrest is not None:
+            args.append(kwrest)
         block = None
         block_node = node.block
         if block_node is not None:
@@ -1077,11 +1098,13 @@ class Translator(nodes.Visitor):
             params.post_args.append(self.declare_parameter(params, param))
         for param in node.keywords:
             if isinstance(param, nodes.RequiredKeywordParameterNode):
-                self.symtable.declare_argument(param.name)
+                self.symtable.declare_argument(
+                    param.name, self.symtable.KEYWORD_ARG)
                 params.kwargs.append(ast.Argument(param.name, None))
             else:
                 assert isinstance(param, nodes.OptionalKeywordParameterNode)
-                self.symtable.declare_argument(param.name)
+                self.symtable.declare_argument(
+                    param.name, self.symtable.KEYWORD_ARG)
                 params.kwargs.append(
                     ast.Argument(param.name, self.expr(param.value)))
         kwrest = node.keyword_rest
