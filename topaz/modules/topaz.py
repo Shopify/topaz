@@ -7,6 +7,7 @@ from rpython.rlib.rtermios import tcsetattr, tcgetattr, all_constants
 from topaz.error import error_for_oserror
 from topaz.module import ModuleDef
 from topaz.objects.classobject import W_ClassObject
+from topaz.objects.symbolobject import is_label_symbol
 
 
 class Topaz(object):
@@ -19,6 +20,11 @@ class Topaz(object):
         space.set_const(w_mod, "TermIOConstants", w_termioconsts)
         for name, value in all_constants.iteritems():
             space.set_const(w_termioconsts, name, space.newint(value))
+
+    @moduledef.function("label_symbol?", symbol="symbol")
+    def method_label_symbolp(self, space, symbol):
+        """Whether a Hash inspects the key :symbol as `symbol: `."""
+        return space.newbool(is_label_symbol(symbol))
 
     @moduledef.function("intmask")
     def method_intmask(self, space, w_int):

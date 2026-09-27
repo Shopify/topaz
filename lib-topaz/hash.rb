@@ -157,7 +157,13 @@ class Hash
         if i > 0
           result << ", "
         end
-        result << "#{key.inspect}=>#{value.inspect}"
+        # Ruby 3.4: {a: 1, "+": 2, "b" => 3}
+        if key.is_a?(Symbol)
+          label = Topaz.label_symbol?(key) ? key.to_s : key.to_s.inspect
+          result << "#{label}: #{value.inspect}"
+        else
+          result << "#{key.inspect} => #{value.inspect}"
+        end
       end
     end
     if recursion

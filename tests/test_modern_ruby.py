@@ -235,3 +235,32 @@ class TestArgumentForwarding(BaseTopazTest):
         return C.new.m(1) { 2 }
         """)
         assert self.unwrap(space, w_res) == [[1], 2]
+
+
+class TestInspect(BaseTopazTest):
+    def test_string_inspect_escapes(self, space):
+        w_res = space.execute(r"""
+        return ['a"b', "a\\b", "\n\t\e\u0001", "\#{x}", "\u00e9", "\xff"].map(&:inspect)
+        """)
+        assert self.unwrap(space, w_res) == [
+            r'"a\"b"', r'"a\\b"', r'"\n\t\e\u0001"', r'"\#{x}"',
+            u'"\u00e9"'.encode("utf-8"), r'"\xFF"',
+        ]
+
+    def test_symbol_inspect(self, space):
+        w_res = space.execute("""
+        return [:foo_bar, :+, :a?, :a=, :[]=, :@iv, :$g, :"foo bar", :"9x"].map(&:inspect)
+        """)
+        assert self.unwrap(space, w_res) == [
+            ":foo_bar", ":+", ":a?", ":a=", ":[]=", ":@iv", ":$g",
+            ':"foo bar"', ':"9x"',
+        ]
+
+    def test_hash_inspect(self, space):
+        # Ruby 3.4
+        w_res = space.execute("""
+        h = {a: 1, "b" => 2, 1 => 3, :+ => 4, :a? => 5, nil => 6}
+        return h.inspect
+        """)
+        assert self.unwrap(space, w_res) == (
+            '{a: 1, "b" => 2, 1 => 3, "+": 4, a?: 5, nil => 6}')
