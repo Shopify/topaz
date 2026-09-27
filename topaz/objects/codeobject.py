@@ -1,7 +1,22 @@
 import copy
 
+from rpython.rlib import rvmprof
+
 from topaz.module import ClassDef
 from topaz.objects.objectobject import W_BaseObject
+
+
+def _vmprof_safe(s):
+    # vmprof names must not contain extra ':' and must stay short.
+    if len(s) > 200:
+        s = s[:197] + "..."
+    return s.replace(":", ";")
+
+
+def get_vmprof_name(code):
+    return "rb:%s:%d:%s" % (
+        _vmprof_safe(code.name), code.lineno, _vmprof_safe(code.filepath)
+    )
 
 
 class W_CodeObject(W_BaseObject):
@@ -58,6 +73,8 @@ class W_CodeObject(W_BaseObject):
             block_arg_pos = cellvars.index(block_arg)
         self.block_arg_pos = block_arg_pos
 
+        rvmprof.register_code(self, get_vmprof_name)
+
     def __deepcopy__(self, memo):
         obj = super(W_CodeObject, self).__deepcopy__(memo)
         obj.name = self.name
@@ -88,3 +105,6 @@ class W_CodeObject(W_BaseObject):
     @classdef.method("filepath")
     def method_filepath(self, space):
         return space.newstr_fromstr(self.filepath)
+
+
+rvmprof.register_code_object_class(W_CodeObject, get_vmprof_name)

@@ -1,4 +1,4 @@
-from rpython.rlib import jit, rstackovf
+from rpython.rlib import jit, rstackovf, rvmprof
 from rpython.rlib.debug import check_nonneg
 from rpython.rlib.objectmodel import we_are_translated, specialize
 
@@ -29,12 +29,21 @@ def get_printable_location(pc, bytecode, block_bytecode, w_trace_proc):
     )
 
 
+def get_unique_id(pc, bytecode, block_bytecode, w_trace_proc):
+    return rvmprof.get_unique_id(bytecode)
+
+
+def _get_vmprof_code(self, space, frame, bytecode):
+    return bytecode
+
+
 class Interpreter(object):
     jitdriver = jit.JitDriver(
         greens=["pc", "bytecode", "block_bytecode", "w_trace_proc"],
         reds=["self", "frame"],
         virtualizables=["frame"],
         get_printable_location=get_printable_location,
+        get_unique_id=get_unique_id,
         check_untranslated=False,
         is_recursive=True
     )
@@ -45,8 +54,12 @@ class Interpreter(object):
     def get_block_bytecode(self, block):
         return block.bytecode if block is not None else None
 
-    def interpret(self, space, frame, bytecode, startpc=0):
-        pc = startpc
+    # RPython's stacklet support (used for Fibers) always links in rvmprof,
+    # which requires the interpreter to declare its code-executing function.
+    # This also makes Ruby frames visible to vmprof.
+    @rvmprof.vmprof_execute_code("topaz", _get_vmprof_code)
+    def interpret(self, space, frame, bytecode):
+        pc = 0
         try:
             while True:
                 self.jitdriver.jit_merge_point(
