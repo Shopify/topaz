@@ -235,8 +235,17 @@ class W_RegexpObject(W_Object):
         matched = self.rsre_search(ctx)
         return self.get_match_result(space, ctx, s, matched)
 
-    @classdef.method("===", s="str")
-    def method_eqeqeq(self, space, s):
+    @classdef.method("===")
+    def method_eqeqeq(self, space, w_obj):
+        # Anything but a String or Symbol simply does not match.
+        if space.is_kind_of(w_obj, space.w_symbol):
+            s = space.symbol_w(w_obj)
+        elif space.is_kind_of(w_obj, space.w_string):
+            s = space.str_w(w_obj)
+        elif space.respond_to(w_obj, "to_str"):
+            s = Coerce.str(space, w_obj)
+        else:
+            return space.w_false
         ctx = self.make_ctx(s)
         matched = self.rsre_search(ctx)
         self.get_match_result(space, ctx, s, matched)
