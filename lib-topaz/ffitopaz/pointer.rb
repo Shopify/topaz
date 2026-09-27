@@ -11,7 +11,7 @@ module FFI
       if meth_name.start_with? 'write'
         raise NullPointerError.new("write attempt on NULL pointer")
       end
-      raise NoMethodError.new("undefined method `#{meth_name}' for #{self}")
+      raise NoMethodError.new("undefined method '#{meth_name}' for #{self}")
     end
 
     def write_array_of_uint32(ary)

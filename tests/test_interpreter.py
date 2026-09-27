@@ -101,7 +101,7 @@ class TestInterpreter(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [1, "hello", [2, 3], 4]
 
-        with self.raises(space, "NoMethodError", "undefined method `each' for Integer"):
+        with self.raises(space, "NoMethodError", "undefined method 'each' for an instance of Integer"):
             space.execute("for i in 1; end")
 
         w_res = space.execute("""

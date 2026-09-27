@@ -514,7 +514,7 @@ class ObjectSpace(object):
         if w_function is None:
             raise self.error(
                 self.w_NameError,
-                "undefined method `%s' for class `%s'" % (
+                "undefined method '%s' for class '%s'" % (
                     name, self.obj_to_s(w_cls)))
         else:
             return W_UnboundMethodObject(self, w_cls, w_function)
@@ -720,10 +720,7 @@ class ObjectSpace(object):
         if raw_method is None:
             method_missing = w_cls.find_method(self, "method_missing")
             if method_missing is None:
-                class_name = self.str_w(self.send(w_cls, "to_s"))
-                raise self.error(
-                    self.w_NoMethodError,
-                    "undefined method `%s' for %s" % (name, class_name))
+                raise self.undefined_method_error(name, w_receiver)
             else:
                 args_w = [self.newsymbol(name)] + args_w
                 return method_missing.call(self, w_receiver, args_w, block)
@@ -922,6 +919,30 @@ class ObjectSpace(object):
 
     def obj_to_s(self, w_obj):
         return self.str_w(self.send(w_obj, "to_s"))
+
+    def describe_receiver(self, w_obj):
+        """How error messages name an object since Ruby 3.4: "nil", "main",
+        "class Foo", "module Bar" or "an instance of Baz"."""
+        if w_obj is self.w_nil:
+            return "nil"
+        elif w_obj is self.w_true:
+            return "true"
+        elif w_obj is self.w_false:
+            return "false"
+        elif w_obj is self.w_top_self:
+            return "main"
+        elif isinstance(w_obj, W_ClassObject):
+            return "class %s" % self.obj_to_s(w_obj)
+        elif isinstance(w_obj, W_ModuleObject):
+            return "module %s" % self.obj_to_s(w_obj)
+        return "an instance of %s" % self.obj_to_s(
+            self.getnonsingletonclass(w_obj))
+
+    def undefined_method_error(self, name, w_receiver):
+        return self.error(
+            self.w_NoMethodError,
+            "undefined method '%s' for %s" % (
+                name, self.describe_receiver(w_receiver)))
 
     def compare(self, w_a, w_b, block=None):
         if block is None:

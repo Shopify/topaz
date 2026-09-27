@@ -60,11 +60,7 @@ class W_BaseObject(W_Root):
 
     @classdef.method("method_missing")
     def method_method_missing(self, space, w_name, args_w):
-        name = space.symbol_w(w_name)
-        class_name = space.str_w(space.send(self.getclass(space), "to_s"))
-        raise space.error(space.w_NoMethodError,
-            "undefined method `%s' for %s" % (name, class_name)
-        )
+        raise space.undefined_method_error(space.symbol_w(w_name), self)
 
     @classdef.method("==")
     @classdef.method("equal?")

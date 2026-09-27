@@ -335,15 +335,15 @@ class TestModuleObject(BaseTopazTest):
           undef_method :hello
         end
         """)
-        with self.raises(space, "NoMethodError", "undefined method `hello' for A"):
+        with self.raises(space, "NoMethodError", "undefined method 'hello' for an instance of A"):
             space.execute("A.new.hello")
-        with self.raises(space, "NameError", "undefined method `undefinedmethod' for class `A'"):
+        with self.raises(space, "NameError", "undefined method 'undefinedmethod' for class 'A'"):
             space.execute("""
             class A
               undef_method :undefinedmethod
             end
             """)
-        with self.raises(space, "NameError", "undefined method `hello' for class `A'"):
+        with self.raises(space, "NameError", "undefined method 'hello' for class 'A'"):
             space.execute("""
             class A
               undef_method :hello
@@ -354,7 +354,7 @@ class TestModuleObject(BaseTopazTest):
           undef_method :==
         end
         """)
-        with self.raises(space, "NoMethodError", "undefined method `==' for A"):
+        with self.raises(space, "NoMethodError", "undefined method '==' for an instance of A"):
             space.execute("""
             A.new == 1
             """)

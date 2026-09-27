@@ -383,7 +383,7 @@ class W_ModuleObject(W_RootObject):
         if w_method is None or isinstance(w_method, UndefMethod):
             cls_name = space.obj_to_s(self)
             raise space.error(space.w_NameError,
-                "undefined method `%s' for class `%s'" % (name, cls_name)
+                "undefined method '%s' for class '%s'" % (name, cls_name)
             )
         w_method.update_visibility(visibility)
 
@@ -525,7 +525,7 @@ class W_ModuleObject(W_RootObject):
             if w_method is None or isinstance(w_method, UndefMethod):
                 cls_name = space.obj_to_s(self)
                 raise space.error(space.w_NameError,
-                    "undefined method `%s' for class `%s'" % (name, cls_name)
+                    "undefined method '%s' for class '%s'" % (name, cls_name)
                 )
             self.attach_method(space, name, w_method)
             self.set_method_visibility(space, name, W_FunctionObject.PRIVATE)
@@ -550,7 +550,7 @@ class W_ModuleObject(W_RootObject):
         if w_method is None or isinstance(w_method, UndefMethod):
             cls_name = space.obj_to_s(self)
             raise space.error(space.w_NameError,
-                "undefined method `%s' for class `%s'" % (old_name, cls_name)
+                "undefined method '%s' for class '%s'" % (old_name, cls_name)
             )
         self.define_method(space, new_name, w_method)
         return self
@@ -802,7 +802,7 @@ class W_ModuleObject(W_RootObject):
         if w_method is None or isinstance(w_method, UndefMethod):
             cls_name = space.obj_to_s(self)
             raise space.error(space.w_NameError,
-                "undefined method `%s' for class `%s'" % (name, cls_name)
+                "undefined method '%s' for class '%s'" % (name, cls_name)
             )
         self.define_method(space, name, UndefMethod(name))
         return self

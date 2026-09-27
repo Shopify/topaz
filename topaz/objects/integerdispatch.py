@@ -55,11 +55,7 @@ class W_IntegerDispatchFunction(W_FunctionObject):
             assert isinstance(w_class, W_ClassObject)
             w_method = w_class.superclass.find_method(space, self.name)
             if w_method is None:
-                raise space.error(
-                    space.w_NoMethodError,
-                    "undefined method '%s' for an instance of Integer" %
-                    self.name
-                )
+                raise space.undefined_method_error(self.name, w_receiver)
         return w_method.call(space, w_receiver, args_w, block)
 
     def arity(self, space):
