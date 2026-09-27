@@ -399,3 +399,72 @@ class TestCoreMethods(BaseTopazTest):
                 add.curry[1][2], 5.method(:+).curry[3]]
         """)
         assert self.unwrap(space, w_res) == [7, 8, 3, 8]
+
+
+class TestImplicitSuper(BaseTopazTest):
+    def test_passes_keywords_as_keywords(self, space):
+        w_res = space.execute("""
+        class P
+          def m(a, b = 2, *r, k: 1, **o, &blk) = [a, b, r, k, o, blk && blk.call]
+        end
+        class C < P
+          def m(a, b = 5, *r, k: 9, **o, &blk)
+            [1].map { super }.first
+          end
+        end
+        return [C.new.m(1), C.new.m(1, 2, 3, k: 4, z: 5) { :blk }]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 5, [], 9, {}, None], [1, 2, [3], 4, {"z": 5}, "blk"]]
+
+
+class TestData(BaseTopazTest):
+    def test_define(self, space):
+        # Ruby 3.2
+        w_res = space.execute("""
+        Point = Data.define(:x, :y) do
+          def norm = x * x + y * y
+        end
+        a = Point.new(1, 2)
+        b = Point.new(x: 1, y: 2)
+        return [a.inspect, a == b, a.hash == b.hash, a.to_h, a.norm,
+                a.frozen?, a.with(y: 5).inspect, Point[3, 4].x]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "#<data Point x=1, y=2>", True, True, {"x": 1, "y": 2}, 5, True,
+            "#<data Point x=1, y=5>", 3]
+
+    def test_errors_and_defaults(self, space):
+        w_res = space.execute("""
+        Point = Data.define(:x, :y)
+        errors = []
+        [[1], [1, 2, 3]].each do |args|
+          begin
+            Point.new(*args)
+          rescue ArgumentError => e
+            errors << e.message
+          end
+        end
+        WithDefault = Data.define(:a) { def initialize(a: 0) = super }
+        return [errors, WithDefault.new.a]
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["missing keyword: :y", "wrong number of arguments (given 3, expected 0..2)"],
+            0]
+
+
+class TestSetAndWarning(BaseTopazTest):
+    def test_set_is_core(self, space):
+        # Ruby 4.0: no require, and Set[...] inspection.
+        w_res = space.execute("return [Set[1, 2, 2].size, Set[1, 2].inspect]")
+        assert self.unwrap(space, w_res) == [2, "Set[1, 2]"]
+
+    def test_warning(self, space):
+        w_res = space.execute("""
+        $VERBOSE = false
+        seen = []
+        Warning.define_singleton_method(:warn) { |message| seen << message }
+        warn "one", "two"
+        return [seen, Warning[:experimental], Warning.categories.include?(:deprecated)]
+        """)
+        assert self.unwrap(space, w_res) == [["one\ntwo\n"], True, True]

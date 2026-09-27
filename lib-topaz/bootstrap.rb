@@ -37,6 +37,11 @@ load_bootstrap.call("proc.rb")
 load_bootstrap.call("rational.rb")
 load_bootstrap.call("file_test.rb")
 load_bootstrap.call("pattern_matching.rb")
+load_bootstrap.call("data.rb")
+load_bootstrap.call("warning.rb")
+
+# Set is part of the core since Ruby 4.0.
+Object.autoload(:Set, "set")
 
 # ffi
 load_bootstrap.call("ffitopaz/pointer.rb")

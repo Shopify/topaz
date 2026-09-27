@@ -100,6 +100,12 @@ class W_Autoload(W_RootObject):
         self.space = space
         self.path = path
 
+    def __deepcopy__(self, memo):
+        obj = super(W_Autoload, self).__deepcopy__(memo)
+        obj.space = copy.deepcopy(self.space, memo)
+        obj.path = self.path
+        return obj
+
     def load(self):
         self.space.send(
             self.space.w_kernel,

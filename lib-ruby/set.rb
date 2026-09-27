@@ -451,21 +451,22 @@ class Set
   InspectKey = :__inspect_key__         # :nodoc:
 
   # Returns a string containing a human-readable representation of the
-  # set. ("#<Set: {element1, element2, ...}>")
+  # set, in the Ruby 4.0 format: "Set[element1, element2, ...]".
   def inspect
     ids = (Thread.current[InspectKey] ||= [])
 
     if ids.include?(object_id)
-      return sprintf('#<%s: {...}>', self.class.name)
+      return sprintf('%s[...]', self.class.name)
     end
 
     begin
       ids << object_id
-      return sprintf('#<%s: {%s}>', self.class, to_a.inspect[1..-2])
+      return sprintf('%s[%s]', self.class, to_a.inspect[1..-2])
     ensure
       ids.pop
     end
   end
+  alias to_s inspect
 
   def pretty_print(pp)  # :nodoc:
     pp.text sprintf('#<%s: {', self.class.name)
