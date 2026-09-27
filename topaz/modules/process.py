@@ -38,7 +38,10 @@ else:
     WEXITSTATUS = os.WEXITSTATUS
 
 
-if not rtime.HAS_CLOCK_GETTIME:
+# RPython renamed HAS_CLOCK_GETTIME to HAS_CLOCK_GETTIME_RUNTIME.
+HAS_CLOCK_GETTIME = rtime.HAS_CLOCK_GETTIME_RUNTIME
+
+if not HAS_CLOCK_GETTIME:
     CLOCK_PROCESS_CPUTIME_ID = 1
 
 
@@ -47,7 +50,7 @@ class Process(object):
 
     @moduledef.setup_module
     def setup_module(space, w_mod):
-        if rtime.HAS_CLOCK_GETTIME:
+        if HAS_CLOCK_GETTIME:
             for name in rtime.ALL_DEFINED_CLOCKS:
                 space.set_const(w_mod, name, space.newint(getattr(rtime, name)))
         else:
@@ -157,7 +160,7 @@ class Process(object):
             unit = Coerce.symbol(space, args_w[0])
         else:
             unit = "float_second"
-        if rtime.HAS_CLOCK_GETTIME:
+        if HAS_CLOCK_GETTIME:
             with lltype.scoped_alloc(rtime.TIMESPEC) as a:
                 if rtime.c_clock_gettime(clockid, a) == 0:
                     sec = rffi.getintfield(a, 'c_tv_sec')
