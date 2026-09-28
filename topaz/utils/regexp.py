@@ -9,7 +9,7 @@ from rpython.rlib.rsre.rsre_constants import (
     OPCODE_MIN_UNTIL, OPCODE_GROUPREF, OPCODE_AT, OPCODE_BRANCH, OPCODE_RANGE,
     OPCODE_JUMP, OPCODE_ASSERT_NOT, OPCODE_CATEGORY, OPCODE_FAILURE, OPCODE_IN,
     OPCODE_NEGATE, OPCODE_GROUPREF_EXISTS, OPCODE_GROUPREF_IGNORE,
-    OPCODE_IN_IGNORE
+    OPCODE_IN_IGNORE, OPCODE_NOT_LITERAL, OPCODE_NOT_LITERAL_IGNORE
 )
 from rpython.rlib.rsre.rsre_constants import (
     AT_BEGINNING, AT_BEGINNING_LINE, AT_BEGINNING_STRING, AT_BOUNDARY,
@@ -322,12 +322,13 @@ class Character(RegexpBase):
         return False
 
     def compile(self, ctx):
+        # A negated character is what [^x] optimizes to.
         if self.case_insensitive:
             # The matcher lowercases the subject before comparing.
-            ctx.emit(OPCODE_LITERAL_IGNORE)
+            ctx.emit(OPCODE_LITERAL_IGNORE if self.positive else OPCODE_NOT_LITERAL_IGNORE)
             ctx.emit(_lower_ascii(self.value))
         else:
-            ctx.emit(OPCODE_LITERAL)
+            ctx.emit(OPCODE_LITERAL if self.positive else OPCODE_NOT_LITERAL)
             ctx.emit(self.value)
 
     def compile_folded(self, ctx):
@@ -675,7 +676,10 @@ class Branch(RegexpBase):
         items = {}
         case_insensitive = False
         for b in branches:
-            if isinstance(b, Character) or isinstance(b, Property) or isinstance(b, SetBase):
+            # Only positive single characters and classes can become members
+            # of one set: a set member cannot be negated on its own.
+            if ((isinstance(b, Character) and b.positive) or
+                    isinstance(b, Property)):
                 if b.case_insensitive != case_insensitive:
                     self._flush_set_members(info, items, case_insensitive, new_branches)
                     case_insensitive = b.case_insensitive
@@ -997,17 +1001,23 @@ CHARSET_ESCAPES = {
     "S": Property(CATEGORY_NOT_SPACE),
 }
 PROPERTIES = {
-    "alnum": CATEGORY_WORD,
     "digit": CATEGORY_DIGIT,
     "space": CATEGORY_SPACE,
-    "graph": CATEGORY_WORD,
-
 }
+# Bytes 0x80 and up count as letters, so that the classes match the
+# characters of UTF-8 text the way CRuby's Unicode classes do.
 EXTRA_POSIX_PROPERTIES = {
-    "print": [Range(32, 255)],  # space - ASCII-end
+    "alnum": [Range(ord("a"), ord("z")), Range(ord("A"), ord("Z")),
+              Range(ord("0"), ord("9")), Range(0x80, 0xff)],
+    "alpha": [Range(ord("a"), ord("z")), Range(ord("A"), ord("Z")),
+              Range(0x80, 0xff)],
+    "word": [Range(ord("a"), ord("z")), Range(ord("A"), ord("Z")),
+             Range(ord("0"), ord("9")), Character(ord("_")), Range(0x80, 0xff)],
+    "graph": [Range(33, 126), Range(0x80, 0xff)],
+    "print": [Range(32, 126), Range(0x80, 0xff)],
     "blank": [Character(ord(c)) for c in " \t"],
-    "punct": [Character(ord(c)) for c in '~!@#$%^&*()+-\|{}[]:";\'<>?,./'],
-    "alpha": [Range(ord("a"), ord("z")), Range(ord("A"), ord("Z"))],
+    "cntrl": [Range(0, 31), Character(127)],
+    "punct": [Character(ord(c)) for c in '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~'],
     "lower": [Range(ord("a"), ord("z"))],
     "upper": [Range(ord("A"), ord("Z"))],
     "xdigit": [Range(ord("0"), ord("9")), Range(ord("a"), ord("f")), Range(ord("A"), ord("F"))],
@@ -1148,6 +1158,12 @@ def _parse_quantifier(source, info):
 
 def _parse_paren(source, info):
     if source.match("?"):
+        # A comment group. In extended mode a bare # would start a comment
+        # to the end of the line, so look at the raw text.
+        if source.pos < len(source.s) and source.s[source.pos] == "#":
+            source.pos += 1
+            _parse_comment(source)
+            return Sequence([])
         if source.match("<"):
             if source.match("="):
                 return _parse_lookaround(source, info, behind=True, positive=True)

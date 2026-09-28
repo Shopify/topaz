@@ -1121,3 +1121,21 @@ class TestModuleCopies(BaseTopazTest):
                 m.dup.instance_methods(false), r.equal?(o), o.a + o.b]
         """)
         assert self.unwrap(space, w_res) == [True, False, True, ["foo"], True, 3]
+
+
+class TestRegexpClasses(BaseTopazTest):
+    def test_negated_single_characters(self, space):
+        # [^x] used to compile to a plain x.
+        w_res = space.execute("""
+        return ["ab".match(/[^x]*/)[0], "ab" =~ /[^"]*$/, "X" =~ /[^x]/i, "ab" =~ /a[^b]|ab/,
+                "q" =~ /[^ab]|x/, "a" =~ /[^ab]|x/]
+        """)
+        assert self.unwrap(space, w_res) == ["ab", 0, None, 0, 0, None]
+
+    def test_posix_classes_and_extended_comments(self, space):
+        w_res = space.execute("""
+        return ["a" =~ /^[^[:word:]][^"]*$/, "-a" =~ /^[^[:word:]][^"]*$/, "_" =~ /[[:word:]]/,
+                "_" =~ /[[:alnum:]]/, "`" =~ /[[:punct:]]/, "\\t" =~ /[[:cntrl:]]/, " " =~ /[[:graph:]]/,
+                "1.5" =~ /^(?:[-+]?([0-9][0-9_,]*)?\\.[0-9]*(?# base 10))$/x]
+        """)
+        assert self.unwrap(space, w_res) == [None, 0, 0, None, 0, 0, None, 0]
