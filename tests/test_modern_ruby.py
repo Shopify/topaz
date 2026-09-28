@@ -1627,3 +1627,24 @@ class TestZlib(BaseTopazTest):
             pytest.skip("libz is not available")
         assert res == [891568578, 38600999, "789ccb48cdc9c90700062c0215", True, 100,
                        ["line1\n", "line2\n"], "incorrect header check"]
+
+
+class TestLineReading(BaseTopazTest):
+    def test_readlines_gets_and_chomp(self, space, tmpdir):
+        f = tmpdir.join("lines.txt")
+        f.write("a\nbb\n\n\nccc\nd")
+        w_res = space.execute("""
+        path = %r
+        r = []
+        r << File.readlines(path) << File.readlines(path, chomp: true) << File.readlines(path, "b")
+        r << File.readlines(path, 2) << File.readlines(path, "")
+        File.open(path) { |f| r << f.gets << f.read(2) << f.gets << f.lineno << f.gets(nil) << f.gets << f.read << f.read(1) }
+        IO.pipe { |rd, wr| wr.write("x\\ny\\n"); wr.close; r << rd.gets << rd.readlines }
+        return r
+        """ % (str(f),))
+        assert self.unwrap(space, w_res) == [
+            ["a\n", "bb\n", "\n", "\n", "ccc\n", "d"], ["a", "bb", "", "", "ccc", "d"],
+            ["a\nb", "b", "\n\n\nccc\nd"], ["a\n", "bb", "\n", "\n", "\n", "cc", "c\n", "d"],
+            ["a\nbb\n\n", "ccc\nd"], "a\n", "bb", "\n", 2, "\n\nccc\nd", None, "", None,
+            "x\n", ["y\n"]]
+

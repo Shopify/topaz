@@ -26,83 +26,138 @@ class IO
     seek(i, IO::SEEK_SET)
   end
 
-  def each_line(sep = $/, limit = nil)
-    if sep.is_a?(Integer) && limit.nil?
-      limit = sep
-      sep = $/
+  # Line reading. topaz's IO does not buffer, so a line is read in
+  # chunks and what follows it is given back by seeking; where the IO
+  # cannot seek (pipes, terminals) it is read a byte at a time.
+  def gets(*args, chomp: false)
+    raise IOError, "closed stream" if closed?
+    sep, limit = __topaz_line_args(args)
+    line = __topaz_read_line(sep, limit)
+    if line
+      self.lineno = lineno + 1
+      $. = lineno
+      line = __topaz_chomp_line(line, sep) if chomp
     end
+    $_ = line
+  end
 
-    if sep.nil?
-      yield(limit ? read(limit) : read)
-      return self
-    end
+  def readline(*args, chomp: false)
+    line = gets(*args, chomp: chomp)
+    raise EOFError, "end of file reached" if line.nil?
+    line
+  end
 
-    if limit == 0
-      raise ArgumentError.new("invalid limit: 0 for each_line")
-    end
-
-    rest = ""
-    nxt = read(8192)
-    need_read = false
-    while nxt || rest
-      if nxt && need_read
-        rest = rest ? rest + nxt : nxt
-        nxt = read(8192)
-        need_read = false
-      end
-
-      line, rest = *rest.split(sep, 2)
-
-      if limit && line.size > limit
-        left = 0
-        right = limit
-        while right < line.size
-          yield line[left...right]
-          left, right = right, right + limit
-        end
-        rest = line[right - limit..-1] + sep + (rest || "")
-      elsif rest || nxt.nil?
-        yield line
-      else
-        need_read = true
-      end
+  def each_line(*args, chomp: false)
+    return enum_for(:each_line, *args, chomp: chomp) unless block_given?
+    sep, limit = __topaz_line_args(args)
+    raise ArgumentError, "invalid limit: 0 for each_line" if limit == 0
+    while (line = gets(sep, limit, chomp: chomp))
+      yield line
     end
     self
   end
   alias each each_line
-  alias lines each_line
 
-  def readline(sep = $/, limit = nil)
-    line = gets(sep, limit)
-    raise EOFError.new("end of file reached") if line.nil?
-    line
-  end
-
-  def gets(sep = $/, limit = nil)
-    if sep.nil?
-      return read
-    end
-    if sep.is_a?(Integer) && limit.nil?
-      limit = sep
-      sep = $/
-    end
-    raise IOError.new("closed stream") if closed?
-    line = ""
-    loop do
-      c = getc
-      break if c.nil? || c.empty?
-      line << c
-      break if c == sep || line.length == limit
-    end
-    $_ = line
-    line.empty? ? nil : line
-  end
-
-  def readlines(sep = $/, limit = nil)
+  def readlines(*args, chomp: false)
+    sep, limit = __topaz_line_args(args)
+    raise ArgumentError, "invalid limit: 0 for readlines" if limit == 0
     lines = []
-    each_line(sep, limit) { |line| lines << line }
-    return lines
+    while (line = gets(sep, limit, chomp: chomp))
+      lines << line
+    end
+    lines
   end
+
+  private
+
+  def __topaz_line_args(args)
+    sep = $/
+    limit = nil
+    case args.size
+    when 0
+    when 1
+      if args[0].nil? || args[0].is_a?(String)
+        sep = args[0]
+      elsif args[0].respond_to?(:to_str)
+        sep = args[0].to_str
+      else
+        limit = Integer(args[0])
+      end
+    else
+      sep = args[0].nil? ? nil : Topaz.convert_type(args[0], String, :to_str)
+      limit = args[1].nil? ? nil : Integer(args[1])
+    end
+    limit = nil if limit && limit < 0
+    [sep, limit]
+  end
+
+  def __topaz_chomp_line(line, sep)
+    if sep.nil?
+      line
+    elsif sep == ""
+      line.sub(/\n+\z/, "")
+    elsif sep == "\n"
+      line.chomp
+    else
+      line.end_with?(sep) ? line[0, line.bytesize - sep.bytesize] : line
+    end
+  end
+
+  def __topaz_seekable?
+    return @__topaz_seekable unless @__topaz_seekable.nil?
+    @__topaz_seekable = begin
+      pos
+      !File.pipe?("/proc/self/fd/#{fileno}") && !tty?
+    rescue SystemCallError, NotImplementedError, NoMethodError
+      false
+    end
+  end
+
+  def __topaz_read_line(sep, limit)
+    if sep.nil?
+      data = limit ? read(limit) : read
+      return data.nil? || data.empty? ? nil : data
+    end
+    paragraph = sep == ""
+    chunk_size = __topaz_seekable? ? 4096 : 1
+    buffer = "".b
+    if paragraph
+      # Blank lines before a paragraph (and so after the last) are skipped.
+      sep = "\n\n"
+      byte = read(1)
+      byte = read(1) while byte == "\n"
+      return nil if byte.nil?
+      buffer << byte
+    end
+    searched = 0
+    while true
+      if limit && buffer.bytesize >= limit
+        return __topaz_take(buffer, limit)
+      end
+      chunk = read(chunk_size)
+      break if chunk.nil?
+      buffer << chunk
+      index = buffer.index(sep, [searched - sep.bytesize + 1, 0].max)
+      if index
+        cut = index + sep.bytesize
+        cut = limit if limit && limit < cut
+        return __topaz_take(buffer, cut)
+      end
+      searched = buffer.bytesize
+    end
+    return nil if buffer.empty?
+    return __topaz_take(buffer, limit) if limit && buffer.bytesize > limit
+    buffer.force_encoding(Encoding.default_external)
+  end
+
+  # The first length bytes of buffer; the rest goes back to the file.
+  def __topaz_take(buffer, length)
+    rest = buffer.bytesize - length
+    seek(-rest, IO::SEEK_CUR) if rest > 0
+    buffer.byteslice(0, length).force_encoding(Encoding.default_external)
+  end
+
+  public
 
   def self.read(name)
     File.open(name) do |f|
@@ -110,9 +165,9 @@ class IO
     end
   end
 
-  def self.readlines(name, *args)
+  def self.readlines(name, *args, chomp: false, **opts)
     File.open(name) do |f|
-      return f.readlines(*args)
+      return f.readlines(*args, chomp: chomp)
     end
   end
 
@@ -343,9 +398,9 @@ class IO
     File.open(path, "wb") { |f| f.write(data.to_s) }
   end
 
-  def self.foreach(path, *args, &block)
-    return enum_for(:foreach, path, *args) unless block
-    File.open(path) { |f| f.each_line(*args, &block) }
+  def self.foreach(path, *args, chomp: false, **opts, &block)
+    return enum_for(:foreach, path, *args, chomp: chomp) unless block
+    File.open(path) { |f| f.each_line(*args, chomp: chomp, &block) }
     nil
   end
 

@@ -130,8 +130,8 @@ class W_IOObject(W_Object):
                 break
             read_bytes += len(current_read)
             read_chunks += current_read
-        # Return nil on EOF if length is given
-        if read_bytes == 0:
+        # At the end of the file read(n) gives nil and read() "".
+        if read_bytes == 0 and length > 0:
             return space.w_nil
         w_read_str = space.newstr_fromchars(read_chunks)
         if w_str is not None:
@@ -160,7 +160,10 @@ class W_IOObject(W_Object):
     @classdef.method("seek", amount="int", whence="int")
     def method_seek(self, space, amount, whence=os.SEEK_SET):
         self.ensure_not_closed(space)
-        os.lseek(self.fd, amount, whence)
+        try:
+            os.lseek(self.fd, amount, whence)
+        except OSError as e:
+            raise error_for_oserror(space, e)
         return space.newint(0)
 
     @classdef.method("pos")
@@ -169,12 +172,18 @@ class W_IOObject(W_Object):
         self.ensure_not_closed(space)
         # TODO: this currently truncates large values, switch this to use a
         # Bignum in those cases
-        return space.newint(int(os.lseek(self.fd, 0, os.SEEK_CUR)))
+        try:
+            return space.newint(int(os.lseek(self.fd, 0, os.SEEK_CUR)))
+        except OSError as e:
+            raise error_for_oserror(space, e)
 
     @classdef.method("rewind")
     def method_rewind(self, space):
         self.ensure_not_closed(space)
-        os.lseek(self.fd, 0, os.SEEK_SET)
+        try:
+            os.lseek(self.fd, 0, os.SEEK_SET)
+        except OSError as e:
+            raise error_for_oserror(space, e)
         return space.newint(0)
 
     @classdef.method("print")

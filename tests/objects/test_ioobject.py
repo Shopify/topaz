@@ -159,7 +159,7 @@ class TestIO(BaseTopazTest):
         out, err = capfd.readouterr()
         assert out == "STDOUT\n$stdout\n$>\n"
         assert err == "STDERR\n$stderr\n"
-        assert self.unwrap(space, w_res) == [None, None]
+        assert self.unwrap(space, w_res) == ["", ""]
 
     def test_rewind(self, space, tmpdir):
         f = tmpdir.join("file.txt")
@@ -306,7 +306,7 @@ class TestIO(BaseTopazTest):
         res << f2.readlines[0]
         return res
         """ % (f, f))
-        assert self.unwrap(space, w_res) == [content, content, ""]
+        assert self.unwrap(space, w_res) == [content + "\n", content + "\n", None]
 
     def test_reopen_path(self, space, tmpdir):
         content = "This is line one"
@@ -321,7 +321,7 @@ class TestIO(BaseTopazTest):
         res << f.readlines[0]
         return res
         """ % (f, f))
-        assert self.unwrap(space, w_res) == [content, content, ""]
+        assert self.unwrap(space, w_res) == [content + "\n", content + "\n", None]
 
     def test_reopen_with_invalid_arg(self, space):
         with self.raises(space, "TypeError", "no implicit conversion of Integer into String"):
