@@ -2151,3 +2151,15 @@ class TestMethodListsByVisibility(BaseTopazTest):
                 A.new.private_methods.include?(:priv), A.protected_instance_methods(false)]
         """)
         assert self.unwrap(space, w_res) == [[], ["prot", "pub"], ["priv"], False, True, False, True, ["prot"]]
+
+
+class TestRecursiveSubexpCalls(BaseTopazTest):
+    def test_recursive_calls(self, space):
+        w_res = space.execute("""
+        m1 = /\\A((?:((?:\\w+\\.)?\\w+ | \\w+\\((?:|\\g<2>)\\)))(?:(?:\\s+AS)?\\s+\\w+)?)(?:\\s*,\\s*\\g<1>)*\\z/ix
+        return [m1.match?("posts.id"), m1.match?("count(posts.id) AS c, name"), m1.match?("lower(trim(x))"),
+                m1.match?("id; drop"), /(?<p>\\((?:\\g<p>)*\\))/.match("(())")[0],
+                (Regexp.new("\\\\g<x>") rescue $!.class)]
+        """)
+        assert self.unwrap(space, w_res)[:5] == [True, True, True, False, "(())"]
+        assert space.str_w(space.send(space.listview(w_res)[5], "name")) == "RegexpError"

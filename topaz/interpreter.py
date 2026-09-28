@@ -481,7 +481,7 @@ class Interpreter(object):
             w_regexp = space.newregexp(
                 space.str_w(w_string), space.int_w(w_flags))
         except RegexpError as e:
-            raise space.error(space.w_RegexpError, str(e))
+            raise space.error(space.w_RegexpError, e.msg)
         frame.push(w_regexp)
 
     def COERCE_ARRAY(self, space, bytecode, frame, pc, nil_is_empty):

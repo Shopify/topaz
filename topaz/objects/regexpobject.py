@@ -192,7 +192,7 @@ class W_RegexpObject(W_Object):
             try:
                 self.set_source(space, Coerce.str(space, w_source), flags)
             except regexp.RegexpError as e:
-                raise space.error(space.w_RegexpError, str(e))
+                raise space.error(space.w_RegexpError, e.msg)
         return self
 
     @classdef.method("to_s")

@@ -1424,7 +1424,7 @@ class ConstantRegexp(ConstantNode):
         try:
             w_regexp = ctx.space.newregexp(self.regexp, self.flags)
         except RegexpError as e:
-            raise ctx.space.error(ctx.space.w_SyntaxError, "line %d: %s" % (self.lineno, e))
+            raise ctx.space.error(ctx.space.w_SyntaxError, "line %d: %s" % (self.lineno, e.msg))
         return ctx.create_const(w_regexp)
 
 

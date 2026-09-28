@@ -83,7 +83,11 @@ class UnscopedFlagSet(Exception):
 
 
 class RegexpError(Exception):
-    pass
+    def __init__(self, msg="invalid pattern"):
+        self.msg = msg
+
+    def __str__(self):
+        return self.msg
 
 
 class ParseError(Exception):
@@ -203,6 +207,10 @@ class Info(object):
         # not capture).
         self.group_spans = {}
         self.calling = 0
+        # Open groups' starts, for recursive calls, and how deep each
+        # group's recursion is being expanded.
+        self.group_starts = {}
+        self.call_depth = {}
         # Groups made for atomic groups and possessive quantifiers, which
         # Ruby code does not see.
         self.hidden_groups = {}
@@ -1258,6 +1266,7 @@ def _parse_group_body(source, info, group):
     start = source.pos
     saved_flags = info.flags
     saved_ignore = source.ignore_space
+    info.group_starts[group] = GroupSpan(start, -1, saved_flags, saved_ignore)
     try:
         subpattern = _parse_pattern(source, info)
     finally:
@@ -1281,6 +1290,55 @@ def _parse_called_group_body(source, info):
         info.flags = saved_flags
     source.expect(")")
     return subpattern
+
+
+MAX_CALL_DEPTH = 8
+
+
+def _find_group_end(s, pos, extended):
+    """The position of the ")" that closes the group whose pattern starts at
+    pos, skipping escapes, sets, comments and nested groups."""
+    depth = 0
+    n = len(s)
+    while pos < n:
+        c = s[pos]
+        if c == "\\":
+            pos += 2
+            continue
+        if c == "[":
+            pos += 1
+            if pos < n and s[pos] == "^":
+                pos += 1
+            if pos < n and s[pos] == "]":
+                pos += 1
+            nesting = 1
+            while pos < n and nesting > 0:
+                if s[pos] == "\\":
+                    pos += 2
+                    continue
+                if s[pos] == "[":
+                    nesting += 1
+                elif s[pos] == "]":
+                    nesting -= 1
+                pos += 1
+            continue
+        if extended and c == "#":
+            while pos < n and s[pos] != "\n":
+                pos += 1
+            continue
+        if c == "(":
+            if pos + 2 < n and s[pos + 1] == "?" and s[pos + 2] == "#":
+                while pos < n and s[pos] != ")":
+                    pos += 1
+                pos += 1
+                continue
+            depth += 1
+        elif c == ")":
+            if depth == 0:
+                return pos
+            depth -= 1
+        pos += 1
+    raise RegexpError("end pattern with unmatched parenthesis")
 
 
 class GroupSpan(object):
@@ -1307,7 +1365,24 @@ def _parse_subexp_call(source, info):
     group = info.normalize_group(name)
     span = info.group_spans.get(group, None)
     if span is None:
-        raise RegexpError("recursive or forward subexpression calls are not supported")
+        start = info.group_starts.get(group, None)
+        if start is None:
+            raise RegexpError("forward subexpression calls are not supported")
+        # A recursive call: expanded to a limited depth, below which it
+        # does not match.
+        end = _find_group_end(source.s, start.start, start.ignore_space)
+        span = GroupSpan(start.start, end, start.flags, start.ignore_space)
+    depth = info.call_depth.get(group, 0)
+    if depth >= MAX_CALL_DEPTH:
+        return LookAround(Sequence([]), behind=False, positive=False)
+    info.call_depth[group] = depth + 1
+    try:
+        return _parse_call_span(source, info, span)
+    finally:
+        info.call_depth[group] = depth
+
+
+def _parse_call_span(source, info, span):
     here = source.pos
     saved_flags = info.flags
     saved_ignore = source.ignore_space
