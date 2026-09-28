@@ -425,7 +425,7 @@ class ObjectSpace(object):
         )
 
     def execute_frame(self, frame, bc):
-        return Interpreter().interpret(self, frame, bc)
+        return Interpreter().run(self, frame, bc)
 
     # Methods for allocating new objects.
 

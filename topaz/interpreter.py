@@ -75,6 +75,16 @@ class Interpreter(object):
             raise
         except Return as e:
             return e.w_value
+
+    def run(self, space, frame, bytecode):
+        """Runs the frame, then marks this interpreter finished (so that a
+        break from one of its blocks is known to be an orphan). The mark is
+        made here, outside the JIT's portal: made in interpret's own
+        finally clause, the translated JIT marked the wrong interpreter
+        finished after a break left an inlined call, and a later break
+        from the same method raised "break from proc-closure"."""
+        try:
+            return self.interpret(space, frame, bytecode)
         finally:
             self.finished = True
 

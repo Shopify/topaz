@@ -170,7 +170,7 @@ class Frame(BaseFrame):
         for i in xrange(given_defaults, len(bytecode.defaults)):
             bc = bytecode.defaults[i]
             self.bytecode = bc
-            w_value = Interpreter().interpret(space, self, bc)
+            w_value = Interpreter().run(space, self, bc)
             self._set_arg(space, bytecode.arg_pos[len_pre_args + i], w_value)
 
         if bytecode.splat_arg_pos != -1:
@@ -200,7 +200,7 @@ class Frame(BaseFrame):
                         space.w_ArgumentError,
                         "missing keyword: %s" % name)
                 self.bytecode = bc
-                w_value = Interpreter().interpret(space, self, bc)
+                w_value = Interpreter().run(space, self, bc)
             self._set_arg(space, bytecode.cellvars.index(name), w_value)
 
         self.bytecode = bytecode
