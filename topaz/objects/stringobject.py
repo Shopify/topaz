@@ -804,52 +804,69 @@ class W_StringObject(W_Object):
     @classdef.method("find_string", offset="int")
     @classdef.method("index", offset="int")
     def method_index(self, space, w_sub, offset=0):
-        if offset < 0 or offset >= self.length():
+        string = space.str_w(self)
+        length = len(string)
+        if offset < 0:
+            offset += length
+            if offset < 0:
+                return space.w_nil
+        if offset > length:
             return space.w_nil
-        elif space.is_kind_of(w_sub, space.w_string):
-            return space.newint(space.str_w(self).find(space.str_w(w_sub), offset))
-        elif space.is_kind_of(w_sub, space.w_regexp):
-            ctx = w_sub.make_ctx(space.str_w(self), offset=offset)
+        if space.is_kind_of(w_sub, space.w_regexp):
+            ctx = w_sub.make_ctx(string, offset=offset)
             if self.search_context(space, w_sub, ctx):
+                w_sub.get_match_result(space, ctx, string, found=True)
                 return space.newint(ctx.match_start)
-            else:
-                return space.newint(-1)
-        else:
-            raise space.error(
-                space.w_TypeError,
-                "type mismatch: %s given" % space.obj_to_s(space.getclass(w_sub))
-            )
-
-    @classdef.method("rindex", end="int")
-    def method_rindex(self, space, w_sub, end=0):
-        if end < 0:
-            end += self.length()
-        else:
-            end = self.length()
-        if end < 0:
+            w_sub.get_match_result(space, ctx, string, found=False)
             return space.w_nil
-
-        idx = -1
-        if space.is_kind_of(w_sub, space.w_string):
-            idx = space.str_w(self).rfind(space.str_w(w_sub), 0, end + 1)
-        elif space.is_kind_of(w_sub, space.w_regexp):
-            ctx = w_sub.make_ctx(space.str_w(self))
-            idx = -1
-            while self.search_context(space, w_sub, ctx):
-                if ctx.match_start > end:
-                    break
-                else:
-                    idx = ctx.match_start
-                ctx.reset(idx + 1)
-        else:
-            raise space.error(
-                space.w_TypeError,
-                "type mismatch: %s given" % space.obj_to_s(space.getclass(w_sub))
-            )
+        w_str = space.convert_type(w_sub, space.w_string, "to_str")
+        idx = string.find(space.str_w(w_str), offset)
         if idx < 0:
             return space.w_nil
-        else:
+        return space.newint(idx)
+
+    @classdef.method("rindex")
+    def method_rindex(self, space, w_sub, w_pos=None):
+        string = space.str_w(self)
+        length = len(string)
+        pos = length
+        if w_pos is not None:
+            pos = Coerce.int(space, w_pos)
+            if pos < 0:
+                pos += length
+                if pos < 0:
+                    return space.w_nil
+            if pos > length:
+                pos = length
+        if space.is_kind_of(w_sub, space.w_regexp):
+            ctx = w_sub.make_ctx(string)
+            idx = -1
+            start = 0
+            while start <= pos:
+                ctx.reset(start)
+                if not self.search_context(space, w_sub, ctx):
+                    break
+                if ctx.match_start > pos:
+                    break
+                idx = ctx.match_start
+                start = idx + 1
+            if idx < 0:
+                w_sub.get_match_result(space, ctx, string, found=False)
+                return space.w_nil
+            ctx.reset(idx)
+            self.search_context(space, w_sub, ctx)
+            w_sub.get_match_result(space, ctx, string, found=True)
             return space.newint(idx)
+        w_str = space.convert_type(w_sub, space.w_string, "to_str")
+        sub = space.str_w(w_str)
+        stop = pos + len(sub)
+        if stop > length:
+            stop = length
+        assert stop >= 0
+        idx = string.rfind(sub, 0, stop)
+        if idx < 0:
+            return space.w_nil
+        return space.newint(idx)
 
     @classdef.method("split", limit="int")
     def method_split(self, space, w_sep=None, limit=0):

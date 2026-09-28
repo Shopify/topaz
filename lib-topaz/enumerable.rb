@@ -612,3 +612,10 @@ module Enumerable
     to_a.uniq(&block)
   end
 end
+
+module Enumerable
+  # Set is core in Ruby 4.0; referring to it here autoloads set.rb.
+  def to_set(klass = Set, *args, &block)
+    klass.new(self, *args, &block)
+  end
+end

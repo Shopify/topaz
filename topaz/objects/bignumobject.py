@@ -63,9 +63,16 @@ class W_BignumObject(W_IntegerObject):
     def ulonglongmask_w(self, space):
         return self.bigint.ulonglongmask()
 
-    @classdef.method("to_s")
-    def method_to_s(self, space):
+    @classdef.method("inspect")
+    def method_inspect(self, space):
         return space.newstr_fromstr(self.bigint.str())
+
+    @classdef.method("to_s", base="int")
+    def method_to_s(self, space, base=10):
+        if base == 10:
+            return space.newstr_fromstr(self.bigint.str())
+        from topaz.objects.intobject import format_integer_base
+        return space.newstr_fromstr(format_integer_base(space, self.bigint, base))
 
     @classdef.method("to_f")
     def method_to_f(self, space):

@@ -1034,9 +1034,10 @@ class TestInterpreter(BaseTopazTest):
         module Y
           ABC
         end
-        return Y::ABC
+        return [Y.module_eval { ABC }, (Y::ABC rescue $!.class)]
         """)
-        assert self.unwrap(space, w_res) == 1
+        # Ruby 2.5 dropped the top-level fallback for Y::ABC.
+        assert self.unwrap(space, w_res) == [1, space.w_NameError]
 
     def test_defined(self, space):
         w_res = space.execute("return [defined? A, defined? Array]")

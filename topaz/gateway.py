@@ -41,6 +41,11 @@ class WrapperGenerator(object):
 
         @functools.wraps(self.func)
         def wrapper(self, space, args_w, block):
+            if args_w:
+                # `f(**{})` passes no argument.
+                w_last = args_w[-1]
+                if w_last is not None and w_last.is_empty_keywords():
+                    args_w = args_w[:-1]
             if (len(args_w) < min_args or
                     (not takes_args_w and len(args_w) > argcount)):
                 raise space.error(

@@ -71,6 +71,19 @@ class W_ClassObject(W_ModuleObject):
             w_res = self.superclass.find_const(space, name, autoload=autoload)
         return w_res
 
+    def find_scoped_const(self, space, name):
+        # `Klass::Name` looks in the class and its ancestors, but only
+        # reaches Object's constants for Object itself.
+        w_cls = self
+        while w_cls is not None:
+            if w_cls is space.w_object and self is not space.w_object:
+                return None
+            w_res = W_ModuleObject.find_included_const(w_cls, space, name, autoload=True)
+            if w_res is not None:
+                return w_res
+            w_cls = w_cls.superclass
+        return None
+
     def inherited_constants(self, space):
         consts = {}
         for const in W_ModuleObject.local_constants(self, space):
@@ -191,9 +204,39 @@ class W_ClassObject(W_ModuleObject):
             return space.w_nil
         raise space.error(space.w_TypeError, "uninitialized class")
 
-    @classdef.method("class_variables")
-    def method_class_variables(self, space):
-        return space.newarray([space.newsymbol(cvar) for cvar in self.class_variables])
+    @classdef.method("class_variables", inherit="bool")
+    def method_class_variables(self, space, inherit=True):
+        names = []
+        w_cls = self
+        while w_cls is not None:
+            for cvar in w_cls.class_variables:
+                if cvar not in names:
+                    names.append(cvar)
+            if not inherit:
+                break
+            w_cls = w_cls.superclass
+        return space.newarray([space.newsymbol(cvar) for cvar in names])
+
+    @classdef.method("subclasses")
+    def method_subclasses(self, space):
+        subclasses_w = []
+        for w_mod in self.descendants:
+            if (isinstance(w_mod, W_ClassObject) and w_mod.superclass is self and
+                    not w_mod.is_singleton and w_mod not in subclasses_w):
+                subclasses_w.append(w_mod)
+        subclasses_w.reverse()
+        return space.newarray(subclasses_w)
+
+    @classdef.method("attached_object")
+    def method_attached_object(self, space):
+        if not self.is_singleton or self.attached is None:
+            raise space.error(space.w_TypeError,
+                "'%s' is not a singleton class" % space.obj_to_s(self))
+        return self.attached
+
+    @classdef.method("singleton_class?")
+    def method_singleton_classp(self, space):
+        return space.newbool(self.is_singleton)
 
     @classdef.method("instance_variables")
     def method_instance_variables(self, space):

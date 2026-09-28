@@ -57,6 +57,9 @@ class UndefMethod(W_FunctionObject):
         W_FunctionObject.__init__(self, name)
         self.name = name
 
+    def is_undefined(self):
+        return True
+
     def call(self, space, w_obj, args_w, block):
         args_w.insert(0, space.newsymbol(self.name))
         return space.send(w_obj, "method_missing", args_w, block)
@@ -69,11 +72,14 @@ class DefineMethodBlock(W_FunctionObject):
         W_FunctionObject.__init__(self, name)
         self.name = name
         self.block = block
+        self.w_owner = None
 
     def call(self, space, w_obj, args_w, block):
         from topaz.interpreter import RaiseReturn
 
         method_block = self.block.copy(space, w_self=w_obj, is_lambda=True)
+        if self.w_owner is not None:
+            method_block.w_owner = self.w_owner
         try:
             return space.invoke_block(method_block, args_w, block)
         except RaiseReturn as e:
@@ -116,7 +122,8 @@ class W_Autoload(W_RootObject):
 
 
 class W_ModuleObject(W_RootObject):
-    _immutable_fields_ = ["version?", "included_modules?[*]", "klass?", "name?"]
+    _immutable_fields_ = ["version?", "included_modules?[*]", "prepended_modules?[*]",
+                          "klass?", "name?"]
 
     classdef = ClassDef("Module", W_RootObject.classdef)
 
@@ -130,6 +137,8 @@ class W_ModuleObject(W_RootObject):
         self.instance_variables = CellDict()
         self.flags = CellDict()
         self.included_modules = []
+        # Modules prepended here, in lookup order (the latest first).
+        self.prepended_modules = []
         self.descendants = []
 
     def __deepcopy__(self, memo):
@@ -143,6 +152,7 @@ class W_ModuleObject(W_RootObject):
         obj.instance_variables = copy.deepcopy(self.instance_variables, memo)
         obj.flags = copy.deepcopy(self.flags, memo)
         obj.included_modules = copy.deepcopy(self.included_modules, memo)
+        obj.prepended_modules = copy.deepcopy(self.prepended_modules, memo)
         obj.descendants = copy.deepcopy(self.descendants, memo)
         return obj
 
@@ -171,6 +181,12 @@ class W_ModuleObject(W_RootObject):
             method.update_visibility(W_FunctionObject.PRIVATE)
         self.mutated()
         self.methods_w[name] = method
+        if isinstance(method, W_UserFunction):
+            if method.w_owner is None:
+                method.w_owner = self
+        elif isinstance(method, DefineMethodBlock):
+            if method.w_owner is None:
+                method.w_owner = self
         self.shadow_hidden_subclasses(name)
         if not space.bootstrap:
             if isinstance(method, UndefMethod):
@@ -180,6 +196,10 @@ class W_ModuleObject(W_RootObject):
 
     @jit.unroll_safe
     def find_method(self, space, name):
+        for module in self.prepended_modules:
+            method = module.find_local_method(space, name)
+            if method is not None:
+                return method
         method = self._find_method_pure(space, name, self.version)
         if method is None:
             for module in self.included_modules:
@@ -187,6 +207,28 @@ class W_ModuleObject(W_RootObject):
                 if method is not None:
                     return method
         return method
+
+    def find_local_method(self, space, name):
+        return self._find_method_pure(space, name, self.version)
+
+    @jit.unroll_safe
+    def find_method_after(self, space, w_owner, name):
+        """For super: the method `name` in these ancestors that comes
+        after `w_owner`, the module that defines the calling method."""
+        ancestors = self.ancestors()
+        found = False
+        for w_mod in ancestors:
+            if found:
+                method = w_mod.find_local_method(space, name)
+                if method is not None:
+                    if isinstance(method, UndefMethod):
+                        return None
+                    return method
+            elif w_mod is w_owner:
+                found = True
+        if not found:
+            return w_owner.find_method_super(space, name)
+        return None
 
     @jit.unroll_safe
     def find_method_super(self, space, name):
@@ -214,6 +256,9 @@ class W_ModuleObject(W_RootObject):
                     method = self._find_method_pure(space, name, self.version)
                     if method is None or not isinstance(method, UndefMethod):
                         methods[name] = None
+            for w_mod in self.prepended_modules:
+                for name in w_mod.methods(space, visibility=visibility, inherit=False):
+                    methods[name] = None
         return methods.keys()
 
     def set_const(self, space, name, w_obj):
@@ -228,6 +273,11 @@ class W_ModuleObject(W_RootObject):
             return space.w_object.find_const(space, name, autoload=autoload)
         else:
             return w_res
+
+    def find_scoped_const(self, space, name):
+        """`Mod::Name`: the module and what it includes, but not Object
+        (Ruby 2.5 dropped the top-level fallback)."""
+        return self.find_included_const(space, name, autoload=True)
 
     @jit.unroll_safe
     def find_included_const(self, space, name, autoload=True):
@@ -322,6 +372,15 @@ class W_ModuleObject(W_RootObject):
     def find_instance_var(self, space, name):
         return self.instance_variables.get(space, name)
 
+    def instance_variable_names(self, space):
+        return [name for name in self.instance_variables]
+
+    def remove_instance_var(self, space, name):
+        w_value = self.instance_variables.get(space, name)
+        if w_value is not None:
+            self.instance_variables.delete(name)
+        return w_value
+
     def copy_instance_vars(self, space, w_other):
         assert isinstance(w_other, W_ModuleObject)
         for key in w_other.instance_variables:
@@ -339,15 +398,18 @@ class W_ModuleObject(W_RootObject):
 
     def ancestors(self, include_singleton=True, include_self=True):
         if include_self:
-            return [self] + self.included_modules
+            return self.prepended_modules + [self] + self.included_modules
         else:
-            return self.included_modules[:]
+            return self.prepended_modules + self.included_modules
 
     @jit.unroll_safe
     def is_ancestor_of(self, w_cls):
         if self is w_cls:
             return True
         for w_mod in w_cls.included_modules:
+            if self is w_mod:
+                return True
+        for w_mod in w_cls.prepended_modules:
             if self is w_mod:
                 return True
         if w_cls.superclass is not None:
@@ -359,6 +421,13 @@ class W_ModuleObject(W_RootObject):
         if w_mod not in self.ancestors():
             self.included_modules = [w_mod] + self.included_modules
             w_mod.included(space, self)
+
+    def prepend_module(self, space, w_mod):
+        assert isinstance(w_mod, W_ModuleObject)
+        if w_mod not in self.prepended_modules:
+            self.prepended_modules = [w_mod] + self.prepended_modules
+            self.mutated()
+            w_mod.descendants.append(self)
 
     def included(self, space, w_mod):
         self.descendants.append(w_mod)
@@ -489,6 +558,32 @@ class W_ModuleObject(W_RootObject):
             raise space.error(space.w_TypeError, "wrong argument type")
         for module in reversed(self.ancestors()):
             w_mod.include_module(space, module)
+
+    @classdef.method("prepend")
+    def method_prepend(self, space, args_w):
+        for w_mod in args_w:
+            if type(w_mod) is not W_ModuleObject:
+                raise space.error(
+                    space.w_TypeError,
+                    "wrong argument type %s (expected Module)" % space.obj_to_s(space.getclass(w_mod))
+                )
+        for w_mod in reversed(args_w):
+            space.send(w_mod, "prepend_features", [self])
+            space.send(w_mod, "prepended", [self])
+        return self
+
+    @classdef.method("prepend_features")
+    def method_prepend_features(self, space, w_mod):
+        if not isinstance(w_mod, W_ModuleObject):
+            raise space.error(space.w_TypeError, "wrong argument type")
+        if w_mod in self.ancestors():
+            raise space.error(space.w_ArgumentError, "cyclic prepend detected")
+        for module in reversed(self.ancestors()):
+            w_mod.prepend_module(space, module)
+
+    @classdef.method("prepended")
+    def method_prepended(self, space, w_mod):
+        return space.w_nil
 
     @classdef.method("define_method", name="symbol")
     @check_frozen()
@@ -738,6 +833,14 @@ class W_ModuleObject(W_RootObject):
         del self.constants_w[name]
         self.mutated()
         return w_res
+
+    @classdef.method("class_variables", inherit="bool")
+    def method_class_variables(self, space, inherit=True):
+        return space.newarray([space.newsymbol(cvar) for cvar in self.class_variables])
+
+    @classdef.method("singleton_class?")
+    def method_singleton_classp(self, space):
+        return space.w_false
 
     @classdef.method("class_variable_defined?", name="symbol")
     def method_class_variable_definedp(self, space, name):

@@ -53,4 +53,3 @@ module RbConfig
   end
 end
 
-Config = RbConfig

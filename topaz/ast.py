@@ -648,6 +648,11 @@ class OrEqual(Node):
         self.value = value
 
     def compile(self, ctx):
+        if (isinstance(self.target, ClassVariable) or
+                isinstance(self.target, Constant) or
+                isinstance(self.target, LookupConstant)):
+            self.compile_checking_defined(ctx)
+            return
         otherwise = ctx.new_block()
         end = ctx.new_block()
 
@@ -664,6 +669,25 @@ class OrEqual(Node):
         self.value.compile(ctx)
         ctx.use_next_block(end)
         self.target.compile_store(ctx)
+
+    def compile_checking_defined(self, ctx):
+        # `@@x ||= v` and `X ||= v` assign when the target is not defined,
+        # instead of raising NameError on reading it.
+        load = ctx.new_block()
+        falsy = ctx.new_block()
+        assign = ctx.new_block()
+        end = ctx.new_block()
+        self.target.compile_defined(ctx)
+        ctx.emit_jump(consts.JUMP_IF_FALSE, assign)
+        ctx.use_next_block(load)
+        self.target.compile(ctx)
+        ctx.emit(consts.DUP_TOP)
+        ctx.emit_jump(consts.JUMP_IF_TRUE, end)
+        ctx.use_next_block(falsy)
+        ctx.emit(consts.DISCARD_TOP)
+        ctx.use_next_block(assign)
+        Assignment(self.target, self.value).compile(ctx)
+        ctx.use_next_block(end)
 
     def compile_defined(self, ctx):
         ConstantString("assignment").compile(ctx)

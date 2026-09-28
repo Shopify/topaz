@@ -25,6 +25,17 @@ class W_Root(object):
         memo[id(self)] = obj
         return obj
 
+    def instance_variable_names(self, space):
+        return []
+
+    def remove_instance_var(self, space, name):
+        return None
+
+    def is_empty_keywords(self):
+        """Whether this is an empty `**` hash at a call site, which passes
+        no argument at all."""
+        return False
+
 
 class W_BaseObject(W_Root):
     _attrs_ = []
@@ -194,6 +205,25 @@ class W_Object(W_RootObject):
     def copy_instance_vars(self, space, w_other):
         assert isinstance(w_other, W_Object)
         w_other.map.copy_attrs(space, w_other, self)
+
+    def instance_variable_names(self, space):
+        names = []
+        node = self.map
+        while node is not None:
+            if isinstance(node, mapdict.AttributeNode):
+                names.append(node.name)
+            node = node.getprev()
+        names.reverse()
+        return names
+
+    def remove_instance_var(self, space, name):
+        node = self.map.find(mapdict.AttributeNode, name)
+        if node is None:
+            return None
+        assert isinstance(node, mapdict.AttributeNode)
+        w_value = node.read(space, self)
+        self.map = self.map.remove_attr(space, node, self)
+        return w_value
 
     def get_flag(self, space, name):
         node = jit.promote(self.map).find(mapdict.FlagNode, name)

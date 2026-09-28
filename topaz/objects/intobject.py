@@ -19,6 +19,17 @@ from topaz.objects.objectobject import W_RootObject
 from topaz.system import IS_WINDOWS
 
 
+
+INTEGER_DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+
+def format_integer_base(space, bigint, base):
+    """Integer#to_s(base) for 2 <= base <= 36."""
+    if not 2 <= base <= 36:
+        raise space.error(space.w_ArgumentError, "invalid radix %d" % base)
+    assert base >= 0
+    return bigint.format(INTEGER_DIGITS[:base])
+
 class FixnumStorage(object):
     def __init__(self, space):
         self.storages = {}
@@ -77,6 +88,10 @@ class W_FixnumObject(W_RootObject):
         storage = space.fromcache(FixnumStorage).get_or_create(space, self.intvalue)
         storage.set_instance_var(space, name, w_value)
 
+    def instance_variable_names(self, space):
+        storage = space.fromcache(FixnumStorage).get_or_create(space, self.intvalue)
+        return storage.instance_variable_names(space)
+
     def set_flag(self, space, name):
         storage = space.fromcache(FixnumStorage).get_or_create(space, self.intvalue)
         storage.set_flag(space, name)
@@ -98,9 +113,15 @@ class W_FixnumObject(W_RootObject):
         raise space.error(space.w_TypeError, "can't define singleton")
 
     @classdef.method("inspect")
-    @classdef.method("to_s")
-    def method_to_s(self, space):
+    def method_inspect(self, space):
         return space.newstr_fromstr(str(self.intvalue))
+
+    @classdef.method("to_s", base="int")
+    def method_to_s(self, space, base=10):
+        if base == 10:
+            return space.newstr_fromstr(str(self.intvalue))
+        return space.newstr_fromstr(
+            format_integer_base(space, rbigint.fromint(self.intvalue), base))
 
     @classdef.method("to_f")
     def method_to_f(self, space):

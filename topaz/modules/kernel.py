@@ -370,8 +370,12 @@ class Kernel(object):
 
     @moduledef.method("respond_to?", include_private="bool")
     def method_respond_top(self, space, w_name, include_private=False):
-        if space.respond_to(self, space.symbol_w(w_name)):
-            return space.newbool(True)
+        name = Coerce.symbol(space, w_name)
+        w_method = space.getclass(self).find_method(space, name)
+        if w_method is not None and not w_method.is_undefined():
+            # Private and protected methods count only with include_all.
+            return space.newbool(
+                include_private or w_method.visibility == W_FunctionObject.PUBLIC)
 
         w_found = space.send(
             self,
@@ -578,6 +582,27 @@ class Kernel(object):
     @moduledef.method("hash")
     def method_hash(self, space):
         return space.newint(compute_identity_hash(self))
+
+    @moduledef.function("global_variables")
+    def method_global_variables(self, space):
+        return space.newarray([space.newsymbol(name) for name in space.globals])
+
+    @moduledef.method("instance_variables")
+    def method_instance_variables(self, space):
+        return space.newarray([
+            space.newsymbol(name) for name in self.instance_variable_names(space)
+            # Topaz's own bookkeeping, such as a string's encoding.
+            if not name.startswith("@__topaz")
+        ])
+
+    @moduledef.method("remove_instance_variable", name="str")
+    @check_frozen()
+    def method_remove_instance_variable(self, space, name):
+        w_value = self.remove_instance_var(space, name)
+        if w_value is None:
+            raise space.error(space.w_NameError,
+                "instance variable %s not defined" % name)
+        return w_value
 
     @moduledef.method("instance_variable_get", name="str")
     def method_instance_variable_get(self, space, name):

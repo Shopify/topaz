@@ -721,6 +721,14 @@ class ObjectSpace(object):
         return self._send_raw(
             name, raw_method, w_receiver, w_cls, args_w, block)
 
+    def send_super_from(self, w_owner, w_receiver, name, args_w, block=None):
+        """`super` in a method defined in w_owner: the next method in the
+        receiver's ancestors."""
+        w_cls = self.getclass(w_receiver)
+        raw_method = w_cls.find_method_after(self, w_owner, name)
+        return self._send_raw(
+            name, raw_method, w_receiver, w_cls, args_w, block)
+
     def _send_raw(self, name, raw_method, w_receiver, w_cls, args_w, block):
         if raw_method is None:
             method_missing = w_cls.find_method(self, "method_missing")
@@ -748,6 +756,7 @@ class ObjectSpace(object):
             top_parent_interp=block.top_parent_interp,
             regexp_match_cell=block.regexp_match_cell,
         )
+        frame.w_owner = block.w_owner
         if block.is_lambda:
             frame.handle_args(self, bc, args_w, block_arg)
         else:

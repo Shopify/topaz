@@ -128,6 +128,16 @@ class W_HashObject(W_Object):
     def delete(self, w_key):
         return self.strategy.pop(self.dict_storage, w_key, None)
 
+    def is_empty_keywords(self):
+        return self.is_keywords and self.size() == 0
+
+    def copy_keywords(self, space):
+        """A plain copy, for binding keyword arguments to parameters."""
+        w_hash = W_HashObject(space)
+        w_hash.strategy = self.strategy
+        w_hash.dict_storage = self.strategy.copy(self.dict_storage)
+        return w_hash
+
     def size(self):
         return self.strategy.len(self.dict_storage)
 

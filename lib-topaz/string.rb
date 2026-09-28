@@ -110,7 +110,12 @@ class String
 
     self
   end
-  alias chars each_char
+  # Ruby 2.0: an array, not an enumerator.
+  def chars
+    result = []
+    each_char { |c| result << c }
+    result
+  end
 
   def each_byte(&block)
     return self.enum_for(:each_byte) unless block

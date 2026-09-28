@@ -82,6 +82,10 @@ class W_FloatObject(W_RootObject):
         storage = space.fromcache(FloatStorage).get_or_create(space, self.floatvalue)
         storage.set_instance_var(space, name, w_value)
 
+    def instance_variable_names(self, space):
+        storage = space.fromcache(FloatStorage).get_or_create(space, self.floatvalue)
+        return storage.instance_variable_names(space)
+
     def set_flag(self, space, name):
         storage = space.fromcache(FloatStorage).get_or_create(space, self.floatvalue)
         storage.set_flag(space, name)

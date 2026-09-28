@@ -175,12 +175,12 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute("return 'aba'.index 'a', 1")
         assert space.int_w(w_res) == 2
         w_res = space.execute("return 'aba'.index 'c', 1")
-        assert space.int_w(w_res) == -1
+        assert w_res is space.w_nil
         w_res = space.execute("return 'aba'.index /ba/")
         assert space.int_w(w_res) == 1
         w_res = space.execute("return 'aba'.index /xyz/")
-        assert space.int_w(w_res) == -1
-        with self.raises(space, "TypeError", "type mismatch: Integer given"):
+        assert w_res is space.w_nil
+        with self.raises(space, "TypeError", "no implicit conversion of Integer into String"):
             space.execute("'a b c'.index 12")
 
     def test_rindex(self, space):
@@ -195,7 +195,7 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute('"hello".rindex(/[aeiou]/, -2)')
         assert space.int_w(w_res) == 1
         w_res = space.execute('"hello".rindex(/[aeiou]/, 0)')
-        assert space.int_w(w_res) == 4
+        assert w_res is space.w_nil
         w_res = space.execute('"hello".rindex(/[aeiou]/, 10)')
         assert space.int_w(w_res) == 4
         w_res = space.execute('"hello".rindex(/[aeiou]/, -1)')
@@ -206,7 +206,7 @@ class TestStringObject(BaseTopazTest):
         assert w_res is space.w_nil
         w_res = space.execute('"hello".rindex("x")')
         assert w_res is space.w_nil
-        with self.raises(space, "TypeError", "type mismatch: Integer given"):
+        with self.raises(space, "TypeError", "no implicit conversion of Integer into String"):
             space.execute('"hello".rindex(123)')
 
     def test_split(self, space):

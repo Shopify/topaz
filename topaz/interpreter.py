@@ -221,7 +221,12 @@ class Interpreter(object):
         w_scope = frame.pop()
         w_name = bytecode.consts_w[idx]
         name = space.symbol_w(w_name)
-        w_obj = space.find_const(w_scope, name)
+        if not isinstance(w_scope, W_ModuleObject):
+            raise space.error(space.w_TypeError,
+                "%s is not a class/module" % space.str_w(space.send(w_scope, "inspect")))
+        w_obj = w_scope.find_scoped_const(space, name)
+        if w_obj is None:
+            w_obj = space.send(w_scope, "const_missing", [space.newsymbol(name)])
         frame.push(w_obj)
 
     def STORE_CONSTANT(self, space, bytecode, frame, pc, idx):
@@ -379,10 +384,12 @@ class Interpreter(object):
         cells = [frame.pop() for _ in range(n_cells)]
         w_code = frame.pop()
         assert isinstance(w_code, W_CodeObject)
-        frame.push(space.newproc(
+        w_proc = space.newproc(
             w_code, frame.w_self, frame.lexical_scope, cells, frame.block,
             self, frame.top_parent_interp or self, frame.regexp_match_cell
-        ))
+        )
+        w_proc.w_owner = frame.w_owner
+        frame.push(w_proc)
 
     def BUILD_LAMBDA(self, space, bytecode, frame, pc):
         block = frame.pop()
@@ -650,13 +657,19 @@ class Interpreter(object):
             w_block = None
         else:
             assert isinstance(w_block, W_ProcObject)
-        if frame.lexical_scope is not None:
-            w_cls = frame.lexical_scope.w_mod
+        w_owner = frame.w_owner
+        if w_owner is None and frame.lexical_scope is not None:
+            w_owner = frame.lexical_scope.w_mod
+        if w_owner is not None:
+            w_res = space.send_super_from(
+                w_owner, w_receiver,
+                space.symbol_w(bytecode.consts_w[meth_idx]), args_w,
+                block=w_block)
         else:
-            w_cls = space.getclass(w_receiver)
-        w_res = space.send_super(
-            w_cls, w_receiver, space.symbol_w(bytecode.consts_w[meth_idx]),
-            args_w, block=w_block)
+            w_res = space.send_super(
+                space.getclass(w_receiver), w_receiver,
+                space.symbol_w(bytecode.consts_w[meth_idx]), args_w,
+                block=w_block)
         frame.push(w_res)
 
     @jit.unroll_safe
@@ -673,20 +686,34 @@ class Interpreter(object):
             w_block = None
         else:
             assert isinstance(w_block, W_ProcObject)
-        if frame.lexical_scope is not None:
-            w_cls = frame.lexical_scope.w_mod
+        w_owner = frame.w_owner
+        if w_owner is None and frame.lexical_scope is not None:
+            w_owner = frame.lexical_scope.w_mod
+        if w_owner is not None:
+            w_res = space.send_super_from(
+                w_owner, w_receiver,
+                space.symbol_w(bytecode.consts_w[meth_idx]), args_w,
+                block=w_block)
         else:
-            w_cls = space.getclass(w_receiver)
-        w_res = space.send_super(
-            w_cls, w_receiver, space.symbol_w(bytecode.consts_w[meth_idx]),
-            args_w, block=w_block)
+            w_res = space.send_super(
+                space.getclass(w_receiver), w_receiver,
+                space.symbol_w(bytecode.consts_w[meth_idx]), args_w,
+                block=w_block)
         frame.push(w_res)
 
     def DEFINED_SUPER(self, space, bytecode, frame, pc, meth_idx):
         space.getexecutioncontext().last_instr = pc
         w_obj = frame.pop()
         name = space.symbol_w(bytecode.consts_w[meth_idx])
-        if space.getclass(w_obj).find_method_super(space, name) is not None:
+        w_cls = space.getclass(w_obj)
+        w_owner = frame.w_owner
+        if w_owner is None and frame.lexical_scope is not None:
+            w_owner = frame.lexical_scope.w_mod
+        if w_owner is not None:
+            w_method = w_cls.find_method_after(space, w_owner, name)
+        else:
+            w_method = w_cls.find_method_super(space, name)
+        if w_method is not None:
             frame.push(space.newstr_fromstr("super"))
         else:
             frame.push(space.w_nil)

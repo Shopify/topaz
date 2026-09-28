@@ -27,9 +27,11 @@ class W_ProcObject(W_Object):
         # A block captured with &blk breaks out of the method it was given
         # to, even when called with Proc#call.
         self.orphan_break = False
+        # The owner of the method the block was created in, for `super`.
+        self.w_owner = None
 
     def copy(self, space, w_self=None, lexical_scope=None, is_lambda=False):
-        return W_ProcObject(
+        w_proc = W_ProcObject(
             space, self.bytecode,
             w_self or self.w_self,
             lexical_scope or self.lexical_scope,
@@ -37,6 +39,8 @@ class W_ProcObject(W_Object):
             self.regexp_match_cell,
             is_lambda or self.is_lambda
         )
+        w_proc.w_owner = self.w_owner
+        return w_proc
 
     def orphan_copy(self, space):
         w_proc = self.copy(space)

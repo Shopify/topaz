@@ -1677,13 +1677,18 @@ class TestCompiler(object):
         RETURN
         """)
 
+        # A constant is checked with defined? first, so that an undefined
+        # one is assigned rather than raising NameError.
         self.assert_compiles(space, "Const ||= 3", """
         LOAD_SCOPE
-        DUP_TOP
+        DEFINED_LOCAL_CONSTANT 0
+        JUMP_IF_FALSE 16
+        LOAD_SCOPE
         LOAD_LOCAL_CONSTANT 0
         DUP_TOP
-        JUMP_IF_TRUE 13
+        JUMP_IF_TRUE 23
         DISCARD_TOP
+        LOAD_SCOPE
         LOAD_CONST 1
         STORE_CONSTANT 0
 

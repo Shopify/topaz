@@ -26,6 +26,9 @@ class W_FunctionObject(W_BaseObject):
     def update_visibility(self, visibility):
         self.visibility = visibility
 
+    def is_undefined(self):
+        return False
+
     def arity(self, space):
         return space.newint(0)
 
@@ -40,11 +43,14 @@ class W_UserFunction(W_FunctionObject):
         W_FunctionObject.__init__(self, name, visibility=visibility)
         self.bytecode = bytecode
         self.lexical_scope = lexical_scope
+        # The module the method was first defined in (see define_method).
+        self.w_owner = None
 
     def __deepcopy__(self, memo):
         obj = super(W_UserFunction, self).__deepcopy__(memo)
         obj.bytecode = copy.deepcopy(self.bytecode, memo)
         obj.lexical_scope = copy.deepcopy(self.lexical_scope, memo)
+        obj.w_owner = copy.deepcopy(self.w_owner, memo)
         return obj
 
     def call(self, space, w_receiver, args_w, block):
@@ -54,6 +60,7 @@ class W_UserFunction(W_FunctionObject):
             lexical_scope=self.lexical_scope,
             block=block,
         )
+        frame.w_owner = self.w_owner
         with space.getexecutioncontext().visit_frame(frame):
             frame.handle_args(space, self.bytecode, args_w, block)
             return space.execute_frame(frame, self.bytecode)

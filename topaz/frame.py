@@ -41,6 +41,9 @@ class Frame(BaseFrame):
         self.top_parent_interp = top_parent_interp
         self.visibility = W_FunctionObject.PUBLIC
         self.lastblock = None
+        # The module that owns the running method, for `super`; None when
+        # not known (then the lexical scope is used).
+        self.w_owner = None
 
     def _set_arg(self, space, pos, w_value):
         assert pos >= 0
@@ -93,8 +96,7 @@ class Frame(BaseFrame):
                 end = len(args_w) - 1
                 assert end >= 0
                 if len(bytecode.kwarg_names) > 0 or bytecode.kwrest_pos != -1:
-                    keywords_hash = space.send(w_last, "clone")
-                    assert isinstance(keywords_hash, W_HashObject)
+                    keywords_hash = w_last.copy_keywords(space)
                     args_w = args_w[:end]
                 elif w_last.size() == 0:
                     # `f(**{})` passes nothing.

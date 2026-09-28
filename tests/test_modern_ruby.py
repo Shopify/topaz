@@ -903,3 +903,131 @@ class TestEncodings(BaseTopazTest):
         assert self.unwrap(space, w_res) == [
             "UTF-8", "ASCII-8BIT", "ASCII-8BIT", False, True, True, "?a", True, False,
             "?", "Encoding::UndefinedConversionError", [0xc3, 0xa9], "a&lt;b&gt;", False]
+
+
+class TestPrepend(BaseTopazTest):
+    def test_prepend_and_super(self, space):
+        w_res = space.execute("""
+        r = []
+        module M; def foo = "M" + super; end
+        class A; def foo = "A"; end
+        class B < A; include M; end
+        r << B.new.foo
+        module P; def bar = "P(" + super + ")"; end
+        class C; prepend P; def bar = "C"; end
+        r << C.new.bar << C.ancestors.take(2).map(&:name) << C.new.is_a?(P)
+        module Hook
+          def self.prepended(base) = (@bases ||= []) << base.name
+          def self.bases = @bases
+          def self.prepend_features(base)
+            base.instance_variable_set(:@seen, true)
+            super
+          end
+        end
+        class D; prepend Hook; end
+        r << Hook.bases << D.instance_variable_get(:@seen)
+        o = Object.new
+        def o.x = "sx"
+        module Ext; def x = "ext:" + super; end
+        o.singleton_class.prepend(Ext)
+        r << o.x
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            "MA", "P(C)", ["P", "C"], True, ["D"], True, "ext:sx"]
+
+
+class TestReflection(BaseTopazTest):
+    def test_instance_and_class_variables(self, space):
+        w_res = space.execute("""
+        o = Object.new
+        o.instance_variable_set(:@a, 1)
+        o.instance_variable_set(:@b, "x")
+        r = [o.instance_variables, o.remove_instance_variable(:@b), o.instance_variables,
+             (o.remove_instance_variable(:@z) rescue $!.message)]
+        class K; @@v = 1; @i = 2; end
+        class L < K; end
+        r << L.class_variables << K.instance_variables << K.subclasses.map(&:name) << L.singleton_class.singleton_class?
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["@a", "@b"], "x", ["@a"], "instance variable @z not defined",
+            ["@@v"], ["@i"], ["L"], True]
+
+    def test_respond_to_respects_visibility(self, space):
+        w_res = space.execute("""
+        class A; def a = 1; private def b = 2; protected def c = 3; end
+        x = A.new
+        return [x.respond_to?(:a), x.respond_to?(:b), x.respond_to?(:b, true), x.respond_to?(:c),
+                1.respond_to?(:puts), 1.public_send(:+, 2), (1.public_send(:puts) rescue $!.class.name)]
+        """)
+        assert self.unwrap(space, w_res) == [True, False, True, False, False, 3, "NoMethodError"]
+
+    def test_empty_keyword_splat_passes_nothing(self, space):
+        w_res = space.execute("""
+        opts = {}
+        return [[1, 2].push(**opts), 5.fdiv(2, **opts), "ab".upcase(**{})]
+        """)
+        assert self.unwrap(space, w_res) == [[1, 2], 2.5, "AB"]
+
+
+class TestStringSearch(BaseTopazTest):
+    def test_index_and_rindex(self, space):
+        w_res = space.execute("""
+        return ["hello".index("l"), "hello".index("z"), "hello".index("l", -2), "hello".index("", 5),
+                "hello".index(/l+/), $~[0], "hello".rindex("l"), "hello".rindex("l", 2),
+                "hello".rindex(/l/, 2), "hello".rindex(""), "a\\nb".lines, "ab".chars]
+        """)
+        assert self.unwrap(space, w_res) == [
+            2, None, 3, 5, 2, "ll", 3, 2, 2, 5, ["a\n", "b"], ["a", "b"]]
+
+
+class TestModernCoreMethods(BaseTopazTest):
+    def test_integer_to_s_base_and_exception_inspect(self, space):
+        w_res = space.execute("""
+        return [255.to_s(16), (2 ** 70).to_s(16), -255.to_s(2), (5.to_s(1) rescue $!.message),
+                RuntimeError.new("x").inspect, RuntimeError.new.inspect, RuntimeError.new("").inspect]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "ff", "400000000000000000", "-11111111", "invalid radix 1",
+            "#<RuntimeError: x>", "#<RuntimeError: RuntimeError>", "RuntimeError"]
+
+    def test_string_and_enumerable_methods(self, space):
+        w_res = space.execute("""
+        return ["  hi ".lstrip, "ab".center(6, "*"), "a-b-c".partition("-"), "a-b-c".rpartition("-"),
+                "hello".delete("l"), "hello".count("lo"), "hello".delete("a-k"), "abc".gsub!(/z/, ""),
+                [1, 5, 9].grep_v(5), [1, 2, 3, 4].slice_after(&:even?).to_a, [1, 3, 5, 7].bsearch_index { |x| x >= 4 },
+                {a: 1} <= {a: 1, b: 2}, nil.to_h, 7.remainder(-3), 1.step(10, 4).to_a,
+                :abc.match?(/b/), "ab".match(/(?<x>a)(?<y>b)/).named_captures]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "hi ", "**ab**", ["a", "-", "b-c"], ["a-b", "-", "c"], "heo", 3, "llo", None,
+            [1, 9], [[1, 2], [3, 4]], 2, True, {}, 1, [1, 5, 9], True, {"x": "a", "y": "b"}]
+
+
+class TestConstantsAndClassVariables(BaseTopazTest):
+    def test_or_assign_undefined(self, space):
+        w_res = space.execute("""
+        class A
+          def self.lp = (@@lp ||= [])
+        end
+        A.lp << 1
+        X1 ||= 5
+        X1 ||= 6
+        module M; Y1 ||= 7; end
+        M::Z1 ||= 8
+        return [A.lp, X1, M::Y1, M::Z1]
+        """)
+        assert self.unwrap(space, w_res) == [[1], 5, 7, 8]
+
+    def test_scoped_lookup_skips_toplevel(self, space):
+        w_res = space.execute("""
+        module Y2; end
+        class K2; end
+        class L2 < K2; Q = 1; end
+        class L3 < L2; end
+        return [(Y2::String rescue $!.class), (K2::String rescue $!.class), L3::Q, Object::String,
+                (5::X rescue $!.class)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            space.w_NameError, space.w_NameError, 1, space.w_string, space.w_TypeError]
