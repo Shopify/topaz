@@ -858,3 +858,22 @@ class TestSecureRandomSupport(BaseTopazTest):
                 f.random_number(1000).class, f.random_number.class, f.rand(3..3)]
         """)
         assert self.unwrap(space, w_res) == [8, 3, space.w_integer, space.w_integer, space.w_float, 3]
+
+
+class TestRegexpFlags(BaseTopazTest):
+    def test_inline_flags_and_case_folding(self, space):
+        w_res = space.execute("""
+        return ["A" =~ /(?i:a)/, "A" =~ /(?i)a/, "a" =~ /(?-mix:a)/, "AB" =~ /(?i-mx:a)b/,
+                "a\\nb" =~ /(?m:a.b)/, "ab" =~ /(?x: a b )/, "ab" =~ /a(?#comment)b/,
+                "x" =~ /X/i, "x" =~ /[X]/i, "Q" =~ /[a-z]/i, "q" =~ /[A-Z]/i, "Z" =~ /[^a-z]/i,
+                "x" =~ /(?i:X)|y/]
+        """)
+        assert self.unwrap(space, w_res) == [0, 0, 0, None, 0, 0, 0, 0, 0, 0, 0, None, 0]
+
+    def test_union_and_inspect(self, space):
+        w_res = space.execute("""
+        return [Regexp.union("a.b", /c/i).source, Regexp.union.source, Regexp.union(["x", "y"]).source,
+                "c" =~ Regexp.union("a.b", /C/i), /x/mi.inspect, %r{a/b}.inspect]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "a\\.b|(?i-mx:c)", "(?!)", "x|y", 0, "/x/mi", "/a\\/b/"]

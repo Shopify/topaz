@@ -55,6 +55,18 @@ class W_RegexpObject(W_Object):
         self.source = None
         self.set_source(space, source, flags)
 
+    def __deepcopy__(self, memo):
+        obj = super(W_RegexpObject, self).__deepcopy__(memo)
+        obj.source = self.source
+        if self.source is not None:
+            obj.pattern = self.pattern
+            obj.flags = self.flags
+            obj.groupcount = self.groupcount
+            obj.groupindex = self.groupindex
+            obj.indexgroup = self.indexgroup
+            obj.group_offsets = self.group_offsets
+        return obj
+
     @classdef.setup_class
     def setup_class(cls, space, w_cls):
         space.globals.define_virtual("$~",

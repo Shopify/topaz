@@ -8,7 +8,8 @@ from rpython.rlib.rsre.rsre_constants import (
     OPCODE_MARK, OPCODE_REPEAT, OPCODE_ANY, OPCODE_ANY_ALL, OPCODE_MAX_UNTIL,
     OPCODE_MIN_UNTIL, OPCODE_GROUPREF, OPCODE_AT, OPCODE_BRANCH, OPCODE_RANGE,
     OPCODE_JUMP, OPCODE_ASSERT_NOT, OPCODE_CATEGORY, OPCODE_FAILURE, OPCODE_IN,
-    OPCODE_NEGATE, OPCODE_GROUPREF_EXISTS, OPCODE_GROUPREF_IGNORE
+    OPCODE_NEGATE, OPCODE_GROUPREF_EXISTS, OPCODE_GROUPREF_IGNORE,
+    OPCODE_IN_IGNORE
 )
 from rpython.rlib.rsre.rsre_constants import (
     AT_BEGINNING, AT_BEGINNING_LINE, AT_BEGINNING_STRING, AT_BOUNDARY,
@@ -281,6 +282,10 @@ class RegexpBase(object):
         # the branches of an alternation. Saying no is always safe.
         return False
 
+    def compile_folded(self, ctx):
+        # Compiles this node as a member of a case-insensitive set.
+        self.compile(ctx)
+
     @specialize.argtype(1, 2, 3)
     def with_flags(self, positive=None, case_insensitive=None, zerowidth=None):
         positive = positive if positive is not None else self.positive
@@ -317,8 +322,18 @@ class Character(RegexpBase):
         return False
 
     def compile(self, ctx):
-        ctx.emit(OPCODE_LITERAL_IGNORE if self.case_insensitive else OPCODE_LITERAL)
-        ctx.emit(self.value)
+        if self.case_insensitive:
+            # The matcher lowercases the subject before comparing.
+            ctx.emit(OPCODE_LITERAL_IGNORE)
+            ctx.emit(_lower_ascii(self.value))
+        else:
+            ctx.emit(OPCODE_LITERAL)
+            ctx.emit(self.value)
+
+    def compile_folded(self, ctx):
+        # As a member of a case-insensitive set.
+        ctx.emit(OPCODE_LITERAL)
+        ctx.emit(_lower_ascii(self.value))
 
 
 class Any(RegexpBase):
@@ -436,6 +451,17 @@ class Range(RegexpBase):
         ctx.emit(self.lower)
         ctx.emit(self.upper)
 
+    def compile_folded(self, ctx):
+        # As a member of a case-insensitive set: the subject is lowercased
+        # before it is checked, so add the lowercase of any uppercase part.
+        self.compile(ctx)
+        lo = max(self.lower, ord("A"))
+        hi = min(self.upper, ord("Z"))
+        if self.positive and lo <= hi:
+            ctx.emit(OPCODE_RANGE)
+            ctx.emit(lo + 32)
+            ctx.emit(hi + 32)
+
 
 class Sequence(RegexpBase):
     def __init__(self, items):
@@ -473,6 +499,12 @@ class Sequence(RegexpBase):
     def compile(self, ctx):
         for item in self.items:
             item.compile(ctx)
+
+
+def _lower_ascii(value):
+    if ord("A") <= value <= ord("Z"):
+        return value + 32
+    return value
 
 
 def _same_item(a, b):
@@ -908,13 +940,16 @@ class SetUnion(SetBase):
         return SetUnion(self.info, self.items, positive, case_insensitive, zerowidth).optimize(self.info)
 
     def compile(self, ctx):
-        ctx.emit(OPCODE_IN)
+        ctx.emit(OPCODE_IN_IGNORE if self.case_insensitive else OPCODE_IN)
         pos = ctx.tell()
         ctx.emit(0)
         if not self.positive:
             ctx.emit(OPCODE_NEGATE)
         for item in self.items:
-            item.compile(ctx)
+            if self.case_insensitive:
+                item.compile_folded(ctx)
+            else:
+                item.compile(ctx)
         ctx.emit(OPCODE_FAILURE)
         ctx.patch(pos, ctx.tell() - pos)
 
@@ -1137,7 +1172,7 @@ def _parse_paren(source, info):
             return _parse_lookaround(source, info, behind=False, positive=False)
         elif source.match("#"):
             _parse_comment(source)
-            return
+            return Sequence([])
         elif source.match(">"):
             return _parse_atomic(source, info)
         elif source.match(":"):
@@ -1163,13 +1198,12 @@ def _parse_paren(source, info):
                 codeyes = subpattern.branches[0]
                 codeno = subpattern.branches[1]
             return GroupExistsBranch(info, groupidx, codeyes, codeno)
-        elif source.match("-") or source.match("m") or source.match("i") or source.match("x"):
-            # TODO: parse plain here flags = _parse_plain_flags(source)
-            subpattern = _parse_pattern(source, info)
-            source.expect(")")
-            return subpattern
-        else:
-            raise RegexpError("undefined group option")
+        here = source.pos
+        ch = source.get()
+        if ch and ch in "-imx":
+            return _parse_flags_group(source, info, ch)
+        source.pos = here
+        raise RegexpError("undefined group option")
     group = info.new_group()
     saved_flags = info.flags
     saved_ignore = source.ignore_space
@@ -1181,6 +1215,53 @@ def _parse_paren(source, info):
     source.expect(")")
     info.close_group(group)
     return Group(info, group, subpattern)
+
+
+def _parse_flags_group(source, info, ch):
+    """(?imx-imx) sets flags for the rest of the enclosing group, and
+    (?imx-imx:subpattern) for the subpattern. `ch` is the first flag
+    character, already read."""
+    on = 0
+    off = 0
+    turning_off = False
+    while True:
+        if ch == "-":
+            if turning_off:
+                raise RegexpError("undefined group option")
+            turning_off = True
+        elif ch == "i" or ch == "m" or ch == "x":
+            if ch == "i":
+                flag = IGNORE_CASE
+            elif ch == "m":
+                flag = DOT_ALL
+            else:
+                flag = EXTENDED
+            if turning_off:
+                off |= flag
+            else:
+                on |= flag
+        elif ch == ":":
+            saved_flags = info.flags
+            saved_ignore = source.ignore_space
+            info.flags = (info.flags | on) & ~off
+            source.ignore_space = bool(info.flags & EXTENDED)
+            try:
+                subpattern = _parse_pattern(source, info)
+                # Still in the group's mode: (?x: a ) may end in spaces.
+                source.expect(")")
+            finally:
+                info.flags = saved_flags
+                source.ignore_space = saved_ignore
+            return subpattern
+        elif ch == ")":
+            info.flags = (info.flags | on) & ~off
+            source.ignore_space = bool(info.flags & EXTENDED)
+            return Sequence([])
+        else:
+            raise RegexpError("undefined group option")
+        ch = source.get()
+        if not ch:
+            raise RegexpError("end pattern in group")
 
 
 def _parse_atomic(source, info):
