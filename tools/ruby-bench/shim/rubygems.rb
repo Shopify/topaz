@@ -205,12 +205,38 @@ module Gem
     false
   end
 
+  # The gem directory: where the gems on the load path were installed.
   def self.dir
-    ENV["GEM_HOME"] || File.expand_path("~/.gem")
+    spec = loaded_specs.values.first
+    ENV["GEM_HOME"] || (spec ? File.dirname(File.dirname(spec.full_gem_path)) : File.expand_path("~/.gem"))
+  end
+
+  def self.default_dir
+    dir
+  end
+
+  def self.user_dir
+    File.expand_path("~/.gem/topaz")
   end
 
   def self.path
     [dir]
+  end
+
+  def self.paths
+    self
+  end
+
+  def self.home
+    dir
+  end
+
+  def self.bindir(install_dir = dir)
+    File.join(install_dir, "bin")
+  end
+
+  def self.suffixes
+    ["", ".rb"]
   end
 end
 

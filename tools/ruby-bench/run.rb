@@ -10,6 +10,7 @@ gems = paths.select { |p| p.include?("/gems/") }
 stdlib = paths.reject { |p| p.include?("/gems/") }
 $LOAD_PATH.replace([File.join(here, "shim")] + gems + $LOAD_PATH + stdlib)
 require "rubygems"
+require "topaz_engine"
 bench = ARGV.shift
 $0 = bench
 load bench
