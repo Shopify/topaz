@@ -1042,7 +1042,9 @@ class W_StringObject(W_Object):
     def to_int(self, s, neg, i, radix):
         val = 0
         for digit in self._digits(s, i, radix):
-            val = ovfcheck(val * radix + digit)
+            # ovfcheck covers only one operation.
+            val = ovfcheck(val * radix)
+            val = ovfcheck(val + digit)
         if neg:
             val = -val
         return val

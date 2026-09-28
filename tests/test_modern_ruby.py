@@ -1565,3 +1565,13 @@ class TestProcRuby2Keywords(BaseTopazTest):
         res = self.unwrap(space, w_res)
         assert res == [[[1], {"x": 2}], [[1, {"x": 2}], {}], True]
 
+
+class TestLargeIntegerParsing(BaseTopazTest):
+    def test_string_to_i_beyond_a_machine_word(self, space):
+        w_res = space.execute("""
+        return ["123456789012345678901".to_i.to_s, "-99999999999999999999".to_i.to_s,
+                Integer("123456789012345678901").to_s, "ffffffffffffffffffff".to_i(16).to_s]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "123456789012345678901", "-99999999999999999999", "123456789012345678901",
+            "1208925819614629174706175"]

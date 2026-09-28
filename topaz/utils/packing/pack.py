@@ -68,7 +68,8 @@ class RPacker(object):
         repetitions = 0
         while end < len(self.fmt) and self.fmt[end].isdigit():
             try:
-                repetitions = ovfcheck(repetitions * 10 + (ord(self.fmt[end]) - ord("0")))
+                repetitions = ovfcheck(repetitions * 10)
+                repetitions = ovfcheck(repetitions + (ord(self.fmt[end]) - ord("0")))
             except OverflowError:
                 raise space.error(space.w_RangeError, "pack length too big")
             end += 1
