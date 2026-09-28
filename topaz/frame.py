@@ -112,7 +112,9 @@ class Frame(BaseFrame):
         if (len(bytecode.kw_defaults) < len(bytecode.kwarg_names) and
                 not keywords_hash):
             # The keywords without defaults come last.
-            missing = [":" + name for name in bytecode.kwarg_names[len(bytecode.kw_defaults):]]
+            missing = []
+            for j in range(len(bytecode.kw_defaults), len(bytecode.kwarg_names)):
+                missing.append(":" + bytecode.kwarg_names[j])
             raise space.error(
                 space.w_ArgumentError,
                 "%s: %s" % ("missing keyword" if len(missing) == 1 else "missing keywords",
