@@ -1471,11 +1471,15 @@ def _parse_set_member(source, info):
         here = source.pos
         if source.match("-") and not source.match("]"):
             end = _parse_set_item(source, info)
-            if isinstance(end, Character) or isinstance(end, CodePoint):
-                if start.value > end.value:
-                    raise RegexpError("bad character range")
-                return WideRange(start.value, end.value)
-            raise RegexpError("bad character range")
+            if isinstance(end, Character):
+                end_value = end.value
+            elif isinstance(end, CodePoint):
+                end_value = end.value
+            else:
+                raise RegexpError("bad character range")
+            if start.value > end_value:
+                raise RegexpError("bad character range")
+            return WideRange(start.value, end_value)
         source.pos = here
         return WideRange(start.value, start.value)
     if (not isinstance(start, Character) or not start.positive or
