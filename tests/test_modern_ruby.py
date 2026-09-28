@@ -1868,3 +1868,19 @@ class TestJoinNewAndGrep(BaseTopazTest):
         return [%w[on_a xb on_c].grep(/\\Aon_/) { $'.to_sym }, %w[a1 b2].grep(/(\\d)/) { $1 }]
         """)
         assert self.unwrap(space, w_res) == [["a", "c"], ["1", "2"]]
+
+
+class TestStructKeywordInit(BaseTopazTest):
+    def test_keyword_init(self, space):
+        w_res = space.execute("""
+        a = Struct.new(:a, :b, keyword_init: true)
+        b = Struct.new(:a, :b)
+        c = Struct.new(:a, keyword_init: false)
+        return [a.new(a: 1, b: 2).to_a, (a.new(1) rescue $!.message), (a.new(c: 1) rescue $!.message),
+                a.keyword_init?, b.new(1, 2).to_a, b.new(a: 5).to_a, b.new({a: 5}).to_a[1], b.keyword_init?,
+                c.new(a: 1).to_a.size, (b.new(1, 2, 3) rescue $!.message)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 2], "wrong number of arguments (given 1, expected 0)", "unknown keywords: c", True,
+            [1, 2], [5, None], None, None, 1, "struct size differs"]
+

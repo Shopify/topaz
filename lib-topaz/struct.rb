@@ -5,7 +5,7 @@ class Struct
     alias subclass_new new
   end
 
-  def self.new(klass_name, *attrs, &block)
+  def self.new(klass_name, *attrs, keyword_init: nil, &block)
     if klass_name
       begin
         klass_name = Topaz.convert_type(klass_name, String, :to_str)
@@ -27,15 +27,20 @@ class Struct
     klass = Class.new(self) do
       attr_accessor(*attrs)
 
-      def self.new(*args, &block)
-        return subclass_new(*args, &block)
+      def self.new(*args, **kwargs, &block)
+        return subclass_new(*args, **kwargs, &block)
       end
 
-      def self.[](*args)
-        return new(*args)
+      def self.[](*args, **kwargs)
+        return new(*args, **kwargs)
       end
 
       const_set(:STRUCT_ATTRS, attrs)
+      const_set(:STRUCT_KEYWORD_INIT, keyword_init.nil? ? nil : !!keyword_init)
+
+      def self.keyword_init?
+        self::STRUCT_KEYWORD_INIT
+      end
     end
 
     Struct.const_set(klass_name, klass) if klass_name
@@ -53,11 +58,25 @@ class Struct
     self.singleton_class.instance_variables - attr_syms
   end
 
-  def initialize(*args)
+  # keyword_init: true takes only keywords, false only positional
+  # arguments (a hash is one of them), and nil (the default) keywords when
+  # there are no positional arguments.
+  def initialize(*args, **kwargs)
     attrs = self.class::STRUCT_ATTRS
+    keyword_init = self.class::STRUCT_KEYWORD_INIT
+    if keyword_init == true && !args.empty?
+      raise ArgumentError.new("wrong number of arguments (given #{args.size}, expected 0)")
+    end
+    if !kwargs.empty? && (keyword_init == true || (keyword_init.nil? && args.empty?))
+      unknown = kwargs.keys.reject { |k| attrs.include?(k.to_sym) }
+      raise ArgumentError.new("unknown keywords: #{unknown.join(", ")}") unless unknown.empty?
+      attrs.each { |attr| instance_variable_set(:"@#{attr}", kwargs[attr]) }
+      return
+    end
+    args << kwargs unless kwargs.empty?
 
     unless args.length <= attrs.length
-      raise ArgumentError.new("Expected #{attrs.size}, got #{args.size}")
+      raise ArgumentError.new("struct size differs")
     end
 
     attrs.each_with_index do |attr, i|
