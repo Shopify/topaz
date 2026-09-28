@@ -174,8 +174,32 @@ module Gem
     end
   end
 
-  module Platform
+  class Platform
     RUBY = "ruby"
+    CURRENT = "current"
+
+    attr_reader :cpu, :os, :version
+
+    def self.local
+      @local ||= new(RbConfig::CONFIG["arch"] || "x86_64-linux")
+    end
+
+    def initialize(name)
+      @cpu, @os = name.to_s.split("-", 2)
+      @version = nil
+    end
+
+    def to_s
+      [@cpu, @os].compact.join("-")
+    end
+
+    def to_a
+      [@cpu, @os, @version]
+    end
+
+    def ==(other)
+      other.is_a?(Platform) && to_a == other.to_a
+    end
   end
 
   def self.loaded_specs
