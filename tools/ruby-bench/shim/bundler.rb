@@ -8,9 +8,21 @@ module Bundler
     self
   end
 
+  # As Bundler does, a gem without a file of its own name is skipped, and
+  # "a-b" is tried as "a/b".
   def self.require(*groups)
     File.read(REQUIRES).split("\n").each do |name|
-      Kernel.require(name)
+      begin
+        Kernel.require(name)
+      rescue LoadError => e
+        raise unless e.path == name
+        next unless name.include?("-")
+        begin
+          Kernel.require(name.tr("-", "/"))
+        rescue LoadError => e
+          raise unless e.path == name.tr("-", "/")
+        end
+      end
     end
   end
 
