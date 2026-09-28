@@ -2011,3 +2011,16 @@ class TestApproximateRefinements(BaseTopazTest):
         return User.new.run + [DC.refinements.size]
         """)
         assert self.unwrap(space, w_res) == ["a", "HI!", "X", 2]
+
+
+class TestTopLevelAutoload(BaseTopazTest):
+    def test_top_level_autoload_is_on_object(self, space, tmpdir):
+        f = tmpdir.join("mimey.rb")
+        f.write("module Mimey; X = 1; end\n")
+        w_res = space.execute("""
+        autoload :Mimey, %r
+        r = [Object.autoload?(:Mimey).nil?]
+        module A; module B; def self.f = Mimey::X; end; end
+        return r + [A::B.f]
+        """ % (str(f),))
+        assert self.unwrap(space, w_res) == [False, 1]

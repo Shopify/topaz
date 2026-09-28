@@ -551,13 +551,22 @@ class Kernel(object):
         default = space.find_const(random_class, "DEFAULT")
         return default.srand(space, w_seed)
 
+    # Kernel#autoload registers in the class of the code calling it: for
+    # top-level code, Object, not main's singleton class.
     @moduledef.method("autoload")
     def method_autoload(self, space, args_w):
-        return space.send(space.getclass(self), "autoload", args_w)
+        return space.send(Kernel._autoload_base(space, self), "autoload", args_w)
 
     @moduledef.method("autoload?")
     def method_autoload(self, space, args_w):
-        return space.send(space.getclass(self), "autoload?", args_w)
+        return space.send(Kernel._autoload_base(space, self), "autoload?", args_w)
+
+    @staticmethod
+    def _autoload_base(space, w_obj):
+        frame = space.getexecutioncontext().gettoprubyframe()
+        if frame is not None and frame.lexical_scope is not None:
+            return frame.lexical_scope.w_mod
+        return space.getnonsingletonclass(w_obj)
 
     @moduledef.method("object_id")
     def method_object_id(self, space):
