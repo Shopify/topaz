@@ -806,3 +806,12 @@ class Fiber
     @__topaz_storage = hash.to_h
   end
 end
+
+module Kernel
+  # Pathname is autoloaded (it is core in Ruby 4.0).
+  def Pathname(path)
+    return path if path.is_a?(Pathname)
+    Pathname.new(path)
+  end
+  private :Pathname
+end

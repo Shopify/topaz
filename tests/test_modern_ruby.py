@@ -1324,3 +1324,28 @@ class TestExtensionsAndStringIO(BaseTopazTest):
         assert self.unwrap(space, w_res) == [
             "ab1x\ny\nz\n007", "ab1x\n", "y\n", "z\n007", None, True,
             ["line1\n", "line2\n"], ["x", "y"], "heXYo", "start-end", "IOError"]
+
+
+class TestPathnameAndFileNames(BaseTopazTest):
+    def test_file_basename_and_extname(self, space):
+        w_res = space.execute("""
+        return [File.basename("/a/b/"), File.basename("/"), File.basename("a/b.rb", ".rb"),
+                File.basename("b.rb", ".*"), File.basename(".rb", ".rb"), File.extname("x.rb"),
+                File.extname(".bashrc"), File.extname("a.b/c"), File.extname("x."),
+                File.extname("/x/y.tar.gz/")]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "b", "/", "b", "b", ".rb", ".rb", "", "", ".", ".gz"]
+
+    def test_pathname(self, space):
+        w_res = space.execute("""
+        return [Pathname("/a/b/c").ascend.map(&:to_s), (Pathname("/usr/lib") + "../bin").to_s,
+                Pathname("/a").join("b", "c").to_s, Pathname("/a/b/../c/./d").cleanpath.to_s,
+                Pathname("/a/b/c").relative_path_from(Pathname("/a/x")).to_s,
+                Pathname("x.rb").sub_ext(".txt").to_s, Pathname("/a/b").parent.to_s,
+                (Pathname("/a") / "b").to_s, Pathname("/a").inspect,
+                Pathname("/a/b/c").descend.map(&:to_s)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["/a/b/c", "/a/b", "/a", "/"], "/usr/bin", "/a/b/c", "/a/c/d", "../b/c", "x.txt",
+            "/a", "/a/b", "#<Pathname:/a>", ["/", "/a", "/a/b", "/a/b/c"]]

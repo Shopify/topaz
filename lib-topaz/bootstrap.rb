@@ -49,6 +49,7 @@ load_bootstrap.call("modern.rb")
 
 # Set is part of the core since Ruby 4.0.
 Object.autoload(:Set, "set")
+Object.autoload(:Pathname, "pathname")
 
 # ffi
 load_bootstrap.call("ffitopaz/pointer.rb")

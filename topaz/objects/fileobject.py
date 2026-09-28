@@ -19,6 +19,32 @@ FNM_PATHNAME = 0x02
 FNM_DOTMATCH = 0x04
 
 
+
+def file_basename(filename, suffix):
+    """File.basename: the last component, ignoring trailing slashes, less
+    suffix (".*" for any extension) unless that would leave nothing."""
+    end = len(filename)
+    while end > 1 and filename[end - 1] == "/":
+        end -= 1
+    if end == 0:
+        return ""
+    if end == 1 and filename[0] == "/":
+        return "/"
+    assert end >= 0
+    start = filename.rfind("/", 0, end) + 1
+    assert start >= 0
+    base = filename[start:end]
+    if suffix is not None:
+        if suffix == ".*":
+            dot = base.rfind(".")
+            if dot > 0:
+                base = base[:dot]
+        elif len(base) > len(suffix) and base.endswith(suffix):
+            stop = len(base) - len(suffix)
+            assert stop >= 0
+            base = base[:stop]
+    return base
+
 class W_FileObject(W_IOObject):
     classdef = ClassDef("File", W_IOObject.classdef)
 
@@ -267,23 +293,20 @@ class W_FileObject(W_IOObject):
 
     @classdef.singleton_method("basename", filename="path", suffix="path")
     def method_basename(self, space, filename, suffix=None):
-        i = filename.rfind("/") + 1
-        assert i >= 0
-        filename = filename[i:]
-        if suffix is not None and filename.endswith(suffix):
-            end = len(filename) - len(suffix)
-            assert end >= 0
-            filename = filename[:end]
-        return space.newstr_fromstr(filename)
+        return space.newstr_fromstr(file_basename(filename, suffix))
 
     @classdef.singleton_method("extname", filename="path")
     def method_extname(self, space, filename):
-        i = filename.rfind(".")
-        if i < 0:
+        base = file_basename(filename, None)
+        # Leading dots are part of the name: ".bashrc" has no extension.
+        i = 0
+        while i < len(base) and base[i] == ".":
+            i += 1
+        dot = base.rfind(".")
+        if dot < i:
             return space.newstr_fromstr("")
-        else:
-            extname = filename[i + 1:]
-            return space.newstr_fromstr(extname)
+        assert dot >= 0
+        return space.newstr_fromstr(base[dot:])
 
     @classdef.singleton_method("umask", mask="int")
     def method_umask(self, space, mask=-1):
