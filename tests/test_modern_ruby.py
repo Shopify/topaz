@@ -1601,3 +1601,29 @@ class TestBigDecimal(BaseTopazTest):
             "0.3e0", "0.15e0", ["-0.3e1", "0.2e1"], True, 0, "Infinity", 3, "0.33333e1",
             "0.10005e4", 'invalid value for BigDecimal(): "1.5x"', "0.33333e0"]
 
+
+class TestZlib(BaseTopazTest):
+    def test_zlib(self, space):
+        w_res = space.execute("""
+        begin
+          require "zlib"
+        rescue LoadError
+          return :no_libz
+        end
+        big = "hello world " * 5000
+        d = Zlib::Deflate.deflate(big)
+        io = StringIO.new("".b)
+        gz = Zlib::GzipWriter.new(io)
+        gz.write("line1\\n")
+        gz.puts "line2"
+        gz.close
+        return [Zlib.crc32("abc"), Zlib.adler32("abc"), Zlib::Deflate.deflate("hello").unpack1("H*"),
+                Zlib::Inflate.inflate(d) == big, Zlib.gunzip(Zlib.gzip("x" * 100)).size,
+                Zlib::GzipReader.new(StringIO.new(io.string)).readlines,
+                (begin; Zlib::Inflate.inflate("garbage"); rescue Zlib::DataError => e; e.message; end)]
+        """)
+        res = self.unwrap(space, w_res)
+        if res == "no_libz":
+            pytest.skip("libz is not available")
+        assert res == [891568578, 38600999, "789ccb48cdc9c90700062c0215", True, 100,
+                       ["line1\n", "line2\n"], "incorrect header check"]
