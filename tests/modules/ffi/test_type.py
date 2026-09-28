@@ -107,6 +107,15 @@ class Test_StringRWStrategy(BaseFFITest):
         lltype.free(data, flavor='raw')
 
 
+    def test_nil_and_null_strings(self, space):
+        w_string_type = ffitype.StringRWStrategy()
+        size = w_string_type.typesize
+        data = lltype.malloc(rffi.CCHARP.TO, size, flavor='raw')
+        w_string_type.write(space, data, space.w_nil)
+        assert misc.read_raw_unsigned_data(data, size) == 0
+        assert w_string_type.read(space, data) is space.w_nil
+        lltype.free(data, flavor='raw')
+
 class Test_PointerRWStrategy(BaseFFITest):
     def test_it_reads_a_pointer_from_buffer(self, space):
         w_pointer_type = ffitype.PointerRWStrategy()

@@ -177,10 +177,17 @@ class StringRWStrategy(ReadWriteStrategy):
     def read(self, space, data):
         result = misc.read_raw_unsigned_data(data, self.typesize)
         result = rffi.cast(rffi.CCHARP, result)
+        if not result:
+            # A NULL char* is nil.
+            return space.w_nil
         result = rffi.charp2str(result)
         return space.newstr_fromstr(result)
 
     def write(self, space, data, w_arg):
+        if w_arg is space.w_nil:
+            # nil is passed as NULL.
+            misc.write_raw_unsigned_data(data, rffi.cast(lltype.Unsigned, 0), self.typesize)
+            return
         arg = space.str_w(w_arg)
         arg = rffi.str2charp(arg)
         arg = rffi.cast(lltype.Unsigned, arg)
