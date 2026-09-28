@@ -1835,3 +1835,12 @@ class TestMatchSetsCallersLastMatch(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == [0, "X", "c", "bc", False, "ll", "ll", "A", "B", "bc", "y"]
+
+
+class TestUndefAndRemoveSeveralMethods(BaseTopazTest):
+    def test_several_names(self, space):
+        w_res = space.execute("""
+        class A; def a;end; def b;end; def c;end; def d;end; undef_method :a, :b; remove_method :c, :d; end
+        return [A.method_defined?(:a), A.method_defined?(:b), A.method_defined?(:c), A.method_defined?(:d)]
+        """)
+        assert self.unwrap(space, w_res) == [False, False, False, False]

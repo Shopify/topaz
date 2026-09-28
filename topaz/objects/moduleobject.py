@@ -1031,25 +1031,32 @@ class W_ModuleObject(W_RootObject):
             for sym in self.methods(space, visibility=W_FunctionObject.PRIVATE, inherit=inherit)
         ])
 
-    @classdef.method("undef_method", name="symbol")
-    def method_undef_method(self, space, name):
-        w_method = self.find_method(space, name)
-        if w_method is None or isinstance(w_method, UndefMethod):
-            cls_name = space.obj_to_s(self)
-            raise space.error(space.w_NameError,
-                "undefined method '%s' for class '%s'" % (name, cls_name)
-            )
-        self.define_method(space, name, UndefMethod(name))
+    @classdef.method("undef_method")
+    def method_undef_method(self, space, args_w):
+        for w_name in args_w:
+            name = Coerce.symbol(space, w_name)
+            w_method = self.find_method(space, name)
+            if w_method is None or isinstance(w_method, UndefMethod):
+                cls_name = space.obj_to_s(self)
+                raise space.error(space.w_NameError,
+                    "undefined method '%s' for class '%s'" % (name, cls_name)
+                )
+            self.define_method(space, name, UndefMethod(name))
         return self
 
-    @classdef.method("remove_method", name="symbol")
+    @classdef.method("remove_method")
     @check_frozen()
-    def method_remove_method(self, space, name):
+    def method_remove_method(self, space, args_w):
+        for w_name in args_w:
+            self._remove_one_method(space, Coerce.symbol(space, w_name))
+        return self
+
+    def _remove_one_method(self, space, name):
         w_method = self._find_method_pure(space, name, self.version)
         if w_method is None or isinstance(w_method, UndefMethod):
             cls_name = space.obj_to_s(self)
             raise space.error(space.w_NameError,
-                "method `%s' not defined in %s" % (name, cls_name)
+                "method '%s' not defined in %s" % (name, cls_name)
             )
         del self.methods_w[name]
         self.mutated()

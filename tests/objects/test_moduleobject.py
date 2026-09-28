@@ -374,13 +374,13 @@ class TestModuleObject(BaseTopazTest):
         """)
         with self.raises(space, "NoMethodError"):
             space.execute("A.new.foo")
-        with self.raises(space, "NameError", "method `foo' not defined in A"):
+        with self.raises(space, "NameError", "method 'foo' not defined in A"):
             space.execute("""
             class A
               remove_method :foo
             end
             """)
-        with self.raises(space, "NameError", "method `bar' not defined in A"):
+        with self.raises(space, "NameError", "method 'bar' not defined in A"):
             space.execute("""
             class A
               remove_method :bar
