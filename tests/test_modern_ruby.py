@@ -1884,3 +1884,31 @@ class TestStructKeywordInit(BaseTopazTest):
             [1, 2], "wrong number of arguments (given 1, expected 0)", "unknown keywords: c", True,
             [1, 2], [5, None], None, None, 1, "struct size differs"]
 
+
+class TestMarklyAndNokogiriNative(BaseTopazTest):
+    def test_markly_native(self, space):
+        w_res = space.execute("""
+        begin
+          require "markly/markly"
+        rescue LoadError
+          return :no_libcmark
+        end
+        parser = Markly::Parser.new(0)
+        parser.enable(:strikethrough)
+        root = parser.parse("# Hi\\n\\nSome *em* and ~~gone~~")
+        heading = root.first_child
+        types = [root.type, heading.type, heading.next.type, heading.header_level,
+                 heading.first_child.string_content]
+        link = Markly::Node.new(:link)
+        link.url = "/u/bob"
+        text = Markly::Node.new(:text)
+        text.string_content = "@bob"
+        link.append_child(text)
+        heading.first_child.insert_after(link)
+        return types + [root.__send__(:_render_html, 0, [:strikethrough])]
+        """)
+        res = self.unwrap(space, w_res)
+        if res == "no_libcmark":
+            pytest.skip("libcmark-gfm is not available")
+        assert res == ["document", "header", "paragraph", 1, "Hi",
+                       '<h1>Hi<a href="/u/bob">@bob</a></h1>\n<p>Some <em>em</em> and <del>gone</del></p>\n']
