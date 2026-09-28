@@ -2068,3 +2068,21 @@ class TestGsubBangLastMatch(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == ["fooBar::Baz", "aBc", None, "ABc", "x"]
+
+
+class TestBeginElseValue(BaseTopazTest):
+    def test_the_else_clause_gives_the_value(self, space):
+        w_res = space.execute("""
+        def a = (begin; 1; rescue; 2; else; 3; end)
+        def b
+          :body
+        rescue LoadError
+          :rescued
+        else
+          :else
+        end
+        def c = (begin; 1; rescue; 2; end)
+        def d = (begin; raise "x"; rescue; 2; else; 3; end)
+        return [a, b, c, d]
+        """)
+        assert self.unwrap(space, w_res) == [3, "else", 1, 2]

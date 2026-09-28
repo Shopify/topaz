@@ -259,8 +259,13 @@ class TryExcept(Node):
         if self.except_handlers:
             ctx.emit(consts.END_FINALLY)
         ctx.use_next_block(else_block)
-        self.else_body.compile(ctx)
-        ctx.emit(consts.DISCARD_TOP)
+        if isinstance(self.else_body, Nil):
+            # No else clause: the value is the body's.
+            pass
+        else:
+            # With an else clause, its value is the value of the begin.
+            ctx.emit(consts.DISCARD_TOP)
+            self.else_body.compile(ctx)
         ctx.use_next_block(end)
 
 

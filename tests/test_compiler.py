@@ -1163,10 +1163,8 @@ class TestCompiler(object):
         LOAD_DEREF 0
         STORE_GLOBAL 0
         DISCARD_TOP
-        JUMP 69
+        JUMP 65
         END_FINALLY
-        LOAD_CONST 8
-        DISCARD_TOP
 
         RETURN
         """)
@@ -1202,10 +1200,8 @@ class TestCompiler(object):
         LOAD_DEREF 0
         STORE_GLOBAL 0
         DISCARD_TOP
-        JUMP 71
+        JUMP 67
         END_FINALLY
-        LOAD_CONST 7
-        DISCARD_TOP
 
         RETURN
         """)
@@ -1232,10 +1228,8 @@ class TestCompiler(object):
         LOAD_DEREF 0
         STORE_GLOBAL 0
         DISCARD_TOP
-        JUMP 45
+        JUMP 41
         END_FINALLY
-        LOAD_CONST 5
-        DISCARD_TOP
 
         RETURN
         """)
