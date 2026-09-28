@@ -1440,3 +1440,28 @@ class TestDigestAndOpenSSL(BaseTopazTest):
         assert res == ["ba7816bf", "5031fe3d", "632c2812", "f6d2fcc4", "b2e194185dd8d66b893885",
                        "63b61fa99b1ab1b159bf671f01deba7f", "hello world",
                        "cipher final failed: bad decrypt"]
+
+
+class TestStringScanner(BaseTopazTest):
+    def test_scanning(self, space):
+        w_res = space.execute("""
+        require "strscan"
+        s = StringScanner.new("3.14 is pi, hello world\\nline2")
+        r = []
+        r << s.scan(/\\d+/) << s.scan(/\\./) << s.scan(/\\d+/) << s.pos << s.scan(/x/) << s.matched?
+        r << s.skip(/\\s+/) << s.check(/\\w+/) << s.pos << s.scan_until(/,/) << s.pre_match
+        r << s.scan(/\\A\\s*(?<w>\\w+)/) << s[:w] << s.captures
+        r << s.getch << s.peek(4) << s.bol? << s.scan_until(/\\n/) << s.bol?
+        s.unscan
+        r << s.pos << s.skip_until(/2/) << s.eos? << s.inspect
+        t = StringScanner.new("abc")
+        t.pos = 1
+        r << t.scan(/^b/) << t.scan("c") << t.matched_size
+        u = StringScanner.new("-42 0x1f")
+        r << u.scan_integer << u.skip(/ /) << u.scan_integer(base: 16)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            "3", ".", "14", 4, None, False, 1, "is", 5, "is pi,", "3.14 is pi",
+            " hello", "hello", ["hello"], " ", "worl", False, "world\n", True,
+            18, 11, True, "#<StringScanner fin>", "b", "c", 1, -42, 1, 31]

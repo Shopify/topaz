@@ -248,6 +248,22 @@ class W_RegexpObject(W_Object):
         matched = self.rsre_search(ctx)
         return self.get_match_result(space, ctx, s, matched)
 
+    @classdef.method("__topaz_match_at", s="str", pos="int")
+    def method_topaz_match_at(self, space, s, pos, w_anchored=None):
+        """The match starting at byte pos (anchored) or the first one after
+        it, without setting $~: for StringScanner."""
+        self._check_initialized(space)
+        if pos < 0 or pos > len(s):
+            return space.w_nil
+        ctx = self.make_ctx(s, pos)
+        if w_anchored is not None and space.is_true(w_anchored):
+            matched = rsre_core.match_context(ctx, self.pattern)
+        else:
+            matched = self.rsre_search(ctx)
+        if not matched:
+            return space.w_nil
+        return W_MatchDataObject(space, self, ctx, s)
+
     @classdef.method("===")
     def method_eqeqeq(self, space, w_obj):
         # Anything but a String or Symbol simply does not match.
