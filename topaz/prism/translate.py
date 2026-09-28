@@ -1633,10 +1633,12 @@ class Translator(nodes.Visitor):
         lineno = self.line(node)
         names = []
         for name_node in [node.new_name, node.old_name]:
-            name = getattr(name_node, "name", None)
-            if name is None:
+            if isinstance(name_node, nodes.GlobalVariableReadNode):
+                names.append(ast.ConstantSymbol(name_node.name))
+            elif isinstance(name_node, nodes.BackReferenceReadNode):
+                names.append(ast.ConstantSymbol(name_node.name))
+            else:
                 raise self.unsupported(node, "aliasing this global variable")
-            names.append(ast.ConstantSymbol(name))
         return ast.Send(
             ast.LookupConstant(None, "Topaz", lineno), "alias_global", names, None, lineno)
 
