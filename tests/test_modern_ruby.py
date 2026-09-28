@@ -1718,3 +1718,16 @@ class TestParameters(BaseTopazTest):
             [["req", "x"], ["opt", "y"], ["rest", "r"], ["keyreq", "k"], ["keyrest", "kw"], ["block", "b"]],
             [["rest", "*"], ["keyrest", "**"], ["block", "&"]], [], [["req", "q"], ["opt", "w"]],
             [["opt", "x"], ["opt", "y"]], [["req", "x"], ["req", "y"]], [["req", "x"]], [["rest"]]]
+
+
+class TestInheritedHook(BaseTopazTest):
+    def test_inherited_can_call_class_methods_on_the_subclass(self, space):
+        w_res = space.execute("""
+        r = []
+        class A; def self.inherited(s) = (@@r << [s.name, s.bump]); def self.bump = 1; end
+        A.class_variable_set(:@@r, r)
+        class B < A; end
+        Class.new(A)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [["B", 1], [None, 1]]

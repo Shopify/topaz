@@ -26,10 +26,12 @@ class W_ClassObject(W_ModuleObject):
         self.attached = attached
 
         if self.superclass is not None:
-            self.superclass.inherited(space, self)
-            # During bootstrap, we cannot create singleton classes, yet
+            # During bootstrap, we cannot create singleton classes, yet. The
+            # singleton class comes first: the inherited hook may call the
+            # superclass's class methods on the new class.
             if not self.is_singleton and not space.bootstrap:
                 self.getsingletonclass(space)
+            self.superclass.inherited(space, self)
 
     def __deepcopy__(self, memo):
         obj = super(W_ClassObject, self).__deepcopy__(memo)
@@ -186,8 +188,8 @@ class W_ClassObject(W_ModuleObject):
         else:
             w_superclass = space.w_object
         self.superclass = w_superclass
-        self.superclass.inherited(space, self)
         self.getsingletonclass(space)
+        self.superclass.inherited(space, self)
         space.send_super(space.getclassfor(W_ClassObject), self, "initialize", [], block=block)
 
     @classdef.method("initialize_copy")
