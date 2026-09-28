@@ -70,23 +70,23 @@ class Process(object):
 
     @moduledef.function("uid")
     def method_uid(self, space):
-        return space.newint(os.getuid())
+        return space.newint(intmask(os.getuid()))
 
     @moduledef.function("gid")
     def method_gid(self, space):
-        return space.newint(os.getgid())
+        return space.newint(intmask(os.getgid()))
 
     @moduledef.function("euid")
     def method_euid(self, space):
-        return space.newint(os.geteuid())
+        return space.newint(intmask(os.geteuid()))
 
     @moduledef.function("egid")
     def method_egid(self, space):
-        return space.newint(os.getegid())
+        return space.newint(intmask(os.getegid()))
 
     @moduledef.function("ppid")
     def method_ppid(self, space):
-        return space.newint(os.getppid())
+        return space.newint(intmask(os.getppid()))
 
     @moduledef.function("waitpid", pid="int")
     def method_waitpid(self, space, pid=-1):
