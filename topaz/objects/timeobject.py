@@ -3,7 +3,7 @@ import time
 
 from rpython.rtyper.lltypesystem import lltype, rffi
 from rpython.rlib.rarithmetic import intmask
-from pypy.module.time.interp_time import external, TM_P, glob_buf
+from pypy.module.time.interp_time import external, TM_P, glob_buf, c_localtime
 
 from topaz.module import ClassDef
 from topaz.coerce import Coerce
@@ -27,6 +27,23 @@ class W_TimeObject(W_Object):
     @classdef.singleton_method("allocate")
     def method_allocate(self, space):
         return W_TimeObject(space, self)
+
+    @classdef.singleton_method("__topaz_local_zone", seconds="int")
+    def method_local_zone(self, space, seconds):
+        """The local UTC offset (seconds east) and zone name at the given
+        time since the epoch."""
+        with lltype.scoped_alloc(rffi.TIME_TP.TO, 1) as t_ref:
+            t_ref[0] = seconds
+            p = c_localtime(t_ref)
+            offset = intmask(rffi.getintfield(p, 'c_tm_gmtoff'))
+            with lltype.scoped_alloc(rffi.CCHARP.TO, 64) as outbuf:
+                n = c_strftime(outbuf, 64, "%Z", p)
+                name = rffi.charp2strn(outbuf, intmask(n))
+        return space.newarray([space.newint(offset), space.newstr_fromstr(name)])
+
+    @classdef.singleton_method("__topaz_now_float")
+    def method_now_float(self, space):
+        return space.newfloat(time.time())
 
     @classdef.singleton_method("now")
     def method_now(self, space):

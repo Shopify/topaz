@@ -1186,6 +1186,57 @@ class TestNumbers(BaseTopazTest):
             "2.67499999999999982236", "a and b"]
 
 
+class TestTimeAndDate(BaseTopazTest):
+    def test_time(self, space):
+        w_res = space.execute("""
+        t = Time.utc(2024, 3, 5, 14, 7, 9)
+        l = Time.new(2024, 1, 31, 23, 59, 59, "+09:00")
+        return [t.year, t.month, t.day, t.hour, t.min, t.sec, t.wday, t.yday, t.to_i, t.to_s,
+                Time.at(1700000000.5).utc.inspect, l.to_s, l.utc_offset, l.utc.to_s,
+                t.strftime("%Y-%m-%dT%H:%M:%S%z %A %j %U %W %G-%V %e %l %P %L"), t.iso8601,
+                Time.at(0).utc.iso8601(3), (t + 86400).day, t - Time.utc(2024, 3, 4),
+                Time.utc(2021, 1, 1).strftime("%G %V %u")]
+        """)
+        assert self.unwrap(space, w_res) == [
+            2024, 3, 5, 14, 7, 9, 2, 65, 1709647629, "2024-03-05 14:07:09 UTC",
+            "2023-11-14 22:13:20.5 UTC", "2024-01-31 23:59:59 +0900", 32400,
+            "2024-01-31 14:59:59 UTC",
+            "2024-03-05T14:07:09+0000 Tuesday 065 09 10 2024-10  5  2 pm 000",
+            "2024-03-05T14:07:09Z", "1970-01-01T00:00:00.000Z", 6, 137229.0, "2020 53 5"]
+
+    def test_date(self, space):
+        # Date comes from lib-ruby/ext/date_core.rb, which stands in for
+        # CRuby's date_core extension.
+        w_res = space.execute("""
+        require "date"
+        d = Date.new(2024, 2, 29)
+        return [$LOADED_FEATURES.any? { |f| f.end_with?("ext/date_core.rb") }, d.to_s, d.wday, d.yday, d.jd, d.cweek, d.leap?, (d + 1).to_s, (d >> 12).to_s,
+                (d - Date.new(2024, 1, 1)).inspect, d.strftime("%a %b %e %-m"),
+                Date.new(2024, -1, -1).to_s, Date.valid_date?(2023, 2, 29), Date.jd(2460000).to_s,
+                Date.commercial(2024, 1, 1).to_s, Date.parse("March 5, 2024").to_s,
+                Date.strptime("03/05/2024", "%m/%d/%Y").to_s, (Date.new(1582, 10, 15) - 1).to_s,
+                Date.new(2024, 3, 5).httpdate]
+        """)
+        assert self.unwrap(space, w_res) == [
+            True, "2024-02-29", 4, 60, 2460370, 9, True, "2024-03-01", "2025-02-28", "(59/1)",
+            "Thu Feb 29 2", "2024-12-31", False, "2023-02-24", "2024-01-01", "2024-03-05",
+            "2024-03-05", "1582-10-04", "Tue, 05 Mar 2024 00:00:00 GMT"]
+
+    def test_datetime(self, space):
+        w_res = space.execute("""
+        require "date"
+        dt = DateTime.new(2024, 3, 5, 10, 20, 30, "+09:00")
+        return [dt.to_s, dt.hour, dt.offset.inspect, dt.new_offset(0).to_s,
+                (dt + Rational(1, 2)).to_s, dt.to_time.utc.to_s,
+                DateTime.parse("2024-03-05T10:20:30Z").to_s,
+                Time.utc(2024, 3, 5, 1, 2, 3).to_datetime.to_s]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "2024-03-05T10:20:30+09:00", 10, "(3/8)", "2024-03-05T01:20:30+00:00",
+            "2024-03-05T22:20:30+09:00", "2024-03-05 01:20:30 UTC", "2024-03-05T10:20:30+00:00",
+            "2024-03-05T01:02:03+00:00"]
+
+
 class TestMethodVisibilityAndEval(BaseTopazTest):
     def test_module_function_and_inherited_visibility(self, space):
         w_res = space.execute("""
