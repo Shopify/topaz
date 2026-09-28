@@ -1,3 +1,4 @@
+import copy
 from rpython.rlib.rsre import rsre_core
 
 from topaz.coerce import Coerce
@@ -278,18 +279,29 @@ class W_MatchDataObject(W_Object):
     def __init__(self, space, regexp, ctx, target):
         W_Object.__init__(self, space)
         self.regexp = regexp
-        self.ctx = ctx
         self.target = target
-        self._flatten_cache = None
+        # A snapshot of the match: the context is reused for later searches.
+        self.string = ctx._string
+        self.match_start = ctx.match_start
+        self.match_end = ctx.match_end
+        self.marks = self._build_flattened_marks(ctx, regexp.groupcount)
+
+    def __deepcopy__(self, memo):
+        obj = super(W_MatchDataObject, self).__deepcopy__(memo)
+        obj.regexp = copy.deepcopy(self.regexp, memo)
+        obj.target = self.target
+        obj.string = self.string
+        obj.match_start = self.match_start
+        obj.match_end = self.match_end
+        obj.marks = self.marks
+        return obj
 
     def size(self):
         offset = self.regexp.group_offsets[-1] if self.regexp.group_offsets else 0
         return self.regexp.groupcount + 1 - offset
 
     def flatten_marks(self):
-        if self._flatten_cache is None:
-            self._flatten_cache = self._build_flattened_marks(self.ctx, self.regexp.groupcount)
-        return self._flatten_cache
+        return self.marks
 
     def _build_flattened_marks(self, ctx, num_groups):
         if num_groups == 0:
@@ -334,13 +346,13 @@ class W_MatchDataObject(W_Object):
         else:
             n = Coerce.int(space, w_n)
         if n == 0:
-            start, end = self.ctx.match_start, self.ctx.match_end
+            start, end = self.match_start, self.match_end
         elif 1 <= n < self.size():
             start, end = self.get_span(n)
         else:
             return space.w_nil
         if 0 <= start <= end:
-            return space.newstr_fromstr(self.ctx._string[start:end])
+            return space.newstr_fromstr(self.string[start:end])
         else:
             return space.w_nil
 
@@ -361,7 +373,7 @@ class W_MatchDataObject(W_Object):
     @classdef.method("begin", n="int")
     def method_begin(self, space, n):
         if n == 0:
-            start, _ = self.ctx.match_start, self.ctx.match_end
+            start = self.match_start
         elif 1 <= n < self.size():
             start, _ = self.get_span(n)
         else:
@@ -371,7 +383,7 @@ class W_MatchDataObject(W_Object):
     @classdef.method("end", n="int")
     def method_end(self, space, n):
         if n == 0:
-            _, end = self.ctx.match_start, self.ctx.match_end
+            end = self.match_end
         elif 1 <= n < self.size():
             _, end = self.get_span(n)
         else:
@@ -385,13 +397,15 @@ class W_MatchDataObject(W_Object):
 
     @classdef.method("pre_match")
     def method_pre_match(self, space):
-        stop = self.ctx.match_start
-        assert stop > 0
-        return space.newstr_fromstr(self.ctx._string[:stop])
+        stop = self.match_start
+        assert stop >= 0
+        return space.newstr_fromstr(self.string[:stop])
 
     @classdef.method("post_match")
     def method_post_match(self, space):
-        return space.newstr_fromstr(self.ctx._string[self.ctx.match_end:])
+        start = self.match_end
+        assert start >= 0
+        return space.newstr_fromstr(self.string[start:])
 
     @classdef.method("values_at")
     def method_values_at(self, space, args_w):

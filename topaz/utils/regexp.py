@@ -8,7 +8,7 @@ from rpython.rlib.rsre.rsre_constants import (
     OPCODE_MARK, OPCODE_REPEAT, OPCODE_ANY, OPCODE_ANY_ALL, OPCODE_MAX_UNTIL,
     OPCODE_MIN_UNTIL, OPCODE_GROUPREF, OPCODE_AT, OPCODE_BRANCH, OPCODE_RANGE,
     OPCODE_JUMP, OPCODE_ASSERT_NOT, OPCODE_CATEGORY, OPCODE_FAILURE, OPCODE_IN,
-    OPCODE_NEGATE, OPCODE_GROUPREF_EXISTS
+    OPCODE_NEGATE, OPCODE_GROUPREF_EXISTS, OPCODE_GROUPREF_IGNORE
 )
 from rpython.rlib.rsre.rsre_constants import (
     AT_BEGINNING, AT_BEGINNING_LINE, AT_BEGINNING_STRING, AT_BOUNDARY,
@@ -276,6 +276,11 @@ class RegexpBase(object):
         self.case_insensitive = case_insensitive
         self.zerowidth = zerowidth
 
+    def can_be_affix(self):
+        # Whether this node may be moved into a common prefix or suffix of
+        # the branches of an alternation. Saying no is always safe.
+        return False
+
     @specialize.argtype(1, 2, 3)
     def with_flags(self, positive=None, case_insensitive=None, zerowidth=None):
         positive = positive if positive is not None else self.positive
@@ -317,6 +322,9 @@ class Character(RegexpBase):
 
 
 class Any(RegexpBase):
+    def getwidth(self):
+        return 1, 1
+
     def is_empty(self):
         return False
 
@@ -331,6 +339,9 @@ class Any(RegexpBase):
 
 
 class AnyAll(RegexpBase):
+    def getwidth(self):
+        return 1, 1
+
     def is_empty(self):
         return False
 
@@ -345,6 +356,9 @@ class AnyAll(RegexpBase):
 
 
 class ZeroWidthBase(RegexpBase):
+    def getwidth(self):
+        return 0, 0
+
     def fix_groups(self):
         pass
 
@@ -399,6 +413,9 @@ class Range(RegexpBase):
         RegexpBase.__init__(self, positive=positive, case_insensitive=case_insensitive, zerowidth=zerowidth)
         self.lower = lower
         self.upper = upper
+
+    def getwidth(self):
+        return 1, 1
 
     def rebuild(self, positive, case_insensitive, zerowidth):
         return Range(self.lower, self.upper, positive, case_insensitive, zerowidth)
@@ -458,10 +475,37 @@ class Sequence(RegexpBase):
             item.compile(ctx)
 
 
+def _same_item(a, b):
+    """Whether two parsed items match the same thing. Only literal
+    characters are compared; anything else is only the same as itself."""
+    if a is b:
+        return True
+    if isinstance(a, Character) and isinstance(b, Character):
+        return (a.value == b.value and a.positive == b.positive and
+                a.case_insensitive == b.case_insensitive and
+                a.zerowidth == b.zerowidth)
+    return False
+
+
+def _all_items_equal(alternatives, pos, item):
+    for a in alternatives:
+        if not _same_item(a[pos], item):
+            return False
+    return True
+
+
 class Branch(RegexpBase):
     def __init__(self, branches):
         RegexpBase.__init__(self)
         self.branches = branches
+
+    def getwidth(self):
+        lo, hi = MAX_REPEAT, 0
+        for branch in self.branches:
+            branchlo, branchhi = branch.getwidth()
+            lo = min(lo, branchlo)
+            hi = max(hi, branchhi)
+        return lo, hi
 
     def fix_groups(self):
         for b in self.branches:
@@ -498,7 +542,7 @@ class Branch(RegexpBase):
         end_pos = max_count
         while (
             pos < end_pos and prefix[pos].can_be_affix() and
-            [None for a in alternatives if a[pos] == prefix[pos]]
+            _all_items_equal(alternatives, pos, prefix[pos])
         ):
             pos += 1
         if pos == 0:
@@ -523,7 +567,7 @@ class Branch(RegexpBase):
         end_pos = -1 - max_count
         while (
             pos > end_pos and suffix[pos].can_be_affix() and
-            [None for a in alternatives if a[pos] == suffix[pos]]
+            _all_items_equal(alternatives, pos, suffix[pos])
         ):
             pos -= 1
         count = -1 - pos
@@ -647,6 +691,15 @@ class BaseRepeat(RegexpBase):
         self.min_count = min_count
         self.max_count = max_count
 
+    def getwidth(self):
+        lo, hi = self.subpattern.getwidth()
+        lo = min(lo * self.min_count, MAX_REPEAT)
+        if self.max_count >= MAX_REPEAT:
+            hi = MAX_REPEAT
+        else:
+            hi = min(hi * self.max_count, MAX_REPEAT)
+        return lo, hi
+
     def fix_groups(self):
         self.subpattern.fix_groups()
 
@@ -689,6 +742,9 @@ class LookAround(RegexpBase):
         self.subpattern = subpattern
         self.behind = behind
 
+    def getwidth(self):
+        return 0, 0
+
     def fix_groups(self):
         self.subpattern.fix_groups()
 
@@ -721,6 +777,9 @@ class Group(RegexpBase):
         self.group = group
         self.subpattern = subpattern
 
+    def getwidth(self):
+        return self.subpattern.getwidth()
+
     def fix_groups(self):
         self.info.defined_groups[self.group] = self
         self.subpattern.fix_groups()
@@ -749,6 +808,11 @@ class GroupExistsBranch(RegexpBase):
         self.group = group
         self.codeyes = codeyes
         self.codeno = codeno
+
+    def getwidth(self):
+        yeslo, yeshi = self.codeyes.getwidth()
+        nolo, nohi = self.codeno.getwidth()
+        return min(yeslo, nolo), max(yeshi, nohi)
 
     def can_be_affix(self):
         return False
@@ -783,6 +847,9 @@ class RefGroup(RegexpBase):
         self.info = info
         self.group = group
 
+    def getwidth(self):
+        return 0, MAX_REPEAT
+
     def can_be_affix(self):
         return False
 
@@ -794,8 +861,10 @@ class RefGroup(RegexpBase):
         return self
 
     def compile(self, ctx):
-        assert not self.case_insensitive
-        ctx.emit(OPCODE_GROUPREF)
+        if self.case_insensitive:
+            ctx.emit(OPCODE_GROUPREF_IGNORE)
+        else:
+            ctx.emit(OPCODE_GROUPREF)
         ctx.emit(self.group - 1)
 
 
@@ -804,6 +873,9 @@ class SetBase(RegexpBase):
         RegexpBase.__init__(self, positive=positive, case_insensitive=case_insensitive, zerowidth=zerowidth)
         self.info = info
         self.items = items
+
+    def getwidth(self):
+        return 1, 1
 
     def is_empty(self):
         return False
@@ -1362,8 +1434,47 @@ def _parse_property_name(source):
     return name, name
 
 
+def _parse_octal_escape(source, info, digits, in_set):
+    # Up to three octal digits, counting the ones already read.
+    while len(digits) < 3:
+        here = source.pos
+        ch = source.get()
+        if ch and "0" <= ch <= "7":
+            digits += ch
+        else:
+            source.pos = here
+            break
+    value = 0
+    for digit in digits:
+        value = value * 8 + (ord(digit) - ord("0"))
+    return make_character(info, value & 0xff, in_set)
+
+
 def _parse_numeric_escape(source, info, ch, in_set):
-    raise NotImplementedError("_parse_numeric_escape")
+    if ch in "89":
+        if in_set:
+            return make_character(info, ord(ch[0]), in_set)
+    elif in_set or ch == "0":
+        # \0, \0nn, and any digit escape in a set, are octal.
+        return _parse_octal_escape(source, info, ch, in_set)
+    # \1 to \9 are backreferences. A longer number is a backreference if
+    # there are that many groups, and an octal escape otherwise.
+    start = source.pos
+    digits = ch
+    while True:
+        here = source.pos
+        c = source.get()
+        if c and c.isdigit():
+            digits += c
+        else:
+            source.pos = here
+            break
+    if len(digits) > 1 and int(digits) > info.group_count:
+        source.pos = start
+        if ch in "89":
+            return make_character(info, ord(ch[0]), in_set)
+        return _parse_octal_escape(source, info, ch, in_set)
+    return make_ref_group(info, int(digits))
 
 
 def _parse_posix_class(source, info):

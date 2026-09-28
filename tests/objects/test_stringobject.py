@@ -229,14 +229,14 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute('return "1, 2.34,56, 7".split(%r{,\s*}, 0)')
         assert self.unwrap(space, w_res) == ["1", "2.34", "56", "7"]
         w_res = space.execute('return "1, 2.34,56, 7".split(%r{,\s*}, -1)')
-        assert self.unwrap(space, w_res) == ["1", "2.34", "56", "7", ""]
-        w_res = space.execute('return "1, 2.34,56, 7".split(%r{,\s*}, -2)')
+        assert self.unwrap(space, w_res) == ["1", "2.34", "56", "7"]
+        w_res = space.execute('return "1, 2.34,56, 7,".split(%r{,\s*}, -2)')
         assert self.unwrap(space, w_res) == ["1", "2.34", "56", "7", ""]
         w_res = space.execute('return "1, 2.34,56, 7".split(%r{,\s*}, 4)')
         assert self.unwrap(space, w_res) == ["1", "2.34", "56", "7"]
-        w_res = space.execute('return "1, 2.34,56, 7".split(%r{,\s*}, 5)')
-        assert self.unwrap(space, w_res) == ["1", "2.34", "56", "7", ""]
-        w_res = space.execute('return "1, 2.34,56, 7".split(%r{,\s*}, 6)')
+        w_res = space.execute('return "1, 2.34,56, 7".split(%r{,\s*}, 3)')
+        assert self.unwrap(space, w_res) == ["1", "2.34", "56, 7"]
+        w_res = space.execute('return "1, 2.34,56, 7,".split(%r{,\s*}, 6)')
         assert self.unwrap(space, w_res) == ["1", "2.34", "56", "7", ""]
         w_res = space.execute('return "hello".split(//)')
         assert self.unwrap(space, w_res) == ["h", "e", "l", "l", "o"]

@@ -612,3 +612,56 @@ class TestEnvironmentModules(BaseTopazTest):
                 GC.respond_to?(:auto_compact)]
         """)
         assert self.unwrap(space, w_res) == [None, 0, 0, 0, False, False]
+
+
+class TestRegexpEscapes(BaseTopazTest):
+    def test_numeric_escapes(self, space):
+        w_res = space.execute("""
+        return ["ab\\0cd" =~ /\\0/, "a\\nb" =~ /\\012/, "abab" =~ /(ab)\\1/,
+                "xAa" =~ /(a)\\1/i, "x\\x01y" =~ /[\\1]/, "'hi'" =~ /(['"])hi\\1/]
+        """)
+        assert self.unwrap(space, w_res) == [2, 1, 0, 1, 1, 0]
+
+    def test_lookaround_in_alternation(self, space):
+        # From ActiveSupport::Inflector#underscore; used to crash the
+        # regexp optimizer.
+        w_res = space.execute("""
+        return ["HTMLParser".gsub(/(?<=[A-Z])(?=[A-Z][a-z])|(?<=[a-z\\d])(?=[A-Z])/, "_"),
+                "abc" =~ /a(?=.c)|a(?=.d)/, "aab" =~ /a(?!.b)|ab/]
+        """)
+        assert self.unwrap(space, w_res) == ["HTML_Parser", 0, 1]
+
+    def test_alternation(self, space):
+        # Branches used to lose their first item to a bogus common prefix.
+        w_res = space.execute("""
+        return ["cd" =~ /ab|cd/, "xcd" =~ /ab|cd/, "ad" =~ /ab|cd/, "far" =~ /foo|far/,
+                "by" =~ /[a-c]x|by/, "mnop" =~ /mnq|mno/, "ac" =~ /(a)b|(a)c/, $~[2]]
+        """)
+        assert self.unwrap(space, w_res) == [0, 1, None, 0, 0, 0, 0, "a"]
+
+
+class TestGsubAndScan(BaseTopazTest):
+    def test_empty_matches(self, space):
+        w_res = space.execute("""
+        return ["abc".gsub(//, "-"), "abc".gsub(/(?=b)/, "_"), "abc".scan(/(?=b)/),
+                "abc".scan(/b|/), "abc".gsub("", "-"), "abc".gsub(/$/, "!"),
+                "h\xC3\xA9".gsub(//, ".")]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "-a-b-c-", "a_bc", [""], ["", "b", "", ""], "-a-b-c-", "abc!",
+            ".h.\xc3\xa9."]
+
+    def test_replacements_and_last_match(self, space):
+        w_res = space.execute("""
+        r = ["a1b2".gsub(/(\d)/) { $1 * 2 }, "a1b2".gsub(/(?<d>\d)/, '<\\k<d>>'),
+             "hello".gsub(/l(l)?/, '[\\0|\\1|\\&]'), "hello".sub(/ll/, '<\\`>'),
+             "abcabc".gsub("c", "!"), "a-b_c".gsub(/[-_]/, "-" => "+", "_" => "=")]
+        "abc".gsub(/q/, "")
+        r << $~
+        "abc".gsub(/b/, "")
+        r << $~[0] << "abc".match(/a/).pre_match
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            "a11b22", "a<1>b<2>", "he[ll|l|ll]o", "he<he>o", "ab!ab!", "a+b=c",
+            None, "b", ""]

@@ -14,6 +14,7 @@ from topaz.coerce import Coerce
 from topaz.module import ClassDef, check_frozen
 from topaz.modules.comparable import Comparable
 from topaz.objects.objectobject import W_Object
+from topaz.objects.regexpobject import W_MatchDataObject
 from topaz.utils.formatting import StringFormatter
 
 
@@ -145,6 +146,27 @@ def expand_trans_str(source, res_len, inv=False):
 
     return expanded_source
 
+
+
+def utf8_char_length(string, pos):
+    """The number of bytes in the UTF-8 character at `pos`, or 1."""
+    if pos >= len(string):
+        return 1
+    c = ord(string[pos])
+    if c >= 0xf0:
+        n = 4
+    elif c >= 0xe0:
+        n = 3
+    elif c >= 0xc0:
+        n = 2
+    else:
+        n = 1
+    if n > len(string) - pos:
+        n = len(string) - pos
+    if n < 1:
+        n = 1
+    assert n >= 1
+    return n
 
 class StringStrategy(object):
     def __init__(self, space):
@@ -867,37 +889,60 @@ class W_StringObject(W_Object):
                     for i in xrange(self.length())
                 ])
         elif space.is_kind_of(w_sep, space.w_regexp):
-            results_w = []
-            n = 0
-            last = 0
+            # This follows rb_str_split_m in CRuby's string.c.
             string = space.str_w(self)
+            if limit == 1:
+                if not string:
+                    return space.newarray([])
+                return space.newarray([space.newstr_fromstr(string)])
+            results_w = []
+            beg = 0
+            start = 0
+            last_null = False
+            i = 1
             ctx = w_sep.make_ctx(string)
-            w_match = w_sep.get_match_result(space, ctx, string, found=True)
-
-            while limit <= 0 or n + 1 < limit:
+            while start <= len(string):
+                ctx.reset(start)
                 if not self.search_context(space, w_sep, ctx):
                     break
-                elif ctx.match_start == ctx.match_end:
-                    if ctx.match_start == ctx.end:
+                w_match = w_sep.get_match_result(space, ctx, string, found=True)
+                assert isinstance(w_match, W_MatchDataObject)
+                end = ctx.match_start
+                if start == end and ctx.match_start == ctx.match_end:
+                    if not string:
+                        results_w.append(space.newstr_fromstr(""))
                         break
-                    results_w.append(space.newstr_fromstr(string[last]))
-                    last = ctx.match_end + 1
+                    elif last_null:
+                        assert beg >= 0 and start >= beg
+                        results_w.append(space.newstr_fromstr(string[beg:start]))
+                        beg = start
+                    else:
+                        if start == len(string):
+                            start += 1
+                        else:
+                            start += utf8_char_length(string, start)
+                        last_null = True
+                        continue
                 else:
-                    results_w.append(space.newstr_fromstr(string[last:ctx.match_start]))
-                    for num in xrange(1, w_match.size(), 1):
-                        begin, end = w_match.get_span(num)
-                        begin += last
-                        end += last
-                        if begin >= 0 and end >= 0:
-                            results_w.append(space.newstr_fromstr(string[begin:end]))
-                    last = ctx.match_end
-                n += 1
-                ctx.reset(last)
-
-            if len(string) > last:
-                results_w.append(space.newstr_fromstr(string[last:]))
-            if limit < 0 or len(results_w) < limit:
-                results_w.append(space.newstr_fromstr(""))
+                    assert beg >= 0 and end >= beg
+                    results_w.append(space.newstr_fromstr(string[beg:end]))
+                    beg = start = ctx.match_end
+                last_null = False
+                for num in xrange(1, w_match.size(), 1):
+                    begin, stop = w_match.get_span(num)
+                    if begin < 0 or stop < 0:
+                        continue
+                    results_w.append(space.newstr_fromstr(string[begin:stop]))
+                if limit > 0:
+                    i += 1
+                    if limit <= i:
+                        break
+            if len(string) > 0 and (limit > 0 or len(string) > beg or limit < 0):
+                assert beg >= 0
+                results_w.append(space.newstr_fromstr(string[beg:]))
+            if limit == 0:
+                while results_w and not space.str_w(results_w[-1]):
+                    results_w.pop()
             return space.newarray(results_w)
 
         else:
@@ -1153,36 +1198,40 @@ class W_StringObject(W_Object):
             idx = string.find(pattern, idx)
 
     def scan_regexp(self, space, w_pattern):
-        last = -1
         string = space.str_w(self)
         ctx = w_pattern.make_ctx(string)
-
-        while last < len(string) and self.search_context(space, w_pattern, ctx):
+        search_from = 0
+        while search_from <= len(string):
+            ctx.reset(search_from)
+            if not self.search_context(space, w_pattern, ctx):
+                break
             w_matchdata = w_pattern.get_match_result(space, ctx, string, found=True)
+            assert isinstance(w_matchdata, W_MatchDataObject)
+            start, end = ctx.match_start, ctx.match_end
             if w_matchdata.size() > 1:
                 matches_w = []
                 for num in xrange(1, w_matchdata.size(), 1):
-                    begin, end = w_matchdata.get_span(num)
-                    assert begin >= 0
-                    assert end >= 0
-                    w_str = space.newstr_fromstr(string[begin:end])
+                    begin, stop = w_matchdata.get_span(num)
+                    if begin < 0 or stop < 0:
+                        matches_w.append(space.w_nil)
+                        continue
+                    w_str = space.newstr_fromstr(string[begin:stop])
                     space.infect(w_str, self)
                     space.infect(w_str, w_pattern)
                     matches_w.append(w_str)
                 w_match = space.newarray(matches_w)
             else:
-                w_match = space.newstr_fromstr(string[ctx.match_start:ctx.match_end])
+                assert start >= 0 and end >= start
+                w_match = space.newstr_fromstr(string[start:end])
                 space.infect(w_match, self)
                 space.infect(w_match, w_pattern)
 
             yield w_match
 
-            if ctx.match_start == ctx.match_end:
-                last += 1
+            if start == end:
+                search_from = end + utf8_char_length(string, end)
             else:
-                last = ctx.match_end
-            assert last >= 0
-            ctx.reset(last)
+                search_from = end
 
     def scan_process_result(self, space, w_match, results_w, block):
         if block:
@@ -1256,49 +1305,95 @@ class W_StringObject(W_Object):
         pos = 0
         string = space.str_w(self)
         ctx = w_pattern.make_ctx(string)
-
-        w_matchdata = w_pattern.get_match_result(space, ctx, string, found=True)
-        replacement_parts = None
-        if replacement is not None and "\\" in replacement:
-            replacement_parts = [s for s in replacement.split("\\") if s]
-
-        while pos < len(string) and self.search_context(space, w_pattern, ctx):
-            result += string[pos:ctx.match_start]
-            if replacement_parts is not None:
-                result += self.gsub_regexp_subst_string(
-                    space, replacement_parts, w_matchdata, pos
-                )
-            elif replacement is not None:
-                result += replacement
+        w_lastmatch = space.w_nil
+        search_from = 0
+        while search_from <= len(string):
+            ctx.reset(search_from)
+            if not self.search_context(space, w_pattern, ctx):
+                break
+            start, end = ctx.match_start, ctx.match_end
+            assert 0 <= start <= end
+            # Sets $~, which a block may read (as $1 and so on).
+            w_matchdata = w_pattern.get_match_result(space, ctx, string, found=True)
+            assert isinstance(w_matchdata, W_MatchDataObject)
+            w_lastmatch = w_matchdata
+            result += string[pos:start]
+            if replacement is not None:
+                if "\\" in replacement:
+                    self.gsub_expand_replacement(space, result, replacement, w_matchdata)
+                else:
+                    result += replacement
             elif block:
                 result += self.gsub_regexp_block(space, block, w_matchdata)
             elif w_hash:
                 result += self.gsub_regexp_hash(space, w_hash, w_matchdata)
-            pos = ctx.match_end
-            ctx.reset(pos)
+            pos = end
+            if start == end:
+                # After an empty match, copy one character and search on.
+                n = utf8_char_length(string, end)
+                if end < len(string):
+                    result += string[end:end + n]
+                    pos = end + n
+                search_from = end + n
+            else:
+                search_from = end
             if first_only:
                 break
         result += string[pos:]
+        space.globals.set(space, "$~", w_lastmatch)
         return space.newstr_fromchars(result)
 
-    def gsub_regexp_subst_string(self, space, parts_w, w_match, pos=0):
-        result = []
-        string = space.str_w(self)
-        result += parts_w[0]
-        for s in parts_w[1:]:
-            if s[0].isdigit():
-                group = int(s[0])
-                if group < w_match.size():
-                    begin, end = w_match.get_span(group)
-                    begin += pos
-                    end += pos
-                    assert begin >= 0
-                    assert end >= 0
-                    result += string[begin:end]
-                result += s[1:]
+    def gsub_expand_replacement(self, space, result, replacement, w_match):
+        """Appends `replacement` to `result` with its backslash sequences
+        expanded: \0 to \9, \&, \`, \', \k<name> and \\."""
+        assert isinstance(w_match, W_MatchDataObject)
+        string = w_match.string
+        i = 0
+        n = len(replacement)
+        while i < n:
+            ch = replacement[i]
+            if ch != "\\" or i + 1 >= n:
+                result.append(ch)
+                i += 1
+                continue
+            nxt = replacement[i + 1]
+            i += 2
+            start = -1
+            end = -1
+            if "0" <= nxt <= "9" or nxt == "&":
+                group = 0 if nxt == "&" else ord(nxt) - ord("0")
+                if group == 0:
+                    start, end = w_match.match_start, w_match.match_end
+                elif group < w_match.size():
+                    start, end = w_match.get_span(group)
+            elif nxt == "`":
+                start, end = 0, w_match.match_start
+            elif nxt == "'":
+                start, end = w_match.match_end, len(string)
+            elif nxt == "\\":
+                result.append("\\")
+                continue
+            elif nxt == "k" and i < n and replacement[i] == "<":
+                close = replacement.find(">", i)
+                if close < 0:
+                    result.append("\\")
+                    result.append("k")
+                    continue
+                name = replacement[i + 1:close]
+                i = close + 1
+                if name in w_match.regexp.groupindex:
+                    group = w_match.regexp.groupindex[name]
+                    if group < w_match.size():
+                        start, end = w_match.get_span(group)
+                else:
+                    raise space.error(space.w_IndexError,
+                        "undefined group name reference: %s" % name)
             else:
-                result += s
-        return result
+                result.append("\\")
+                result.append(nxt)
+                continue
+            if 0 <= start <= end:
+                result += string[start:end]
 
     def gsub_regexp_block(self, space, block, w_match):
         w_arg = space.send(w_match, "[]", [space.newint(0)])
@@ -1313,19 +1408,28 @@ class W_StringObject(W_Object):
         pos = 0
         string = space.str_w(self)
         pattern = space.str_w(w_pattern)
-        while pos + len(pattern) < len(string):
-            idx = string.find(pattern, pos)
-            if idx >= 0:
-                result += string[pos:idx]
-                if replacement is not None:
-                    result += replacement
-                elif block:
-                    result += self.gsub_yield_block(space, block, w_pattern)
-                elif w_hash:
-                    result += self.gsub_lookup_hash(space, w_hash, w_pattern)
-                pos = idx + len(pattern)
-            else:
+        search_from = 0
+        while search_from <= len(string):
+            idx = string.find(pattern, search_from)
+            if idx < 0:
                 break
+            result += string[pos:idx]
+            if replacement is not None:
+                result += replacement
+            elif block:
+                result += self.gsub_yield_block(space, block, w_pattern)
+            elif w_hash:
+                result += self.gsub_lookup_hash(space, w_hash, w_pattern)
+            end = idx + len(pattern)
+            pos = end
+            if not pattern:
+                n = utf8_char_length(string, end)
+                if end < len(string):
+                    result += string[end:end + n]
+                    pos = end + n
+                search_from = end + n
+            else:
+                search_from = end
             if first_only:
                 break
         result += string[pos:]
