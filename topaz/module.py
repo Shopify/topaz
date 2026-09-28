@@ -111,10 +111,7 @@ def check_frozen(param="self"):
             space = args[space_idx]
             w_obj = args[obj_idx]
             if space.is_true(w_obj.get_flag(space, "frozen?")):
-                klass = space.getclass(w_obj)
-                raise space.error(
-                    space.w_RuntimeError,
-                    "can't modify frozen %s" % klass.name)
+                raise space.frozen_error(w_obj)
             return func(*args)
         wrapper.__wraps__ = func
         return wrapper

@@ -721,6 +721,18 @@ class ObjectSpace(object):
         return self._send_raw(
             name, raw_method, w_receiver, w_cls, args_w, block)
 
+    def frozen_error(self, w_obj):
+        """FrozenError (a RuntimeError) for modifying w_obj."""
+        w_cls = self.w_object.find_const(self, "FrozenError", autoload=False)
+        if w_cls is None:
+            w_cls = self.w_RuntimeError
+        name = self.getnonsingletonclass(w_obj).name
+        w_inspect = self.send(w_obj, "inspect")
+        error = self.error(w_cls, "can't modify frozen %s: %s" % (
+            name, self.str_w(w_inspect)))
+        error.w_value.set_instance_var(self, "@receiver", w_obj)
+        return error
+
     def send_super_from(self, w_owner, w_receiver, name, args_w, block=None):
         """`super` in a method defined in w_owner: the next method in the
         receiver's ancestors."""

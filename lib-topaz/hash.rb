@@ -84,7 +84,7 @@ class Hash
   end
 
   def merge!(other, &block)
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     other = Topaz.convert_type(other, Hash, :to_hash)
     if block
       other.each do |key, val|
@@ -182,7 +182,7 @@ class Hash
 
   def select!(&block)
     return enum_for(:select!) unless block
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     modified = false
     each_pair do |key, value|
       unless yield key, value
@@ -195,7 +195,7 @@ class Hash
 
   def keep_if(&block)
     return enum_for(:keep_if) unless block
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     select!(&block)
     self
   end
@@ -207,7 +207,7 @@ class Hash
 
   def reject!(&block)
     return enum_for(:reject!) unless block
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     modified = false
     each_pair do |key, value|
       if yield key, value
@@ -220,7 +220,7 @@ class Hash
 
   def delete_if(&block)
     return enum_for(:delete_if) unless block
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     reject!(&block)
     self
   end

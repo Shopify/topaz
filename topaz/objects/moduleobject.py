@@ -518,6 +518,25 @@ class W_ModuleObject(W_RootObject):
         if block is not None:
             space.send(self, "module_exec", [self], block)
 
+    @classdef.method("initialize_copy")
+    def method_initialize_copy(self, space, w_other):
+        # Module#dup and #clone copy the methods, constants and class
+        # variables, and include the same modules.
+        if not isinstance(w_other, W_ModuleObject):
+            raise space.error(space.w_TypeError, "initialize_copy should take same class object")
+        for name, w_method in w_other.methods_w.iteritems():
+            self.methods_w[name] = w_method
+        for name, w_const in w_other.constants_w.iteritems():
+            self.constants_w[name] = w_const
+        for name in w_other.class_variables:
+            w_value = w_other.class_variables.get(space, name)
+            if w_value is not None:
+                self.class_variables.set(space, name, w_value)
+        self.included_modules = w_other.included_modules[:]
+        self.prepended_modules = w_other.prepended_modules[:]
+        self.mutated()
+        return self
+
     @classdef.method("to_s")
     def method_to_s(self, space):
         name = self.name

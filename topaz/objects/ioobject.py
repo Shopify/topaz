@@ -233,6 +233,8 @@ class W_IOObject(W_Object):
         w_io = space.convert_type(w_arg, space.w_io, "to_io", raise_error=False)
         if w_io is space.w_nil:
             from topaz.objects.fileobject import W_FileObject
+            # A path, not a file descriptor.
+            w_arg = space.newstr_fromstr(Coerce.path(space, w_arg))
             args = [w_arg] if w_mode is None else [w_arg, w_mode]
             w_io = space.send(space.getclassfor(W_FileObject), "new", args)
         assert isinstance(w_io, W_IOObject)

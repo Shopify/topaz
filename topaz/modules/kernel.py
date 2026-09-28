@@ -544,18 +544,25 @@ class Kernel(object):
 
     @moduledef.method("extend")
     @check_frozen()
-    def method_extend(self, space, w_mod):
-        if not space.is_kind_of(w_mod, space.w_module) or space.is_kind_of(w_mod, space.w_class):
-            if space.is_kind_of(w_mod, space.w_class):
-                name = "Class"
-            else:
-                name = space.obj_to_s(space.getclass(w_mod))
-            raise space.error(
-                space.w_TypeError,
-                "wrong argument type %s (expected Module)" % name
-            )
-        space.send(w_mod, "extend_object", [self])
-        space.send(w_mod, "extended", [self])
+    def method_extend(self, space, args_w):
+        if not args_w:
+            raise space.error(space.w_ArgumentError,
+                "wrong number of arguments (given 0, expected 1+)")
+        for w_mod in args_w:
+            if not space.is_kind_of(w_mod, space.w_module) or space.is_kind_of(w_mod, space.w_class):
+                if space.is_kind_of(w_mod, space.w_class):
+                    name = "Class"
+                else:
+                    name = space.obj_to_s(space.getclass(w_mod))
+                raise space.error(
+                    space.w_TypeError,
+                    "wrong argument type %s (expected Module)" % name
+                )
+        for i in range(len(args_w) - 1, -1, -1):
+            w_mod = args_w[i]
+            space.send(w_mod, "extend_object", [self])
+            space.send(w_mod, "extended", [self])
+        return self
 
     @moduledef.method("inspect")
     def method_inspect(self, space):

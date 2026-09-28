@@ -74,30 +74,52 @@ class W_FileObject(W_IOObject):
                 raise error_for_oserror(space, e)
         return space.newint(len(args_w))
 
-    @classdef.method("initialize", filename="path")
-    def method_initialize(self, space, filename, w_mode=None, w_perm_or_opt=None, w_opt=None):
+    @classdef.method("initialize")
+    def method_initialize(self, space, w_path, w_mode=None, w_perm=None, w_opt=None):
+        # File.new(path_or_fd, mode = "r", perm = 0666, **opts). The options
+        # may come in place of the mode or the permissions.
+        w_opts = None
+        if isinstance(w_opt, W_HashObject):
+            w_opts = w_opt
+        elif isinstance(w_perm, W_HashObject):
+            w_opts = w_perm
+            w_perm = None
+        elif isinstance(w_mode, W_HashObject):
+            w_opts = w_mode
+            w_mode = None
+        path_option = None
+        flags = 0
+        if w_opts is not None:
+            w_value = space.send(w_opts, "[]", [space.newsymbol("mode")])
+            if w_value is not space.w_nil and w_mode is None:
+                w_mode = w_value
+            w_value = space.send(w_opts, "[]", [space.newsymbol("flags")])
+            if w_value is not space.w_nil:
+                flags = Coerce.int(space, w_value)
+            w_value = space.send(w_opts, "[]", [space.newsymbol("perm")])
+            if w_value is not space.w_nil and w_perm is None:
+                w_perm = w_value
+            w_value = space.send(w_opts, "[]", [space.newsymbol("path")])
+            if w_value is not space.w_nil:
+                path_option = Coerce.path(space, w_value)
         if w_mode is None:
             w_mode = space.w_nil
-        if w_perm_or_opt is None:
-            w_perm_or_opt = space.w_nil
-        if w_opt is None:
-            w_opt = space.w_nil
-        if isinstance(w_perm_or_opt, W_HashObject):
-            assert w_opt is space.w_nil
-            perm = 0665
-            w_opt = w_perm_or_opt
-        elif w_opt is not space.w_nil:
-            perm = space.int_w(w_perm_or_opt)
-        else:
-            perm = 0665
         mode, encoding = map_filemode(space, w_mode)
-        if w_perm_or_opt is not space.w_nil or w_opt is not space.w_nil:
-            raise space.error(space.w_NotImplementedError, "options hash or permissions for File.new")
+        mode |= flags
+        if space.is_kind_of(w_path, space.w_integer):
+            # Wrap a file descriptor that is already open.
+            self.fd = Coerce.int(space, w_path)
+            self.filename = path_option if path_option is not None else ""
+            return self
+        filename = Coerce.path(space, w_path)
+        perm = 0666
+        if w_perm is not None and w_perm is not space.w_nil:
+            perm = Coerce.int(space, w_perm)
         try:
             self.fd = os.open(filename, mode, perm)
         except OSError as e:
             raise error_for_oserror(space, e)
-        self.filename = filename
+        self.filename = path_option if path_option is not None else filename
         return self
 
     @classdef.singleton_method("dirname", path="path")

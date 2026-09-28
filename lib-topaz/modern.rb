@@ -777,3 +777,32 @@ module ObjectSpace
     nil
   end
 end
+
+class Fiber
+  # Fiber storage (Ruby 3.2). New fibers do not inherit it yet.
+  def self.__topaz_storage
+    respond_to?(:current) ? current.storage : (@__topaz_main_storage ||= {})
+  end
+
+  def self.[](key)
+    __topaz_storage[key]
+  end
+
+  def self.[]=(key, value)
+    storage = __topaz_storage
+    if value.nil?
+      storage.delete(key)
+    else
+      storage[key] = value
+    end
+    value
+  end
+
+  def storage
+    @__topaz_storage ||= {}
+  end
+
+  def storage=(hash)
+    @__topaz_storage = hash.to_h
+  end
+end

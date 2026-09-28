@@ -1031,3 +1031,65 @@ class TestConstantsAndClassVariables(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [
             space.w_NameError, space.w_NameError, 1, space.w_string, space.w_TypeError]
+
+
+class TestTrAndFrozen(BaseTopazTest):
+    def test_tr(self, space):
+        w_res = space.execute("""
+        s = "hello"
+        unchanged = s.tr!("z", "y")
+        return ["hello".tr("el", ""), "hello".tr("a-y", "b-z"), "hello".tr("^l", "*"),
+                "hello".tr("lo", "x"), "hello".tr_s("l", "r"), "he-llo".tr("-", "_"),
+                unchanged, s.upcase, "aabbcc".tr_s("a-c", "x")]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "ho", "ifmmp", "**ll*", "hexxx", "hero", "he_llo", None, "HELLO", "x"]
+
+    def test_frozen_error(self, space):
+        w_res = space.execute("""
+        s = "ABC".freeze
+        r = [(s.upcase! rescue [$!.class.name, $!.message, $!.receiver.equal?(s)])]
+        r << ([1].freeze << 2 rescue $!.class.name)
+        r << (FrozenError < RuntimeError)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["FrozenError", 'can\'t modify frozen String: "ABC"', True], "FrozenError", True]
+
+
+class TestFilesAndFibers(BaseTopazTest):
+    def test_file_new_with_fd_and_options(self, space, tmpdir):
+        path = str(tmpdir.join("f.txt"))
+        w_res = space.execute("""
+        File.write(%r, "hello")
+        f = File.open(%r)
+        g = File.new(f.fileno, autoclose: false, path: "x")
+        r = [g.path, g.read(3), File.new(%r, mode: "r").read]
+        File.open(%r, File::WRONLY | File::APPEND) { |x| x.write("!") }
+        r << File.read(%r) << $stderr.sync << File.fnmatch("*.rb", "a.rb") << File.fnmatch("*", ".x")
+        return r
+        """ % (path, path, path, path, path))
+        assert self.unwrap(space, w_res) == ["x", "hel", "hello", "hello!", True, True, False]
+
+    def test_fiber_storage(self, space):
+        w_res = space.execute("""
+        Fiber[:a] = 1
+        return [Fiber[:a], Fiber[:b], Fiber.current.class]
+        """)
+        assert self.unwrap(space, w_res) == [1, None, space.find_const(space.w_object, "Fiber")]
+
+
+class TestModuleCopies(BaseTopazTest):
+    def test_dup_and_extend(self, space):
+        w_res = space.execute("""
+        k = Kernel.dup
+        k.class_eval { undef_method :to_s }
+        m = Module.new { def foo = 1 }
+        module A1; def a = 1; end
+        module B1; def b = 2; end
+        o = Object.new
+        r = o.extend(A1, B1)
+        return [k.method_defined?(:inspect), k.method_defined?(:to_s), Kernel.method_defined?(:to_s),
+                m.dup.instance_methods(false), r.equal?(o), o.a + o.b]
+        """)
+        assert self.unwrap(space, w_res) == [True, False, True, ["foo"], True, 3]

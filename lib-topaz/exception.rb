@@ -1,3 +1,14 @@
+class FrozenError < RuntimeError
+  def initialize(message = nil, receiver: nil)
+    super(message)
+    @receiver = receiver
+  end
+
+  def receiver
+    @receiver
+  end
+end
+
 class Exception
   # The Ruby 3.4 format.
   def inspect

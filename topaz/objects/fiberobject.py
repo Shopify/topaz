@@ -58,6 +58,16 @@ class W_FiberObject(W_Object):
     def singleton_method_allocate(self, space):
         return W_FiberObject(space, self)
 
+    @classdef.singleton_method("current")
+    def singleton_method_current(self, space):
+        return space.fromcache(State).get_current(space)
+
+    @classdef.method("alive?")
+    def method_alivep(self, space):
+        if self.sthread is None:
+            return space.w_true
+        return space.newbool(not self.sthread.is_empty_handle(self.h))
+
     @classdef.singleton_method("yield")
     def singleton_method_yield(self, space, args_w):
         current = space.fromcache(State).get_current(space)

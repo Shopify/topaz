@@ -87,7 +87,7 @@ class Array
 
   def select!(&block)
     return self.enum_for(:select!) unless block
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     new_arr = self.select(&block)
     if new_arr.size != self.size
       self.replace(new_arr)
@@ -117,7 +117,7 @@ class Array
 
   def delete_if(&block)
     return self.enum_for(:delete_if) unless block
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     i = 0
     c = 0
     sz = self.size
@@ -164,7 +164,7 @@ class Array
   end
 
   def flatten!(level = -1)
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     level = Topaz.convert_type(level, Topaz::Fixnum, :to_int)
     out = self.class.allocate
     if Topaz::Array.flatten(self, out, level)
@@ -253,7 +253,7 @@ class Array
 
   def map!(&block)
     return self.enum_for(:map!) unless block
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     self.each_with_index { |obj, idx| self[idx] = yield(obj) }
     self
   end
@@ -261,7 +261,7 @@ class Array
   alias :collect! :map!
 
   def uniq!(&block)
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     seen = {}
     old_length = self.length
     i = 0
@@ -366,7 +366,7 @@ class Array
   end
 
   def shuffle!
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     (self.length - 1).downto(1) do |idx|
       other = rand(idx + 1)
       self[other], self[idx] = self[idx], self[other]
@@ -435,7 +435,7 @@ class Array
   end
 
   def fill(*args, &block)
-    raise RuntimeError.new("can't modify frozen #{self.class}") if frozen?
+    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
 
     if block
       raise ArgumentError.new("wrong number of arguments (#{args.size} for 0..2)") if args.size > 2

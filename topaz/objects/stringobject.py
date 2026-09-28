@@ -110,42 +110,40 @@ def inspect_string(s):
     return "".join(result)
 
 
-def create_trans_table(source, replacement, inv=False):
-    src = expand_trans_str(source, len(source), inv)
-    repl = expand_trans_str(replacement, len(src))
-    table = [chr(i) for i in xrange(256)]
-    for i, c in enumerate(src):
-        table[ord(c)] = repl[i]
-    return table
+TR_KEEP = 0
+TR_REPLACE = 1
+TR_DELETE = 2
 
 
-def expand_trans_str(source, res_len, inv=False):
-    # check the source for range definitions
-    # and insert the missing characters
-    expanded_source = []
-    char = ""
-    for i in range(res_len):
-        if i < len(source):
-            char = source[i]
-        if char == "-" and 0 < i < len(source) - 1:
-            # Expand the range
-            range_beg = ord(source[i - 1])
-            range_end = ord(source[i + 1])
-            for j in range(range_beg + 1, range_end - 1):
-                expanded_source.append(chr(j))
-        elif char:
-            expanded_source.append(char[0])
-
-    if inv:
-        inverted_source = []
-        # invert the source
-        for i in range(256):
-            if chr(i) not in expanded_source:
-                inverted_source.append(chr(i))
-        return inverted_source
-
-    return expanded_source
-
+def expand_tr_set(space, source, allow_negate):
+    """A tr character set as a list of characters, and whether it is
+    negated (a leading ^ with more after it)."""
+    negate = False
+    start = 0
+    if allow_negate and len(source) > 1 and source[0] == "^":
+        negate = True
+        start = 1
+    chars = []
+    i = start
+    n = len(source)
+    while i < n:
+        c = source[i]
+        if c == "\\" and i + 1 < n:
+            chars.append(source[i + 1])
+            i += 2
+        elif i + 2 < n and source[i + 1] == "-":
+            lo = ord(c)
+            hi = ord(source[i + 2])
+            if lo > hi:
+                raise space.error(space.w_ArgumentError,
+                    'invalid range "%s-%s" in string transliteration' % (c, source[i + 2]))
+            for x in range(lo, hi + 1):
+                chars.append(chr(x))
+            i += 3
+        else:
+            chars.append(c)
+            i += 1
+    return chars, negate
 
 
 def utf8_char_length(string, pos):
@@ -530,34 +528,56 @@ class W_StringObject(W_Object):
         self.strategy.clear(self)
 
     def tr_trans(self, space, source, replacement, squeeze):
-        change_made = False
+        """String#tr and #tr_s: the translated characters, or None when
+        nothing changes."""
+        src, negate = expand_tr_set(space, source, True)
+        repl, _ = expand_tr_set(space, replacement, False)
+        # kinds[c] is KEEP, REPLACE (with chars[c]) or DELETE.
+        kinds = [TR_KEEP] * 256
+        chars = ["\0"] * 256
+        if negate:
+            present = [False] * 256
+            for c in src:
+                present[ord(c)] = True
+            for i in range(256):
+                if not present[i]:
+                    if repl:
+                        kinds[i] = TR_REPLACE
+                        chars[i] = repl[len(repl) - 1]
+                    else:
+                        kinds[i] = TR_DELETE
+        else:
+            for i in range(len(src)):
+                c = ord(src[i])
+                if not repl:
+                    kinds[c] = TR_DELETE
+                else:
+                    kinds[c] = TR_REPLACE
+                    chars[c] = repl[i] if i < len(repl) else repl[len(repl) - 1]
         string = space.str_w(self)
         new_string = []
-        is_negative_set = len(source) > 1 and source[0] == "^"
-        if is_negative_set:
-            source = source[1:]
-
-        trans_table = create_trans_table(source, replacement, is_negative_set)
-
-        if squeeze:
-            last_repl = ""
-            for char in string:
-                repl = trans_table[ord(char)]
-                if last_repl == repl:
-                    continue
-                if repl != char:
-                    last_repl = repl
-                    if not change_made:
-                        change_made = True
-                new_string.append(repl)
-        else:
-            for char in string:
-                repl = trans_table[ord(char)]
-                if not change_made and repl != char:
-                    change_made = True
-                new_string.append(repl)
-
-        return new_string if change_made else None
+        changed = False
+        has_last = False
+        last = "\0"
+        for char in string:
+            kind = kinds[ord(char)]
+            if kind == TR_KEEP:
+                new_string.append(char)
+                has_last = False
+                continue
+            if kind == TR_DELETE:
+                changed = True
+                continue
+            repl_char = chars[ord(char)]
+            if squeeze and has_last and repl_char == last:
+                changed = True
+                continue
+            if repl_char != char:
+                changed = True
+            new_string.append(repl_char)
+            has_last = True
+            last = repl_char
+        return new_string if changed else None
 
     @classdef.singleton_method("allocate")
     def singleton_method_allocate(self, space):
@@ -1130,29 +1150,35 @@ class W_StringObject(W_Object):
 
     @classdef.method("tr", source="str", replacement="str")
     def method_tr(self, space, source, replacement):
-        string = self.copy(space)
         new_string = self.tr_trans(space, source, replacement, False)
-        return space.newstr_fromchars(new_string) if new_string else string
+        if new_string is None:
+            return self.copy(space)
+        return space.newstr_fromchars(new_string)
 
     @classdef.method("tr!", source="str", replacement="str")
     @check_frozen()
     def method_tr_i(self, space, source, replacement):
         new_string = self.tr_trans(space, source, replacement, False)
+        if new_string is None:
+            return space.w_nil
         self.replace(space, new_string)
-        return self if new_string else space.w_nil
+        return self
 
     @classdef.method("tr_s", source="str", replacement="str")
     def method_tr_s(self, space, source, replacement):
-        string = self.copy(space)
         new_string = self.tr_trans(space, source, replacement, True)
-        return space.newstr_fromchars(new_string) if new_string else string
+        if new_string is None:
+            return self.copy(space)
+        return space.newstr_fromchars(new_string)
 
     @classdef.method("tr_s!", source="str", replacement="str")
     @check_frozen()
     def method_tr_s_i(self, space, source, replacement):
         new_string = self.tr_trans(space, source, replacement, True)
+        if new_string is None:
+            return space.w_nil
         self.replace(space, new_string)
-        return self if new_string else space.w_nil
+        return self
 
     @classdef.method("=~")
     def method_match_operator(self, space, w_obj):
