@@ -1969,3 +1969,23 @@ class TestGlobalAlias(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == [1, 2, "x", None]
+
+
+class TestClassVariablesInSingletonClassBodies(BaseTopazTest):
+    def test_class_variables_of_the_enclosing_module(self, space):
+        w_res = space.execute("""
+        module F
+          @@a = {}
+          class << self
+            def singleton_method_added(n) = (@@a[n] = true)
+            def got = @@a
+            def put(x) = (@@b = x)
+          end
+          def self.later = 1
+          def self.b = @@b
+        end
+        F.put(5)
+        return [F.got.keys, F.b, F.class_variable_get(:@@b)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["singleton_method_added", "got", "put", "later", "b"], 5, 5]

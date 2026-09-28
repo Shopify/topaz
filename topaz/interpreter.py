@@ -302,10 +302,24 @@ class Interpreter(object):
         else:
             frame.push(space.w_nil)
 
+    def _class_var_base(self, space, frame, w_module):
+        """Class variables are not looked up in singleton classes: code in
+        `class << self` uses the enclosing class's."""
+        if not (isinstance(w_module, W_ClassObject) and w_module.is_singleton):
+            return w_module
+        scope = frame.lexical_scope
+        while scope is not None:
+            w_mod = scope.w_mod
+            if not (isinstance(w_mod, W_ClassObject) and w_mod.is_singleton):
+                return w_mod
+            scope = scope.backscope
+        return w_module
+
     def LOAD_CLASS_VAR(self, space, bytecode, frame, pc, idx):
         name = space.symbol_w(bytecode.consts_w[idx])
         w_module = frame.pop()
         assert isinstance(w_module, W_ModuleObject)
+        w_module = self._class_var_base(space, frame, w_module)
         w_value = space.find_class_var(w_module, name)
         frame.push(w_value)
 
@@ -314,6 +328,7 @@ class Interpreter(object):
         w_value = frame.pop()
         w_module = frame.pop()
         assert isinstance(w_module, W_ModuleObject)
+        w_module = self._class_var_base(space, frame, w_module)
         space.set_class_var(w_module, name, w_value)
         frame.push(w_value)
 
