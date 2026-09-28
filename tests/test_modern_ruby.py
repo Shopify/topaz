@@ -1804,3 +1804,18 @@ class TestBCryptExt(BaseTopazTest):
         if res == "no_libcrypt":
             pytest.skip("libcrypt is not available")
         assert res == ["$2a$04$abcdefghijklmnopqrstuu2r9OfJnfCsdneAXAGHnS4UpFFP8WIrW", "$2a$05$", 29, None]
+
+
+class TestAutoloadShadowing(BaseTopazTest):
+    def test_autoload_shadows_an_inherited_constant(self, space, tmpdir):
+        f = tmpdir.join("b_conf.rb")
+        f.write("class B; class Conf; def who = :b; end; end\n")
+        w_res = space.execute("""
+        class A; class Conf; def who = :a; end; end
+        class B < A
+          autoload :Conf, %r
+          def self.make = B::Conf.new.who
+        end
+        return [B.autoload?(:Conf).nil?, B.make, A::Conf.new.who]
+        """ % (str(f),))
+        assert self.unwrap(space, w_res) == [False, "b", "a"]

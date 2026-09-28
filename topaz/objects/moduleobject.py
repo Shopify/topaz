@@ -1076,7 +1076,9 @@ class W_ModuleObject(W_RootObject):
     def method_autoload(self, space, name, path):
         if len(path) == 0:
             raise space.error(space.w_ArgumentError, "empty file name")
-        if not self.find_const(space, name):
+        # Only a constant of this module's own stops the autoload: one
+        # inherited from a superclass is shadowed by it.
+        if self.find_local_const(space, name, autoload=False) is None:
             space.set_const(self, name, W_Autoload(space, path))
         return space.w_nil
 
