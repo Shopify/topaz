@@ -252,7 +252,10 @@ class Interpreter(object):
         space.getexecutioncontext().last_instr = pc
         w_name = bytecode.consts_w[idx]
         w_scope = frame.pop()
-        if space.is_true(space.send(w_scope, "const_defined?", [w_name])):
+        # `defined?(Mod::Name)` looks where `Mod::Name` does (not in
+        # Object, for a module), without autoloading.
+        if (isinstance(w_scope, W_ModuleObject) and
+                w_scope.find_scoped_const(space, space.symbol_w(w_name), autoload=False) is not None):
             frame.push(space.newstr_fromstr("constant"))
         else:
             frame.push(space.w_nil)

@@ -2294,3 +2294,14 @@ class TestRangeStepRational(BaseTopazTest):
         return [((0r..1r) % 0.25r).map(&:to_s), (1..2).step(1/2r).map(&:to_s), (1..10).step(3).to_a]
         """)
         assert self.unwrap(space, w_res) == [["0/1", "1/4", "1/2", "3/4", "1/1"], ["1", "3/2", "2/1"], [1, 4, 7, 10]]
+
+
+class TestDefinedScopedConstant(BaseTopazTest):
+    def test_defined_scoped_constant_skips_object(self, space):
+        w_res = space.execute("""
+        module M; end
+        class K; end
+        module N; R = defined?(String); end
+        return [defined?(M::Struct), defined?(K::Struct), defined?(Object::String), N::R]
+        """)
+        assert self.unwrap(space, w_res) == [None, None, "constant", "constant"]

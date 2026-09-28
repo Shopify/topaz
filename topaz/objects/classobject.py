@@ -76,14 +76,14 @@ class W_ClassObject(W_ModuleObject):
             w_res = self.superclass.find_const(space, name, autoload=autoload)
         return w_res
 
-    def find_scoped_const(self, space, name):
+    def find_scoped_const(self, space, name, autoload=True):
         # `Klass::Name` looks in the class and its ancestors, but only
         # reaches Object's constants for Object itself.
         w_cls = self
         while w_cls is not None:
             if w_cls is space.w_object and self is not space.w_object:
                 return None
-            w_res = W_ModuleObject.find_included_const(w_cls, space, name, autoload=True)
+            w_res = W_ModuleObject.find_included_const(w_cls, space, name, autoload=autoload)
             if w_res is not None:
                 return w_res
             w_cls = w_cls.superclass

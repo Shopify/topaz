@@ -309,10 +309,10 @@ class W_ModuleObject(W_RootObject):
         else:
             return w_res
 
-    def find_scoped_const(self, space, name):
+    def find_scoped_const(self, space, name, autoload=True):
         """`Mod::Name`: the module and what it includes, but not Object
         (Ruby 2.5 dropped the top-level fallback)."""
-        return self.find_included_const(space, name, autoload=True)
+        return self.find_included_const(space, name, autoload=autoload)
 
     @jit.unroll_safe
     def find_included_const(self, space, name, autoload=True):
