@@ -1329,6 +1329,30 @@ class W_StringObject(W_Object):
             raise space.error(space.w_ArgumentError, "wrong number of arguments")
         return self.gsub_main(space, w_pattern, w_replacement, block, first_only=True)
 
+    # gsub! and sub! are here, not in Ruby, so that the block and the
+    # caller see the matches in $~.
+    @classdef.method("gsub!")
+    @check_frozen()
+    def method_gsub_bang(self, space, w_pattern, w_replacement=None, block=None):
+        w_result = self.gsub_main(space, w_pattern, w_replacement, block, first_only=False)
+        return self._replace_if_changed(space, w_result)
+
+    @classdef.method("sub!")
+    @check_frozen()
+    def method_sub_bang(self, space, w_pattern, w_replacement=None, block=None):
+        if w_replacement is None and block is None:
+            raise space.error(space.w_ArgumentError, "wrong number of arguments")
+        w_result = self.gsub_main(space, w_pattern, w_replacement, block, first_only=True)
+        return self._replace_if_changed(space, w_result)
+
+    def _replace_if_changed(self, space, w_result):
+        assert isinstance(w_result, W_StringObject)
+        if space.str_w(w_result) == space.str_w(self):
+            return space.w_nil
+        self.strategy = w_result.strategy
+        self.str_storage = w_result.strategy.copy(w_result.str_storage)
+        return self
+
     def gsub_main(self, space, w_pattern, w_replacement, block, first_only):
         if w_replacement is None and block is None:
             raise space.error(

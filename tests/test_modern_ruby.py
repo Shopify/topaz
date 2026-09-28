@@ -2054,3 +2054,17 @@ class TestDirGlobBase(BaseTopazTest):
                 Dir.glob([base + "/*.txt", base + "/a/*.rb"]).map { |f| File.basename(f) }]
         """ % (str(tmpdir),))
         assert self.unwrap(space, w_res) == [["a/b/y.rb", "a/x.rb"], ["a", "z.txt"], ["z.txt", "x.rb"]]
+
+
+class TestGsubBangLastMatch(BaseTopazTest):
+    def test_gsub_bang_block_sees_the_match(self, space):
+        w_res = space.execute("""
+        s = +"foo_bar/baz"
+        r = [s.gsub!(/(?:_|(\\/))([a-z\\d]*)/i) { w = $2; $1 ? "::#{w.capitalize}" : w.capitalize }]
+        t = +"abc"
+        r << t.sub!(/(b)/) { $1.upcase }.dup << t.gsub!(/z/, "") << t.sub!("a", "A")
+        "x".gsub!(/(x)/, "y")
+        r << $1
+        return r
+        """)
+        assert self.unwrap(space, w_res) == ["fooBar::Baz", "aBc", None, "ABc", "x"]

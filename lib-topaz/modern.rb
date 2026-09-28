@@ -242,17 +242,8 @@ module Signal
 end
 
 class String
-  def gsub!(*args, &block)
-    result = gsub(*args, &block)
-    return nil if result == self
-    replace(result)
-  end
-
-  def sub!(*args, &block)
-    result = sub(*args, &block)
-    return nil if result == self
-    replace(result)
-  end
+  # gsub! and sub! are in RPython (stringobject.py), so that they set the
+  # caller's $~.
 
   def lstrip
     i = 0
