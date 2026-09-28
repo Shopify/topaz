@@ -182,7 +182,8 @@ class TestFixnumObject(BaseTopazTest):
         assert space.execute("return 1 <= 1") is space.w_true
         assert space.execute("return 1 <= 1.1") is space.w_true
         assert space.execute("return 1 <= 0.9") is space.w_false
-        assert space.execute("return 1 <= '1.1'") is space.w_true
+        with self.raises(space, "ArgumentError", "comparison of Integer with String failed"):
+            space.execute("1 <= '1.1'")
         with self.raises(space, "ArgumentError", "comparison of Integer with String failed"):
             space.execute("1 <= 'a'")
 
@@ -324,8 +325,8 @@ class TestFixnumObject(BaseTopazTest):
     def test_pow(self, space):
         w_res = space.execute("return 2 ** 6")
         assert self.unwrap(space, w_res) == 64
-        w_res = space.execute("return 2 ** -6")
-        assert self.unwrap(space, w_res) == 1.0 / 64
+        w_res = space.execute("return (2 ** -6) == Rational(1, 64)")
+        assert w_res is space.w_true
         w_res = space.execute("return 4 ** 0.5")
         assert self.unwrap(space, w_res) == 2.0
         w_res = space.execute("return 4 ** -0.5")

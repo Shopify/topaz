@@ -5,7 +5,7 @@ import sys
 from rpython.rlib.objectmodel import compute_hash
 from rpython.rlib.rarithmetic import ovfcheck_float_to_int
 from rpython.rlib.rbigint import rbigint
-from rpython.rlib.rfloat import (formatd, DTSF_ADD_DOT_0, DTSF_STR_PRECISION,
+from rpython.rlib.rfloat import (formatd, DTSF_ADD_DOT_0, DTSF_STR_PRECISION, DTSF_ALT,
     NAN, INFINITY, isfinite, round_away, round_double)
 
 from topaz.error import RubyError
@@ -14,6 +14,65 @@ from topaz.objects.exceptionobject import W_ArgumentError
 from topaz.objects.objectobject import W_RootObject
 from topaz.objects.numericobject import W_NumericObject
 
+
+
+def float_to_s(value):
+    """Float#to_s: the shortest digits that read back as value, in fixed
+    notation for exponents from -4 to 15 and "d.ddde+XX" otherwise."""
+    if value == 0.0:
+        if math.copysign(1.0, value) < 0:
+            return "-0.0"
+        return "0.0"
+    sign = ""
+    if value < 0:
+        sign = "-"
+        value = -value
+    r = formatd(value, "r", 0)
+    exp = 0
+    epos = r.find("e")
+    if epos >= 0:
+        exp = int(r[epos + 1:])
+        assert epos >= 0
+        r = r[:epos]
+    dot = r.find(".")
+    if dot >= 0:
+        intpart = r[:dot]
+        frac = r[dot + 1:]
+    else:
+        intpart = r
+        frac = ""
+    digits = intpart + frac
+    decpt = len(intpart) + exp
+    start = 0
+    while start < len(digits) - 1 and digits[start] == "0":
+        start += 1
+        decpt -= 1
+    stop = len(digits)
+    while stop > start + 1 and digits[stop - 1] == "0":
+        stop -= 1
+    assert start >= 0 and stop >= start
+    digits = digits[start:stop]
+    if -4 < decpt <= 15:
+        if decpt <= 0:
+            s = "0." + "0" * (-decpt) + digits
+        elif decpt >= len(digits):
+            s = digits + "0" * (decpt - len(digits)) + ".0"
+        else:
+            assert decpt >= 0
+            s = digits[:decpt] + "." + digits[decpt:]
+    else:
+        e = decpt - 1
+        rest = digits[1:]
+        if not rest:
+            rest = "0"
+        esign = "+" if e >= 0 else "-"
+        if e < 0:
+            e = -e
+        estr = str(e)
+        if len(estr) < 2:
+            estr = "0" + estr
+        s = digits[0] + "." + rest + "e" + esign + estr
+    return sign + s
 
 class FloatStorage(object):
     def __init__(self, space):
@@ -112,11 +171,19 @@ class W_FloatObject(W_RootObject):
         elif math.isnan(self.floatvalue):
             return space.newstr_fromstr("NaN")
         else:
-            return space.newstr_fromstr(formatd(self.floatvalue, "g", DTSF_STR_PRECISION, DTSF_ADD_DOT_0))
+            return space.newstr_fromstr(float_to_s(self.floatvalue))
 
     @classdef.method("to_f")
     def method_to_f(self, space):
         return self
+
+    @classdef.method("__topaz_formatd", code="str", precision="int", alt="bool")
+    def method_topaz_formatd(self, space, code, precision, alt=False):
+        """For Kernel#format: %f, %e and %g of this float."""
+        if not code or code[0] not in "fegr" or precision < 0:
+            raise space.error(space.w_ArgumentError, "invalid float format")
+        return space.newstr_fromstr(
+            formatd(self.floatvalue, code[0], precision, DTSF_ALT if alt else 0))
 
     @classdef.method("to_i")
     def method_to_i(self, space):
@@ -171,6 +238,8 @@ class W_FloatObject(W_RootObject):
     def method_eq(self, space, w_other):
         if space.is_kind_of(w_other, space.w_float):
             return space.newbool(self.floatvalue == space.float_w(w_other))
+        if space.is_kind_of(w_other, space.w_fixnum):
+            return space.newbool(self.floatvalue == float(space.int_w(w_other)))
 
         try:
             return W_NumericObject.retry_binop_coercing(space, self, w_other, "==")

@@ -139,6 +139,7 @@ module Kernel
   def to_enum(method = :each, *args)
     Enumerator.new(self, method, *args)
   end
+  ruby2_keywords :to_enum
 
   alias :enum_for :to_enum
 
@@ -204,11 +205,7 @@ module Kernel
 end
 
 module Kernel
-  def sprintf(format, *args)
-    format % args
-  end
-  alias format sprintf
-  private :sprintf, :format
+  # sprintf and format are in format.rb.
 end
 
 class LoadError

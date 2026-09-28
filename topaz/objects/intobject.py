@@ -260,8 +260,13 @@ class W_FixnumObject(W_RootObject):
                     [w_other]
                 )
             return space.newint(ix)
+        elif exp == 0:
+            return space.newint(1)
         else:
-            return space.send(space.newfloat(float(temp)), "**", [w_other])
+            # A negative power is a Rational: 2 ** -2 is (1/4).
+            w_positive = space.send(self, "**", [space.newint(-exp)])
+            w_rational = space.send(space.w_kernel, "Rational", [space.newint(1), w_positive])
+            return w_rational
 
     @classdef.method("divmod")
     def method_divmod(self, space, w_other):
@@ -277,8 +282,9 @@ class W_FixnumObject(W_RootObject):
                     "divided by 0"
                 )
             mod = space.int_w(self.method_mod_int_impl(space, y))
-            div = (self.intvalue - mod) / y
-            return space.newarray([space.newint(int(round_away(div))), space.newfloat(mod)])
+            # x - mod is a multiple of y, so this division is exact.
+            div = (self.intvalue - mod) // y
+            return space.newarray([space.newint(div), space.newint(mod)])
         else:
             raise space.error(
                 space.w_TypeError,
@@ -422,10 +428,11 @@ class W_FixnumObject(W_RootObject):
 
     @classdef.method("coerce")
     def method_coerce(self, space, w_other):
-        if space.getclass(w_other) is space.getclass(self):
+        if space.is_kind_of(w_other, space.w_integer):
             return space.newarray([w_other, self])
-        else:
-            return space.newarray([space.send(self, "Float", [w_other]), self])
+        # Anything else, as floats.
+        return space.newarray([space.send(self, "Float", [w_other]),
+                               space.newfloat(float(self.intvalue))])
 
     @classdef.method("chr")
     def method_chr(self, space):

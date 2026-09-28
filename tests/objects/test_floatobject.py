@@ -88,7 +88,8 @@ class TestFloatObject(BaseTopazTest):
         assert space.execute("return 1.0 <= 1") is space.w_true
         assert space.execute("return 1.1 <= 1.1") is space.w_true
         assert space.execute("return 1.1 <= 0.9") is space.w_false
-        assert space.execute("return 1.0 <= '1.1'") is space.w_true
+        with self.raises(space, "ArgumentError", "comparison of Float with String failed"):
+            space.execute("1.0 <= '1.1'")
         with self.raises(space, "ArgumentError", "comparison of Float with String failed"):
             space.execute("1.0 <= 'a'")
 
@@ -101,7 +102,8 @@ class TestFloatObject(BaseTopazTest):
         assert space.execute("return 1.0 >= 1") is space.w_true
         assert space.execute("return 1.1 >= 1.1") is space.w_true
         assert space.execute("return 1.1 >= 0.9") is space.w_true
-        assert space.execute("return 1.0 >= '1.1'") is space.w_false
+        with self.raises(space, "ArgumentError", "comparison of Float with String failed"):
+            space.execute("1.0 >= '1.1'")
         with self.raises(space, "ArgumentError", "comparison of Float with String failed"):
             space.execute("1.0 >= 'a'")
 

@@ -1139,3 +1139,48 @@ class TestRegexpClasses(BaseTopazTest):
                 "1.5" =~ /^(?:[-+]?([0-9][0-9_,]*)?\\.[0-9]*(?# base 10))$/x]
         """)
         assert self.unwrap(space, w_res) == [None, 0, 0, None, 0, 0, None, 0]
+
+
+class TestNumbers(BaseTopazTest):
+    def test_float_to_s(self, space):
+        w_res = space.execute("""
+        return [22.0 / 7, 0.1 + 0.2, 1e20, 1.0e-5, 1e15, 1e14, 0.0001, -0.0, 5e-324, 2.5].map(&:to_s)
+        """)
+        assert self.unwrap(space, w_res) == [
+            "3.142857142857143", "0.30000000000000004", "1.0e+20", "1.0e-05", "1.0e+15",
+            "100000000000000.0", "0.0001", "-0.0", "5.0e-324", "2.5"]
+
+    def test_integer_power_divmod_and_coercion(self, space):
+        w_res = space.execute("""
+        return [10 ** 0, (2 ** -2).inspect, 7.divmod(2), -7.divmod(2), (1 + Rational(1, 2)).inspect,
+                (3 < Rational(7, 2)), 1.coerce(2.5), 2.0 == 2, (1 + "x" rescue $!.message),
+                (1 < "x" rescue $!.message)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            1, "(1/4)", [3, 1], [-4, 1], "(3/2)", True, [2.5, 1.0], True,
+            "String can't be coerced into Integer", "comparison of Integer with String failed"]
+
+    def test_rational(self, space):
+        w_res = space.execute("""
+        return [Rational(1, 3) + Rational(1, 6), Rational(7, 2).round, Rational(-7, 2).round,
+                Rational(5, 2).round(half: :even), Rational(1, 3).round(2), 0.75.to_r,
+                Rational("1/3"), 0.333.rationalize, Rational(7, 3).divmod(Rational(1, 2)),
+                1/2r].map(&:inspect)
+        """)
+        assert self.unwrap(space, w_res) == [
+            "(1/2)", "4", "-4", "2", "(33/100)", "(3/4)", "(1/3)", "(333/1000)",
+            "[4, (1/3)]", "(1/2)"]
+
+    def test_format(self, space):
+        w_res = space.execute("""
+        return [format("%5d|%-5d|%05d|%+d|%.3d|%x|%#X|%o|%b|%08.3f|%e|%g|%-6s|%.2s|%p|%c|%%",
+                       42, 42, 42, 42, 7, 255, 255, 8, 5, 3.14159, 12345.678, 0.0001234, "hi",
+                       "hello", nil, 65),
+                format("%x|%o", -255, -8), format("%<a>s-%<b>05.1f", a: "x", b: 2.25),
+                format("%{a}/%{b}", a: 1, b: 2), format("%*d", 5, 1), format("%2$s %1$s", "a", "b"),
+                "%.2f" % 2.675, "%.1f" % 0.05, "%.1f" % 0.25, "%.20f" % 2.675, "%s and %s" % ["a", "b"]]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "   42|42   |00042|+42|007|ff|0XFF|10|101|0003.142|1.234568e+04|0.0001234|hi    |he|nil|A|%",
+            "..f01|..70", "x-002.2", "1/2", "    1", "b a", "2.68", "0.1", "0.2",
+            "2.67499999999999982236", "a and b"]
