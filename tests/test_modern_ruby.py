@@ -1143,6 +1143,26 @@ class TestRegexpClasses(BaseTopazTest):
         assert self.unwrap(space, w_res) == [None, 0, 0, None, 0, 0, None, 0]
 
 
+    def test_hex_unicode_and_control_escapes(self, space):
+        w_res = space.execute("""
+        return [/[\\x01-\\x03]/.match("a\\x02")&.begin(0), /\\x41/.match("zA")&.begin(0),
+                /[^"\\\\\\x00-\\x1f]*/n.match("abc\\"")[0], /\\u{41}\\cA/.match("xA\\x01")&.begin(0),
+                /\\e/.match("a\\e")&.begin(0), /\\u00e9/.match("caf\\u00e9")&.begin(0)]
+        """)
+        assert self.unwrap(space, w_res) == [1, 1, "abc", 1, 1, 3]
+
+    def test_sets_with_characters_beyond_ascii(self, space):
+        w_res = space.execute("""
+        p1 = /[\\/"\\\\\\x0-\\x1f\\u2028-\\u2029]/
+        p3 = /[^\\u00e9a]+/
+        p4 = /[\\u00e0-\\u00ff]+/
+        return [p1.match("ab\\u2029c")&.begin(0), p1.match("abc"), p3.match("bc\\u00e9")&.[](0),
+                p4.match("x\\u00e0\\u00e9\\u00ffz")&.[](0) == "\\u00e0\\u00e9\\u00ff", p4.match("x\\u0101"),
+                "a\\u2028b".gsub(/[\\u2028\\u2029]/, "!"), p3.match("\\u00e9\\u00e9")]
+        """)
+        assert self.unwrap(space, w_res) == [2, None, "bc", True, None, "a!b", None]
+
+
 class TestNumbers(BaseTopazTest):
     def test_float_to_s(self, space):
         w_res = space.execute("""
@@ -1495,3 +1515,4 @@ class TestStringScanner(BaseTopazTest):
             "3", ".", "14", 4, None, False, 1, "is", 5, "is pi,", "3.14 is pi",
             " hello", "hello", ["hello"], " ", "worl", False, "world\n", True,
             18, 11, True, "#<StringScanner fin>", "b", "c", 1, -42, 1, 31]
+

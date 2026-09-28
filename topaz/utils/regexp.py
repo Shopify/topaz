@@ -424,6 +424,22 @@ class Property(RegexpBase):
         ctx.emit(self.value if self.positive else self.value ^ 1)
 
 
+class CodePoint(RegexpBase):
+    """A \\u escape beyond ASCII in a set, while the set is parsed."""
+    def __init__(self, value):
+        RegexpBase.__init__(self)
+        self.value = value
+
+
+class WideRange(RegexpBase):
+    """Set members from lower to upper, some beyond ASCII, while the set
+    is parsed."""
+    def __init__(self, lower, upper):
+        RegexpBase.__init__(self)
+        self.lower = lower
+        self.upper = upper
+
+
 class Range(RegexpBase):
     def __init__(self, lower, upper, positive=True, case_insensitive=False, zerowidth=False):
         RegexpBase.__init__(self, positive=positive, case_insensitive=case_insensitive, zerowidth=zerowidth)
@@ -777,6 +793,10 @@ class LookAround(RegexpBase):
         RegexpBase.__init__(self, positive=positive)
         self.subpattern = subpattern
         self.behind = behind
+
+    def is_empty(self):
+        # Zero-width, whatever it looks at.
+        return True
 
     def getwidth(self):
         return 0, 0
@@ -1302,9 +1322,124 @@ def _parse_set(source, info):
     finally:
         source.ignore_space = saved_ignore
 
+    wide = []
+    if isinstance(item, WideRange):
+        wide.append(item)
+        item = None
+    elif isinstance(item, SetUnion):
+        narrow = []
+        for member in item.items:
+            if isinstance(member, WideRange):
+                wide.append(member)
+            else:
+                narrow.append(member)
+        if wide:
+            item = SetUnion(info, narrow) if narrow else None
+    if wide:
+        return _make_wide_set(info, item, wide, negate)
+    assert item is not None
     if negate:
         item = item.with_flags(positive=not item.positive)
     return item.with_flags(case_insensitive=info.flags & IGNORE_CASE)
+
+
+def _make_wide_set(info, narrow, wide, negate):
+    """A set with members beyond ASCII, which match as UTF-8 byte
+    sequences: the ASCII part stays a set, the rest become alternatives.
+    A negated set is a negative lookahead for those before the set."""
+    alternatives = []
+    for member in wide:
+        lower = member.lower
+        if lower < 0x80:
+            upper = min(member.upper, 0x7f)
+            ascii = Range(lower, upper) if lower != upper else Character(lower)
+            if narrow is None:
+                narrow = SetUnion(info, [ascii])
+            else:
+                narrow = SetUnion(info, [narrow, ascii])
+            lower = 0x80
+        if lower > member.upper:
+            continue
+        for ranges in _utf8_sequences(lower, member.upper):
+            items = []
+            for byte_lower, byte_upper in ranges:
+                if byte_lower == byte_upper:
+                    items.append(Character(byte_lower))
+                else:
+                    items.append(SetUnion(info, [Range(byte_lower, byte_upper)]))
+            alternatives.append(Sequence(items))
+    if negate:
+        # Any one character, ASCII outside the narrow part or a whole UTF-8
+        # sequence, that is not one of the alternatives.
+        ascii = SetUnion(info, [Range(0, 0x7f)])
+        if narrow is not None:
+            ascii = SetIntersection(info, [narrow.with_flags(positive=False), ascii])
+        continuation = SetUnion(info, [Range(0x80, 0xbf)])
+        character = Branch([
+            ascii,
+            Sequence([SetUnion(info, [Range(0xc0, 0xdf)]), continuation]),
+            Sequence([SetUnion(info, [Range(0xe0, 0xef)]), continuation,
+                      continuation]),
+            Sequence([SetUnion(info, [Range(0xf0, 0xf7)]), continuation,
+                      continuation, continuation]),
+        ])
+        if not alternatives:
+            return character
+        return Sequence([
+            LookAround(Branch(alternatives), behind=False, positive=False),
+            character,
+        ])
+    if narrow is not None:
+        alternatives.insert(0, narrow)
+    if len(alternatives) == 1:
+        return alternatives[0]
+    return Branch(alternatives)
+
+
+def _utf8_encode(value):
+    if value < 0x80:
+        return [value]
+    if value < 0x800:
+        return [0xc0 | (value >> 6), 0x80 | (value & 0x3f)]
+    if value < 0x10000:
+        return [0xe0 | (value >> 12), 0x80 | ((value >> 6) & 0x3f),
+                0x80 | (value & 0x3f)]
+    return [0xf0 | (value >> 18), 0x80 | ((value >> 12) & 0x3f),
+            0x80 | ((value >> 6) & 0x3f), 0x80 | (value & 0x3f)]
+
+
+def _utf8_sequences(lower, upper):
+    """The UTF-8 encodings of lower..upper as a list of byte-range
+    sequences, each a list of (lower, upper) byte pairs."""
+    result = []
+    for low_bound, high_bound in [(0x80, 0x7ff), (0x800, 0xffff),
+                                  (0x10000, 0x10ffff)]:
+        a = max(lower, low_bound)
+        b = min(upper, high_bound)
+        if a <= b:
+            _utf8_split(a, b, result)
+    return result
+
+
+def _utf8_split(lower, upper, result):
+    n = len(_utf8_encode(lower))
+    for i in range(1, n):
+        mask = (1 << (6 * i)) - 1
+        if lower & ~mask != upper & ~mask:
+            if lower & mask != 0:
+                _utf8_split(lower, lower | mask, result)
+                _utf8_split((lower | mask) + 1, upper, result)
+                return
+            if upper & mask != mask:
+                _utf8_split(lower, (upper & ~mask) - 1, result)
+                _utf8_split(upper & ~mask, upper, result)
+                return
+    lower_bytes = _utf8_encode(lower)
+    upper_bytes = _utf8_encode(upper)
+    ranges = []
+    for i in range(len(lower_bytes)):
+        ranges.append((lower_bytes[i], upper_bytes[i]))
+    result.append(ranges)
 
 
 def _parse_set_intersect(source, info):
@@ -1332,6 +1467,17 @@ def _parse_set_implicit_union(source, info):
 
 def _parse_set_member(source, info):
     start = _parse_set_item(source, info)
+    if isinstance(start, CodePoint):
+        here = source.pos
+        if source.match("-") and not source.match("]"):
+            end = _parse_set_item(source, info)
+            if isinstance(end, Character) or isinstance(end, CodePoint):
+                if start.value > end.value:
+                    raise RegexpError("bad character range")
+                return WideRange(start.value, end.value)
+            raise RegexpError("bad character range")
+        source.pos = here
+        return WideRange(start.value, start.value)
     if (not isinstance(start, Character) or not start.positive or
             not source.match("-")):
         return start
@@ -1341,6 +1487,10 @@ def _parse_set_member(source, info):
         source.pos = here
         return SetUnion(info, [start, Character(ord("-"))])
     end = _parse_set_item(source, info)
+    if isinstance(end, CodePoint):
+        if start.value > end.value:
+            raise RegexpError("bad character range")
+        return WideRange(start.value, end.value)
     if not isinstance(end, Character) or not end.positive:
         return SetUnion(info, [start, Character(ord("-")), end])
     if start.value > end.value:
@@ -1397,6 +1547,23 @@ def _parse_escape(source, info, in_set):
             Range(ord("0"), ord("9")), Range(ord("a"), ord("f")),
             Range(ord("A"), ord("F")),
         ], positive=(ch == "h"))
+    elif ch == "x":
+        return make_character(info, _parse_hex_digits(source, 2), in_set)
+    elif ch == "u":
+        if source.match("{"):
+            value = _parse_hex_digits(source, 8)
+            if not source.match("}"):
+                raise RegexpError("invalid Unicode escape")
+        else:
+            value = _parse_hex_digits(source, 4)
+        return _make_code_point(info, value, in_set)
+    elif ch == "c" or (ch == "C" and source.match("-")):
+        c = source.get()
+        if not c:
+            raise RegexpError("end pattern at control")
+        return make_character(info, ord(c[0]) & 0x1f, in_set)
+    elif ch == "e":
+        return make_character(info, 0x1b, in_set)
     elif ch.isalpha():
         if not in_set:
             if ch in POSITION_ESCAPES:
@@ -1545,6 +1712,44 @@ def _parse_octal_escape(source, info, digits, in_set):
     for digit in digits:
         value = value * 8 + (ord(digit) - ord("0"))
     return make_character(info, value & 0xff, in_set)
+
+
+def _parse_hex_digits(source, max_digits):
+    value = 0
+    count = 0
+    while count < max_digits:
+        here = source.pos
+        c = source.get()
+        if c and c in "0123456789abcdefABCDEF":
+            value = value * 16 + int(c, 16)
+            count += 1
+        else:
+            source.pos = here
+            break
+    if count == 0:
+        raise RegexpError("invalid hex escape")
+    return value
+
+
+def _make_code_point(info, value, in_set):
+    """A character given by code point, matched as its UTF-8 bytes. In a set
+    only single-byte characters can be expressed."""
+    if value < 0x80:
+        return make_character(info, value, in_set)
+    if value < 0x800:
+        units = [0xc0 | (value >> 6), 0x80 | (value & 0x3f)]
+    elif value < 0x10000:
+        units = [0xe0 | (value >> 12), 0x80 | ((value >> 6) & 0x3f),
+                 0x80 | (value & 0x3f)]
+    else:
+        units = [0xf0 | (value >> 18), 0x80 | ((value >> 12) & 0x3f),
+                 0x80 | ((value >> 6) & 0x3f), 0x80 | (value & 0x3f)]
+    if in_set:
+        return CodePoint(value)
+    items = []
+    for unit in units:
+        items.append(Character(unit))
+    return Sequence(items)
 
 
 def _parse_numeric_escape(source, info, ch, in_set):
