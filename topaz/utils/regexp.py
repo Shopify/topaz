@@ -198,6 +198,14 @@ class Info(object):
         self.defined_groups = {}
 
         self.group_offsets = []
+        # For subexpression calls (\g<name>): where each group's pattern is
+        # in the source, and whether a call is being parsed (then groups do
+        # not capture).
+        self.group_spans = {}
+        self.calling = 0
+        # Groups made for atomic groups and possessive quantifiers, which
+        # Ruby code does not see.
+        self.hidden_groups = {}
 
     def new_group(self, name=None):
         if name in self.group_index:
@@ -216,10 +224,8 @@ class Info(object):
         return group
 
     def close_group(self, group, hidden=False):
-        last_group_offset = self.group_offsets[-1] if self.group_offsets else 0
         if hidden:
-            last_group_offset += 1
-        self.group_offsets.append(last_group_offset)
+            self.hidden_groups[group] = None
         self.group_state[group] = self.CLOSED
 
     def normalize_group(self, name):
@@ -1199,18 +1205,11 @@ def _parse_paren(source, info):
             elif source.match("!"):
                 return _parse_lookaround(source, info, behind=True, positive=False)
             name = _parse_name(source)
-            group = info.new_group(name)
             source.expect(">")
-            saved_flags = info.flags
-            saved_ignore = source.ignore_space
-            try:
-                subpattern = _parse_pattern(source, info)
-            finally:
-                source.ignore_space = saved_ignore
-                info.flags = saved_flags
-            source.expect(")")
-            info.close_group(group)
-            return Group(info, group, subpattern)
+            if info.calling > 0:
+                return _parse_called_group_body(source, info)
+            group = info.new_group(name)
+            return _parse_group_body(source, info, group)
         elif source.match("="):
             return _parse_lookaround(source, info, behind=False, positive=True)
         elif source.match("!"):
@@ -1249,7 +1248,30 @@ def _parse_paren(source, info):
             return _parse_flags_group(source, info, ch)
         source.pos = here
         raise RegexpError("undefined group option")
+    if info.calling > 0:
+        return _parse_called_group_body(source, info)
     group = info.new_group()
+    return _parse_group_body(source, info, group)
+
+
+def _parse_group_body(source, info, group):
+    start = source.pos
+    saved_flags = info.flags
+    saved_ignore = source.ignore_space
+    try:
+        subpattern = _parse_pattern(source, info)
+    finally:
+        source.ignore_space = saved_ignore
+        info.flags = saved_flags
+    info.group_spans[group] = GroupSpan(start, source.pos, saved_flags, saved_ignore)
+    source.expect(")")
+    info.close_group(group)
+    return Group(info, group, subpattern)
+
+
+def _parse_called_group_body(source, info):
+    """A group inside a group being called: matched again, without
+    capturing."""
     saved_flags = info.flags
     saved_ignore = source.ignore_space
     try:
@@ -1258,8 +1280,51 @@ def _parse_paren(source, info):
         source.ignore_space = saved_ignore
         info.flags = saved_flags
     source.expect(")")
-    info.close_group(group)
-    return Group(info, group, subpattern)
+    return subpattern
+
+
+class GroupSpan(object):
+    def __init__(self, start, end, flags, ignore_space):
+        self.start = start
+        self.end = end
+        self.flags = flags
+        self.ignore_space = ignore_space
+
+
+def _parse_subexp_call(source, info):
+    """\g<name> or \g<n>: the group's pattern, matched again here (it is
+    parsed again from the source). Its captures are not updated."""
+    if source.match("<"):
+        close = ">"
+    elif source.match("'"):
+        close = "'"
+    else:
+        raise RegexpError("invalid group name")
+    name = _parse_name(source)
+    source.expect(close)
+    if name == "0" or not (name.isdigit() or name in info.group_index):
+        raise RegexpError("undefined name <%s> reference" % name)
+    group = info.normalize_group(name)
+    span = info.group_spans.get(group, None)
+    if span is None:
+        raise RegexpError("recursive or forward subexpression calls are not supported")
+    here = source.pos
+    saved_flags = info.flags
+    saved_ignore = source.ignore_space
+    source.pos = span.start
+    info.flags = span.flags
+    source.ignore_space = span.ignore_space
+    info.calling += 1
+    try:
+        subpattern = _parse_pattern(source, info)
+    finally:
+        info.calling -= 1
+        info.flags = saved_flags
+        source.ignore_space = saved_ignore
+    if source.pos != span.end:
+        raise RegexpError("invalid subexpression call")
+    source.pos = here
+    return subpattern
 
 
 def _parse_flags_group(source, info, ch):
@@ -1545,10 +1610,15 @@ def _parse_escape(source, info, in_set):
         raise RegexpError("bad escape")
     if ch == "g" and not in_set:
         here = source.pos
-        try:
-            return _parse_group_ref(source, info)
-        except RegexpError:
+        if source.match("<") or source.match("'"):
             source.pos = here
+            return _parse_subexp_call(source, info)
+        return make_character(info, ord(ch[0]), in_set)
+    elif ch == "k" and not in_set:
+        here = source.pos
+        if source.match("<"):
+            source.pos = here
+            return _parse_group_ref(source, info)
         return make_character(info, ord(ch[0]), in_set)
     elif ch == "G" and not in_set:
         return AtPosition(AT_BEGINNING)
@@ -1831,11 +1901,28 @@ def _compile_no_cache(pattern, flags):
     ctx.emit(OPCODE_SUCCESS)
     code = ctx.build()
 
+    # Ruby numbers the groups it can see: not the hidden ones, and, when
+    # there are named groups, only those (plain groups do not capture).
+    # group_offsets maps a visible group's number to the actual one.
+    has_names = len(info.group_index) > 0
+    group_offsets = []
+    to_visible = {}
+    for group in range(1, info.group_count + 1):
+        if group in info.hidden_groups:
+            continue
+        if has_names and group not in info.group_name:
+            continue
+        to_visible[group] = len(group_offsets) + 1
+        group_offsets.append(group - (len(group_offsets) + 1))
+    group_index = {}
     index_group = {}
     for n, v in info.group_index.iteritems():
-        index_group[v] = n
+        visible = to_visible.get(v, -1)
+        if visible != -1:
+            group_index[n] = visible
+            index_group[visible] = n
     pattern = CompiledPattern(code, info.flags)
-    return pattern, info.flags, info.group_count, info.group_index, index_group, info.group_offsets
+    return pattern, info.flags, info.group_count, group_index, index_group, group_offsets
 
 
 def compile(cache, pattern, flags=0):

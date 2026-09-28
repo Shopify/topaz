@@ -422,19 +422,7 @@ class Regexp
     result
   end
 
-  def names
-    source.scan(/\(\?<([a-zA-Z_]\w*)>/).flatten.uniq
-  end
-
-  def named_captures
-    result = {}
-    i = 0
-    source.scan(/\((?!\?)|\(\?<([a-zA-Z_]\w*)>/) do
-      i += 1
-      (result[$1] ||= []) << i if $1
-    end
-    result
-  end
+  # names and named_captures are in RPython (regexpobject.py).
 
   def self.last_match(n = nil)
     m = $~

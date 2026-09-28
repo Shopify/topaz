@@ -2098,3 +2098,21 @@ class TestDefinitionReturnValues(BaseTopazTest):
         return A::R + [A.public_method_defined?(:reset)]
         """)
         assert self.unwrap(space, w_res) == ["a2", "d", "e", True]
+
+
+class TestSubexpCallsAndGroupNumbers(BaseTopazTest):
+    def test_subexpression_calls_and_backreferences(self, space):
+        w_res = space.execute("""
+        t = lambda { |src, s| m = Regexp.new(src).match(s); m ? m[0] : nil }
+        return [t.("(?<a>[bc])\\\\g<a>", "bc"), t.("(?<s>x){0}\\\\g<s>+", "xxx"), t.("(?<a>b)\\\\k<a>", "bb"),
+                t.("(?<a>b)\\\\k<a>", "bc"), t.("(a|b)\\\\g<1>", "ab")]
+        """)
+        assert self.unwrap(space, w_res) == ["bc", "xxx", "bb", None, "ab"]
+
+    def test_group_numbers_with_names_and_hidden_groups(self, space):
+        w_res = space.execute("""
+        return [/(?<a>x)(?<b-c>y)/.names, /(?<a>x)(y)(?<b>z)/.named_captures,
+                /(?<a>x)(y)(?<b>z)/.match("xyz").captures, /(a)(?>b)(c)/.match("abc").captures,
+                /a*+(b)/.match("aab")[1], /(?<n>a)*+(?<m>b)/.match("aab")[:m]]
+        """)
+        assert self.unwrap(space, w_res) == [["a", "b-c"], {"a": [1], "b": [2]}, ["x", "z"], ["a", "c"], "b", "b"]

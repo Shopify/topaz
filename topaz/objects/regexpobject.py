@@ -248,6 +248,26 @@ class W_RegexpObject(W_Object):
         matched = self.rsre_search(ctx)
         return self.get_match_result(space, ctx, s, matched)
 
+    @classdef.method("names")
+    def method_names(self, space):
+        self._check_initialized(space)
+        names_w = []
+        for i in range(1, len(self.group_offsets) + 1):
+            name = self.indexgroup.get(i, None)
+            if name is not None:
+                names_w.append(space.newstr_fromstr(name))
+        return space.newarray(names_w)
+
+    @classdef.method("named_captures")
+    def method_named_captures(self, space):
+        self._check_initialized(space)
+        w_result = space.newhash()
+        for i in range(1, len(self.group_offsets) + 1):
+            name = self.indexgroup.get(i, None)
+            if name is not None:
+                space.send(w_result, "[]=", [space.newstr_fromstr(name), space.newarray([space.newint(i)])])
+        return w_result
+
     @classdef.method("__topaz_match_at", s="str", pos="int")
     def method_topaz_match_at(self, space, s, pos, w_anchored=None):
         """The match starting at byte pos (anchored) or the first one after
@@ -325,8 +345,8 @@ class W_MatchDataObject(W_Object):
         return obj
 
     def size(self):
-        offset = self.regexp.group_offsets[-1] if self.regexp.group_offsets else 0
-        return self.regexp.groupcount + 1 - offset
+        # One offset per group Ruby code can see.
+        return len(self.regexp.group_offsets) + 1
 
     def flatten_marks(self):
         return self.marks
