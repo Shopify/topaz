@@ -174,6 +174,40 @@ module Gem
     end
   end
 
+  # Marks methods as deprecated; the stand-in does not warn.
+  module Deprecate
+    def self.skip
+      @skip ||= false
+    end
+
+    def self.skip=(value)
+      @skip = value
+    end
+
+    def self.skip_during
+      old = skip
+      self.skip = true
+      yield
+    ensure
+      self.skip = old
+    end
+
+    def deprecate(name, replacement, year, month)
+      name
+    end
+    module_function :deprecate
+
+    def rubygems_deprecate(name, replacement = :none)
+      name
+    end
+    module_function :rubygems_deprecate
+
+    def rubygems_deprecate_command(version = nil)
+      nil
+    end
+    module_function :rubygems_deprecate_command
+  end
+
   class Platform
     RUBY = "ruby"
     CURRENT = "current"
