@@ -877,3 +877,29 @@ class TestRegexpFlags(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [
             "a\\.b|(?i-mx:c)", "(?!)", "x|y", 0, "/x/mi", "/a\\/b/"]
+
+
+class TestEncodings(BaseTopazTest):
+    def test_encoding_objects(self, space):
+        w_res = space.execute("""
+        return [Encoding::UTF_8.name, Encoding::BINARY.equal?(Encoding::ASCII_8BIT),
+                Encoding::BINARY.inspect, Encoding.find("utf-8").name, __ENCODING__.name,
+                (Encoding.find("nope") rescue $!.message), Encoding::US_ASCII.names]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "UTF-8", True, "#<Encoding:BINARY (ASCII-8BIT)>", "UTF-8", "UTF-8",
+            "unknown encoding name - nope", ["US-ASCII", "ASCII", "ANSI_X3.4-1968", "646"]]
+
+    def test_string_encoding_methods(self, space):
+        w_res = space.execute("""
+        return ["x".encoding.name, "x".b.encoding.name, "x".force_encoding("ASCII-8BIT").encoding.name,
+                "\\xff".valid_encoding?, "\\xc3\\xa9".valid_encoding?, "\\xff".b.valid_encoding?,
+                "\\xffa".scrub("?"), "abc".ascii_only?, "\\xc3\\xa9".ascii_only?,
+                "\\xc3\\xa9".encode("US-ASCII", undef: :replace),
+                ("\\xc3\\xa9".encode("US-ASCII") rescue $!.class.name),
+                "\\xe9".force_encoding("ISO-8859-1").encode("UTF-8").bytes,
+                "a<b>".encode(xml: :text), "x".encode("UTF-8").equal?(nil)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "UTF-8", "ASCII-8BIT", "ASCII-8BIT", False, True, True, "?a", True, False,
+            "?", "Encoding::UndefinedConversionError", [0xc3, 0xa9], "a&lt;b&gt;", False]

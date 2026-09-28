@@ -1632,7 +1632,10 @@ class Translator(nodes.Visitor):
         raise self.unsupported(node, "aliasing global variables")
 
     def visit_source_encoding_node(self, node):
-        raise self.unsupported(node, "__ENCODING__")
+        # Source files are UTF-8.
+        lineno = self.line(node)
+        return ast.LookupConstant(
+            ast.LookupConstant(None, "Encoding", lineno), "UTF_8", lineno)
 
     def visit_match_write_node(self, node):
         # `/(?<name>...)/ =~ string` also assigns each named capture to a
