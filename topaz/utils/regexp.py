@@ -214,6 +214,7 @@ class Info(object):
         # Groups made for atomic groups and possessive quantifiers, which
         # Ruby code does not see.
         self.hidden_groups = {}
+        self.anchored = False
 
     def new_group(self, name=None):
         if name in self.group_index:
@@ -1696,6 +1697,10 @@ def _parse_escape(source, info, in_set):
             return _parse_group_ref(source, info)
         return make_character(info, ord(ch[0]), in_set)
     elif ch == "G" and not in_set:
+        # \G is only supported at the start of the pattern, where it makes
+        # every search an anchored match at its start position.
+        if info.anchored:
+            return Sequence([])
         return AtPosition(AT_BEGINNING)
     elif ch in "pP":
         return _parse_property(source, info, ch == "p", in_set)
@@ -1958,11 +1963,29 @@ def _posix_class_as_set(name, negate, info):
     return item
 
 
+def _starts_with_search_anchor(pattern):
+    """Whether the pattern begins with \G, perhaps inside opening groups."""
+    i = 0
+    n = len(pattern)
+    while i < n and pattern[i] == "(":
+        i += 1
+        if i < n and pattern[i] == "?":
+            i += 1
+            while i < n and pattern[i] in "-imx":
+                i += 1
+            if i < n and pattern[i] == ":":
+                i += 1
+            else:
+                return False
+    return i + 1 < n and pattern[i] == "\\" and pattern[i + 1] == "G"
+
+
 def _compile_no_cache(pattern, flags):
     source = Source(pattern)
     if flags & EXTENDED:
         source.ignore_space = True
     info = Info(flags)
+    info.anchored = _starts_with_search_anchor(pattern)
     parsed = _parse_pattern(source, info)
 
     if not source.at_end():
@@ -1997,7 +2020,7 @@ def _compile_no_cache(pattern, flags):
             group_index[n] = visible
             index_group[visible] = n
     pattern = CompiledPattern(code, info.flags)
-    return pattern, info.flags, info.group_count, group_index, index_group, group_offsets
+    return pattern, info.flags, info.group_count, group_index, index_group, group_offsets, info.anchored
 
 
 def compile(cache, pattern, flags=0):

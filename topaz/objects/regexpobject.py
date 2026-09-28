@@ -53,6 +53,7 @@ class W_RegexpObject(W_Object):
     def __init__(self, space, source, flags):
         W_Object.__init__(self, space)
         self.source = None
+        self.anchored = False
         self.set_source(space, source, flags)
 
     def __deepcopy__(self, memo):
@@ -65,6 +66,7 @@ class W_RegexpObject(W_Object):
             obj.groupindex = self.groupindex
             obj.indexgroup = self.indexgroup
             obj.group_offsets = self.group_offsets
+            obj.anchored = self.anchored
         return obj
 
     @classdef.setup_class
@@ -151,7 +153,8 @@ class W_RegexpObject(W_Object):
         if source is not None:
             cache = space.fromcache(RegexpCache)
             self.source = source
-            pattern, flags, groupcount, groupindex, indexgroup, group_offsets = regexp.compile(cache, source, flags)
+            pattern, flags, groupcount, groupindex, indexgroup, group_offsets, anchored = regexp.compile(cache, source, flags)
+            self.anchored = anchored
             self.pattern = pattern
             self.flags = flags
             self.groupcount = groupcount
@@ -165,6 +168,9 @@ class W_RegexpObject(W_Object):
         return rsre_core.StrMatchContext(s, offset, endpos)
 
     def rsre_search(self, ctx):
+        # A pattern starting with \G only matches where the search starts.
+        if self.anchored:
+            return rsre_core.match_context(ctx, self.pattern)
         return rsre_core.search_context(ctx, self.pattern)
 
     def get_match_result(self, space, ctx, target, found):

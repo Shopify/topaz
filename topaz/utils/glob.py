@@ -13,7 +13,7 @@ from topaz.utils.ll_file import isdir
 def regexp_match(cache, re, string):
     pos = 0
     endpos = len(string)
-    pattern, _, _, _, _, _ = regexp.compile(cache, re)
+    pattern, _, _, _, _, _, _ = regexp.compile(cache, re)
     ctx = rsre_core.StrMatchContext(string, pos, endpos)
     return rsre_core.search_context(ctx, pattern)
 

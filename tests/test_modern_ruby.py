@@ -2204,3 +2204,13 @@ class TestMarshalInRuby(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [
             True, True, [4, 8, 91, 9, 105, 6, 73, 34, 6, 97, 6, 58, 6, 69, 84, 58, 6, 98, 102, 8, 49, 101, 50], "UTF-8"]
+
+
+class TestSearchAnchor(BaseTopazTest):
+    def test_leading_g_anchors_each_search(self, space):
+        w_res = space.execute("""
+        token = /\\G(?:[\\s]+|\\(|\\)|[a-z]+|.)/
+        return ["(send $_ ...)".scan(token), "aab".scan(/\\Ga/), "xaa".scan(/\\Ga/), "ab12".gsub(/\\G[a-z]/, "_")]
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["(", "send", " ", "$", "_", " ", ".", ".", ".", ")"], ["a", "a"], [], "__12"]
