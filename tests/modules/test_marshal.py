@@ -377,7 +377,7 @@ class TestMarshal(BaseTopazTest):
             space,
             "TypeError",
             "incompatible marshal file format (can't be read)\n"
-            "format version 4.8 required; 97.115 given"
+            "\tformat version 4.8 required; 97.115 given"
         ):
             space.execute("Marshal.load('asd')")
 

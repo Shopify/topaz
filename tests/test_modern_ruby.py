@@ -2188,3 +2188,19 @@ class TestConstPaths(BaseTopazTest):
                 Object.const_defined?("Nope::X"), (Object.const_get("Outer::") rescue $!.class.name)]
         """)
         assert self.unwrap(space, w_res) == [1, True, "Outer", False, False, "NameError"]
+
+
+class TestMarshalInRuby(BaseTopazTest):
+    def test_round_trips_and_cruby_bytes(self, space):
+        w_res = space.execute("""
+        s = Struct.new(:a, :b)
+        Object.const_set(:MarshalS, s)
+        objs = [nil, true, 0, -124, 2**30, -(2**70), 1.5, 100.0, 1e-5, "héllo", "bin\\xff".b, :sym,
+                [1, [2, 3]], {a: 1, "b" => [2]}, MarshalS.new(1, "x"), 1...3, Hash.new(5).merge(a: 1), /ab+c/i, String]
+        ok = objs.all? { |o| back = Marshal.load(Marshal.dump(o)); back == o && (!o.is_a?(Hash) || back.default == o.default) }
+        shared = "s"
+        b = Marshal.load(Marshal.dump([shared, shared]))
+        return [ok, b[0].equal?(b[1]), Marshal.dump([1, "a", :b, 1e2]).bytes, Marshal.load(Marshal.dump("\\u00e9")).encoding.to_s]
+        """)
+        assert self.unwrap(space, w_res) == [
+            True, True, [4, 8, 91, 9, 105, 6, 73, 34, 6, 97, 6, 58, 6, 69, 84, 58, 6, 98, 102, 8, 49, 101, 50], "UTF-8"]

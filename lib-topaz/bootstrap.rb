@@ -46,6 +46,7 @@ load_bootstrap.call("pack.rb")
 load_bootstrap.call("encoding.rb")
 load_bootstrap.call("exception.rb")
 load_bootstrap.call("modern.rb")
+load_bootstrap.call("marshal.rb")
 
 # Set is part of the core since Ruby 4.0.
 Object.autoload(:Set, "set")
