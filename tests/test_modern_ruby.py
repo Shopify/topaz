@@ -2177,3 +2177,14 @@ class TestBindingDupAndNewLocals(BaseTopazTest):
                 b2.eval("name * 2"), defined?(y)]
         """)
         assert self.unwrap(space, w_res) == [6, 5, True, "ww", None]
+
+
+class TestConstPaths(BaseTopazTest):
+    def test_const_get_and_const_defined_with_paths(self, space):
+        w_res = space.execute("""
+        module Outer; module Inner; X = 1; end; end
+        return [Object.const_get("Outer::Inner::X"), Object.const_defined?("Outer::Inner"),
+                Object.const_get("::Outer").name, Object.const_defined?("Outer::Nope"),
+                Object.const_defined?("Nope::X"), (Object.const_get("Outer::") rescue $!.class.name)]
+        """)
+        assert self.unwrap(space, w_res) == [1, True, "Outer", False, False, "NameError"]

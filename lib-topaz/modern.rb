@@ -838,3 +838,44 @@ module Kernel
   end
   private :using
 end
+
+class Module
+  alias __topaz_const_get const_get
+  alias __topaz_const_defined? const_defined?
+  private :__topaz_const_get, :__topaz_const_defined?
+
+  # const_get and const_defined? take a path ("A::B::C"; a leading "::"
+  # starts from Object).
+  def const_get(name, inherit = true)
+    return __topaz_const_get(name, inherit) unless name.is_a?(String) && name.include?("::")
+    mod = self
+    parts = name.split("::")
+    if parts.first == ""
+      mod = Object
+      parts.shift
+    end
+    parts.each do |part|
+      raise NameError.new("wrong constant name #{name}", name) if part.empty?
+      mod = mod.__send__(:__topaz_const_get, part, inherit)
+    end
+    mod
+  end
+
+  def const_defined?(name, inherit = true)
+    return __topaz_const_defined?(name, inherit) unless name.is_a?(String) && name.include?("::")
+    mod = self
+    parts = name.split("::")
+    if parts.first == ""
+      mod = Object
+      parts.shift
+    end
+    parts.each_with_index do |part, i|
+      raise NameError.new("wrong constant name #{name}", name) if part.empty?
+      return false unless mod.__send__(:__topaz_const_defined?, part, inherit)
+      return true if i == parts.size - 1
+      mod = mod.__send__(:__topaz_const_get, part, inherit)
+      return false unless mod.is_a?(Module)
+    end
+    true
+  end
+end
