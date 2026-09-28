@@ -2129,3 +2129,12 @@ class TestFileReadOptions(BaseTopazTest):
                 File.read(path, mode: "rb").encoding.to_s, File.read(path, 5).encoding.to_s]
         """ % (str(f),))
         assert self.unwrap(space, w_res) == ["hello world", "hello", "wor", "UTF-8", "ASCII-8BIT", "ASCII-8BIT"]
+
+
+class TestEnumerablePatterns(BaseTopazTest):
+    def test_all_any_one_none_with_a_pattern(self, space):
+        w_res = space.execute("""
+        return [[1, 2].all?(Integer), [1, "a"].all?(Integer), %w[ab cd].any?(/c/), [nil, 1].one?(nil),
+                [1, 2].none?(3..5), {a: 1}.any?(Array), [nil, false].all?(nil)]
+        """)
+        assert self.unwrap(space, w_res) == [True, False, True, True, True, True, False]

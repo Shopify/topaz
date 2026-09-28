@@ -80,8 +80,12 @@ module Enumerable
     self
   end
 
-  def all?(&block)
-    if block
+  # all?, any?, one? and none? take a pattern (pattern === element) in
+  # place of the block.
+  def all?(*pattern, &block)
+    if !pattern.empty?
+      self.each_entry { |e| return false unless pattern[0] === e }
+    elsif block
       self.each { |*e| return false unless yield(*e) }
     else
       self.each_entry { |e| return false unless e }
@@ -89,8 +93,10 @@ module Enumerable
     true
   end
 
-  def any?(&block)
-    if block
+  def any?(*pattern, &block)
+    if !pattern.empty?
+      self.each_entry { |e| return true if pattern[0] === e }
+    elsif block
       self.each { |*e| return true if yield(*e) }
     else
       self.each_entry { |e| return true if e }
@@ -270,9 +276,14 @@ module Enumerable
     c
   end
 
-  def one?(&block)
+  def one?(*pattern, &block)
     c = 0
-    if block
+    if !pattern.empty?
+      self.each_entry do |e|
+        c += 1 if pattern[0] === e
+        return false if c > 1
+      end
+    elsif block
       self.each do |*e|
         c += 1 if yield(*e)
         return false if c > 1
@@ -286,8 +297,10 @@ module Enumerable
     c == 1
   end
 
-  def none?(&block)
-    if block
+  def none?(*pattern, &block)
+    if !pattern.empty?
+      self.each_entry { |e| return false if pattern[0] === e }
+    elsif block
       self.each { |*e| return false if yield(*e) }
     else
       self.each_entry { |e| return false if e }
