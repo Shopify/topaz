@@ -82,7 +82,8 @@ class W_AbstractMemoryObject(W_Object):
         self.check_range(space, offset, nbytes)
         with rffi.scoped_view_charp(string) as cstring:
             rffi.c_memcpy(
-                rffi.ptradd(rffi.cast(rffi.CCHARP, self.ptr), offset),
+                rffi.cast(rffi.VOIDP,
+                          rffi.ptradd(rffi.cast(rffi.CCHARP, self.ptr), offset)),
                 rffi.cast(rffi.CONST_VOIDP, rffi.ptradd(cstring, str_offset)),
                 nbytes
             )

@@ -86,6 +86,11 @@ class SpaceCache(Cache):
         return obj(self.space)
 
 
+
+class LibPaths(object):
+    def __init__(self, ext_lib_path):
+        self.ext_lib_path = ext_lib_path
+
 class ObjectSpace(object):
     def __init__(self, config):
         self.config = config
@@ -253,8 +258,9 @@ class ObjectSpace(object):
         self.w_load_path = self.newarray([])
         self.base_lib_path = os.path.abspath(os.path.join(os.path.join(
             os.path.dirname(__file__), os.path.pardir), "lib-ruby"))
-        # Ruby replacements for C extensions (see Kernel.find_feature).
-        self.ext_lib_path = os.path.join(self.base_lib_path, "ext")
+        # Ruby replacements for C extensions (see Kernel.find_feature). The
+        # space is frozen when translated, so the path lives in a holder.
+        self.lib_paths = LibPaths(os.path.join(self.base_lib_path, "ext"))
 
     def _freeze_(self):
         self._executioncontexts.clear()
@@ -291,7 +297,7 @@ class ObjectSpace(object):
                 kernel_path = os.path.join(path, "lib-topaz")
                 break
         self.send(self.w_load_path, "unshift", [self.newstr_fromstr(lib_path)])
-        self.ext_lib_path = os.path.join(lib_path, "ext")
+        self.lib_paths.ext_lib_path = os.path.join(lib_path, "ext")
         self.load_kernel(kernel_path)
         self.hide_integer_subclasses()
 

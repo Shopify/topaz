@@ -143,7 +143,7 @@ class Kernel(object):
 
     @staticmethod
     def find_ext_replacement(space, name, default):
-        full = os.path.join(space.ext_lib_path, name + ".rb")
+        full = os.path.join(space.lib_paths.ext_lib_path, name + ".rb")
         if os.path.isfile(full):
             return rpath.rabspath(full)
         return default
