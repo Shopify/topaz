@@ -41,7 +41,11 @@ class W_CodeObject(W_BaseObject):
         self.max_stackdepth = max_stackdepth
         self.consts_w = consts
         self.defaults = defaults
-        self.kwarg_names = kwargs
+        # A fixed-size copy: the field is immutable, the list given grew.
+        kwarg_names = [""] * len(kwargs)
+        for i in range(len(kwargs)):
+            kwarg_names[i] = kwargs[i]
+        self.kwarg_names = kwarg_names
         self.kw_defaults = kw_defaults
         self.cellvars = cellvars
         self.freevars = freevars
