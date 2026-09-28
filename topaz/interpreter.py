@@ -650,8 +650,9 @@ class Interpreter(object):
             frame.push(space.w_nil)
 
     def _super_name(self, space, bytecode, frame, meth_idx):
-        if frame.super_name is not None:
-            return frame.super_name
+        name = frame.super_name
+        if name is not None:
+            return name
         return space.symbol_w(bytecode.consts_w[meth_idx])
 
     def SEND_SUPER_BLOCK(self, space, bytecode, frame, pc, meth_idx, num_args):
