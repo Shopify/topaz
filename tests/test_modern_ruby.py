@@ -1774,3 +1774,15 @@ class TestSQLite3Native(BaseTopazTest):
             pytest.skip("libsqlite3 is not available")
         assert res == [[[1, "alice", 1.5], [2, "bob", None]], 2, 1, "no such column: nope",
                        "UNIQUE constraint failed: t.id", [[1]]]
+
+
+class TestEvalWithLocation(BaseTopazTest):
+    def test_eval_with_binding_file_and_line(self, space):
+        w_res = space.execute("""
+        x = 5
+        r = [eval("x * 2", nil, "f.rb", 10), eval("[__FILE__, __LINE__]", nil, "g.rb", 42),
+             binding.eval("x + 3", "h.rb", 7)]
+        r << (begin; eval("raise 'boom'", nil, "e.rb", 99); rescue => e; e.backtrace[0]; end)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [10, ["g.rb", 42], 8, "e.rb:99:in '<main>'"]

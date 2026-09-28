@@ -478,15 +478,20 @@ class Kernel(object):
         return space.newbool(space.getnonsingletonclass(self) is w_mod)
 
     @moduledef.method("eval")
-    def method_eval(self, space, w_source, w_binding=None):
-        if w_binding is None:
+    def method_eval(self, space, w_source, w_binding=None, w_filepath=None, w_lineno=None):
+        if w_binding is None or w_binding is space.w_nil:
             frame = space.getexecutioncontext().gettoprubyframe()
             w_binding = space.newbinding_fromframe(frame)
         elif not isinstance(w_binding, W_BindingObject):
             raise space.error(space.w_TypeError,
                 "wrong argument type %s (expected Binding)" % space.getclass(w_binding).name
             )
-        return space.send(w_binding, "eval", [w_source])
+        args_w = [w_source]
+        if w_filepath is not None and w_filepath is not space.w_nil:
+            args_w.append(w_filepath)
+            if w_lineno is not None and w_lineno is not space.w_nil:
+                args_w.append(w_lineno)
+        return space.send(w_binding, "eval", args_w)
 
     @moduledef.method("set_trace_func")
     def method_set_trace_func(self, space, w_proc):
