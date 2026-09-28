@@ -1365,6 +1365,36 @@ class TestRescueAndSuper(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [[2], 3, [1, -2]]
 
+    def test_retry_from_loops_and_nested_begins(self, space):
+        w_res = space.execute("""
+        r = []
+        n = 0
+        begin
+          n += 1
+          raise "a" if n < 3
+        rescue
+          begin
+            retry
+          rescue SystemCallError
+          end
+        end
+        r << n
+        n = 0
+        begin
+          n += 1
+          raise "a" if n < 3
+        rescue
+          i = 0
+          while i < 2
+            i += 1
+            retry if i == 1
+          end
+        end
+        r << n
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [3, 3]
+
     def test_super_in_define_method(self, space):
         w_res = space.execute("""
         class A; def f(x, y = nil); "A#{x}#{y}"; end; def g; "Ag"; end; end

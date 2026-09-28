@@ -253,11 +253,15 @@ class Retry(Node):
         if not ctx.retry_targets:
             raise CompilerError("Invalid retry")
         target, frame_depth, except_depth = ctx.retry_targets[-1]
-        if (len(ctx.frame_blocks) != frame_depth or
-                ctx.except_depth != except_depth):
-            raise CompilerError(
-                "retry from inside a loop, ensure or begin in a rescue "
-                "clause is not supported")
+        # Leave the loops and begin bodies entered in the rescue clause.
+        nblocks = ctx.except_depth - except_depth
+        for block_type, _ in ctx.frame_blocks[frame_depth:]:
+            if block_type != ctx.F_BLOCK_LOOP:
+                raise CompilerError(
+                    "retry from inside an ensure clause is not supported")
+            nblocks += 1
+        for _ in range(nblocks):
+            ctx.emit(consts.POP_BLOCK)
         ctx.emit_jump(consts.JUMP, target)
         # Never reached, but keeps the stack depth consistent for code that
         # expects an expression here.
