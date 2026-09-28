@@ -1,5 +1,7 @@
 """Language features added between Ruby 2.4 and Ruby 4.0."""
 
+import pytest
+
 from .base import BaseTopazTest
 
 
@@ -1374,3 +1376,67 @@ class TestRescueAndSuper(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == ["BA12", "AgB"]
 
+
+class TestDigestAndOpenSSL(BaseTopazTest):
+    def run_with_libcrypto(self, space, source):
+        w_res = space.execute("""
+        begin
+          require "topaz/libcrypto"
+        rescue LoadError
+          return :no_libcrypto
+        end
+        """ + source)
+        if self.unwrap(space, w_res) == "no_libcrypto":
+            pytest.skip("libcrypto is not available")
+        return self.unwrap(space, w_res)
+
+    def test_digest(self, space):
+        res = self.run_with_libcrypto(space, """
+        require "digest"
+        d = Digest::SHA256.new
+        d << "a"
+        d.update("bc")
+        return [Digest::MD5.hexdigest("abc"), Digest::SHA1.hexdigest(""), d.hexdigest[0, 8],
+                d == Digest::SHA256.hexdigest("abc"), Digest::SHA2.new(384).digest_length,
+                Digest(:SHA512).new.block_length, Digest::MD5.base64digest("abc")]
+        """)
+        assert res == ["900150983cd24fb0d6963f7d28e17f72",
+                       "da39a3ee5e6b4b0d3255bfef95601890afd80709", "ba7816bf", True,
+                       48, 128, "kAFQmDzST7DWlj99KOF/cg=="]
+
+    def test_openssl(self, space):
+        res = self.run_with_libcrypto(space, """
+        require "openssl"
+        r = [OpenSSL::Digest::SHA256.hexdigest("abc")[0, 8],
+             OpenSSL::HMAC.hexdigest("SHA256", "key", "data")[0, 8],
+             OpenSSL::PKCS5.pbkdf2_hmac("password", "salt", 1000, 32,
+                                         OpenSSL::Digest::SHA256.new).unpack1("H*")[0, 8],
+             OpenSSL::KDF.hkdf("secret", salt: "salt", info: "info", length: 42,
+                               hash: "SHA256").unpack1("H*")[0, 8]]
+        key = "k" * 32
+        iv = "i" * 12
+        c = OpenSSL::Cipher.new("aes-256-gcm")
+        c.encrypt
+        c.key = key
+        c.iv = iv
+        c.auth_data = "ad"
+        ct = c.update("hello world") + c.final
+        tag = c.auth_tag
+        r << ct.unpack1("H*") << tag.unpack1("H*")
+        d = OpenSSL::Cipher.new("aes-256-gcm")
+        d.decrypt
+        d.key = key
+        d.iv = iv
+        d.auth_tag = tag
+        d.auth_data = "ad"
+        r << d.update(ct) + d.final
+        d = OpenSSL::Cipher::AES.new(128, :CBC)
+        d.decrypt
+        d.key = "q" * 16
+        d.iv = "i" * 16
+        r << (begin; d.update("x" * 16) + d.final; rescue OpenSSL::Cipher::CipherError => e; e.message; end)
+        return r
+        """)
+        assert res == ["ba7816bf", "5031fe3d", "632c2812", "f6d2fcc4", "b2e194185dd8d66b893885",
+                       "63b61fa99b1ab1b159bf671f01deba7f", "hello world",
+                       "cipher final failed: bad decrypt"]
