@@ -2086,3 +2086,15 @@ class TestBeginElseValue(BaseTopazTest):
         return [a, b, c, d]
         """)
         assert self.unwrap(space, w_res) == [3, "else", 1, 2]
+
+
+class TestDefinitionReturnValues(BaseTopazTest):
+    def test_alias_method_and_define_method_return_names(self, space):
+        w_res = space.execute("""
+        class A
+          R = [alias_method(:a2, :to_s), define_method(:d) {}, define_method(:e, instance_method(:d))]
+          public alias_method(:reset, :initialize)
+        end
+        return A::R + [A.public_method_defined?(:reset)]
+        """)
+        assert self.unwrap(space, w_res) == ["a2", "d", "e", True]

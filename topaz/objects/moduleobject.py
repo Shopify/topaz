@@ -635,18 +635,19 @@ class W_ModuleObject(W_RootObject):
 
             if space.is_kind_of(w_method, space.w_unbound_method):
                 self.define_method(space, name, DefineMethodMethod(name, w_method))
-                return w_method
+                return space.newsymbol(name)
             elif space.is_kind_of(w_method, space.w_proc):
                 assert isinstance(w_method, W_ProcObject)
                 self.define_method(space, name, DefineMethodBlock(name, w_method))
-                return w_method.copy(space, is_lambda=True)
+                return space.newsymbol(name)
             else:
                 raise space.error(space.w_TypeError,
                     "wrong argument type %s (expected Proc/Method)" % space.obj_to_s(space.getclass(w_method))
                 )
         elif block is not None:
             self.define_method(space, name, DefineMethodBlock(name, block))
-            return block.copy(space, is_lambda=True)
+            # define_method returns the method's name, as def does.
+            return space.newsymbol(name)
         else:
             raise space.error(space.w_ArgumentError, "tried to create Proc object without a block")
 
@@ -749,7 +750,8 @@ class W_ModuleObject(W_RootObject):
                 "undefined method '%s' for class '%s'" % (old_name, cls_name)
             )
         self.define_method(space, new_name, w_method)
-        return self
+        # The new name, so that `public alias_method :a, :b` works.
+        return space.newsymbol(new_name)
 
     @classdef.method("ancestors")
     def method_ancestors(self, space):
