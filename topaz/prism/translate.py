@@ -1614,7 +1614,7 @@ class Translator(nodes.Visitor):
     # Not (yet) supported, but with a better message than the default.
 
     def visit_redo_node(self, node):
-        raise self.unsupported(node, "redo")
+        return ast.Redo(self.line(node))
 
     def visit_retry_node(self, node):
         return ast.Retry(self.line(node))

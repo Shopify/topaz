@@ -1912,3 +1912,27 @@ class TestMarklyAndNokogiriNative(BaseTopazTest):
             pytest.skip("libcmark-gfm is not available")
         assert res == ["document", "header", "paragraph", 1, "Hi",
                        '<h1>Hi<a href="/u/bob">@bob</a></h1>\n<p>Some <em>em</em> and <del>gone</del></p>\n']
+
+
+class TestRedo(BaseTopazTest):
+    def test_redo_in_blocks_and_loops(self, space):
+        w_res = space.execute("""
+        r = []
+        tries = 0
+        [1, 2].each do |x|
+          tries += 1
+          r << [x, tries]
+          redo if x == 1 && tries < 3
+        end
+        i = 0
+        n = 0
+        while i < 3
+          i += 1
+          n += 1
+          redo if n == 2
+          r << i
+        end
+        r << n
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [[1, 1], [1, 2], [1, 3], [2, 4], 1, 3, 3]

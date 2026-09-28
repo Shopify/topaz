@@ -113,7 +113,9 @@ class BaseLoop(Node):
                 # next goes to the check).
                 body = ctx.new_block()
                 ctx.use_next_block(body)
+                ctx.redo_targets.append((body, len(ctx.frame_blocks), ctx.except_depth))
                 self.body.compile(ctx)
+                ctx.redo_targets.pop()
                 ctx.emit(consts.DISCARD_TOP)
                 ctx.use_next_block(loop)
                 self.cond.compile(ctx)
@@ -124,7 +126,11 @@ class BaseLoop(Node):
                 self.cond.compile(ctx)
                 ctx.emit_jump(self.cond_instr, anchor)
 
+                body = ctx.new_block()
+                ctx.use_next_block(body)
+                ctx.redo_targets.append((body, len(ctx.frame_blocks), ctx.except_depth))
                 self.body.compile(ctx)
+                ctx.redo_targets.pop()
                 ctx.emit(consts.DISCARD_TOP)
                 ctx.emit_jump(consts.JUMP, loop)
 
@@ -256,6 +262,27 @@ class TryExcept(Node):
         self.else_body.compile(ctx)
         ctx.emit(consts.DISCARD_TOP)
         ctx.use_next_block(end)
+
+
+class Redo(Node):
+    def compile(self, ctx):
+        if not ctx.redo_targets:
+            raise CompilerError("Invalid redo")
+        target, frame_depth, except_depth = ctx.redo_targets[-1]
+        # Leave the loops and begin bodies entered since the loop body or
+        # block began.
+        nblocks = ctx.except_depth - except_depth
+        for block_type, _ in ctx.frame_blocks[frame_depth:]:
+            if block_type != ctx.F_BLOCK_LOOP:
+                raise CompilerError(
+                    "redo from inside an ensure clause is not supported")
+            nblocks += 1
+        for _ in range(nblocks):
+            ctx.emit(consts.POP_BLOCK)
+        ctx.emit_jump(consts.JUMP, target)
+        # Never reached, but keeps the stack depth consistent for code that
+        # expects an expression here.
+        ctx.emit(consts.LOAD_CONST, ctx.create_const(ctx.space.w_nil))
 
 
 class Retry(Node):
@@ -431,6 +458,11 @@ class AbstractCallable(Node):
         if block_arg is not None:
             code_ctx.symtable.get_cell_num(block_arg)
         self.post_process_ctx(ctx, code_ctx)
+        if isinstance(code_ctx.symtable, BlockSymbolTable):
+            # `redo` in a block runs its body again.
+            redo_block = code_ctx.new_block()
+            code_ctx.use_next_block(redo_block)
+            code_ctx.redo_targets.append((redo_block, 0, 0))
         body.compile(code_ctx)
         code_ctx.emit(consts.RETURN)
 

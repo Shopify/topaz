@@ -103,6 +103,8 @@ class CompilerContext(object):
         # For `retry`: (block to jump to, len(frame_blocks), except_depth)
         # for each rescue clause being compiled.
         self.retry_targets = []
+        # For `redo`: (block to jump to, len(frame_blocks), except_depth)
+        self.redo_targets = []
         # How many begin/rescue bodies are being compiled.
         self.except_depth = 0
         # Hidden locals holding the value of $! from before each rescue
