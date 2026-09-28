@@ -1629,7 +1629,16 @@ class Translator(nodes.Visitor):
         raise self.unsupported(node, "END")
 
     def visit_alias_global_variable_node(self, node):
-        raise self.unsupported(node, "aliasing global variables")
+        # alias $new $old: Topaz.alias_global(:$new, :$old)
+        lineno = self.line(node)
+        names = []
+        for name_node in [node.new_name, node.old_name]:
+            name = getattr(name_node, "name", None)
+            if name is None:
+                raise self.unsupported(node, "aliasing this global variable")
+            names.append(ast.ConstantSymbol(name))
+        return ast.Send(
+            ast.LookupConstant(None, "Topaz", lineno), "alias_global", names, None, lineno)
 
     def visit_source_encoding_node(self, node):
         # Source files are UTF-8.

@@ -34,6 +34,11 @@ class Topaz(object):
             bigint = space.bigint_w(w_int)
             return space.newint(intmask(bigint.uintmask()))
 
+    @moduledef.function("alias_global", new_name="symbol", old_name="symbol")
+    def method_alias_global(self, space, new_name, old_name):
+        space.globals.alias(space, new_name, old_name)
+        return space.w_nil
+
     @moduledef.function("convert_type", method="symbol")
     def method_convert_type(self, space, w_obj, w_type, method):
         if not isinstance(w_type, W_ClassObject):

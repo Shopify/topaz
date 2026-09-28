@@ -108,3 +108,15 @@ class GlobalsDict(CellDict):
     def define_virtual(self, name, getter, setter=None):
         self.mutated()
         self.values[name] = GetterSetterCell(getter, setter)
+
+    def alias(self, space, new_name, old_name):
+        """alias $new $old: both names share the old one's cell."""
+        cell = self.values.get(old_name, None)
+        if not isinstance(cell, BaseCell):
+            if cell is None:
+                cell = Cell(space.w_nil)
+            else:
+                cell = Cell(cell)
+            self.values[old_name] = cell
+        self.values[new_name] = cell
+        self.mutated()

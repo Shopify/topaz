@@ -1952,3 +1952,20 @@ class TestModuleNewBlockConstants(BaseTopazTest):
         return [Outer::H.get, Outer::C.new.k]
         """)
         assert self.unwrap(space, w_res) == [7, 7]
+
+
+class TestGlobalAlias(BaseTopazTest):
+    def test_alias_global_variables(self, space):
+        w_res = space.execute("""
+        $foo = 1
+        alias $bar $foo
+        r = [$bar]
+        $bar = 2
+        r << $foo
+        alias $ERROR_INFO $!
+        begin; raise "x"; rescue; r << $ERROR_INFO.message; end
+        alias $new_one $never_set
+        r << $new_one
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [1, 2, "x", None]
