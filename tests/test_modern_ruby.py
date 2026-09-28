@@ -698,6 +698,34 @@ class TestErrinfo(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == ["x", None, "b", "a", None, "c"]
 
+    def test_return_from_rescue_restores_errinfo(self, space):
+        # Kernel#caller rescues its own exception and returns from the
+        # rescue clause; a bare raise after calling it must still re-raise
+        # the exception being handled.
+        w_res = space.execute("""
+        def c
+          begin
+            raise "inner"
+          rescue => e
+            return e.message
+          end
+        end
+        r = []
+        begin
+          raise LoadError, "outer"
+        rescue LoadError
+          r << c
+          begin
+            raise
+          rescue LoadError => e2
+            r << e2.message
+          end
+        end
+        r << $!
+        return r
+        """)
+        assert self.unwrap(space, w_res) == ["inner", "outer", None]
+
     def test_cause(self, space):
         w_res = space.execute("""
         r = []

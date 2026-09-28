@@ -105,6 +105,9 @@ class CompilerContext(object):
         self.retry_targets = []
         # How many begin/rescue bodies are being compiled.
         self.except_depth = 0
+        # Hidden locals holding the value of $! from before each rescue
+        # clause being compiled, outermost first (see TryExcept).
+        self.errinfo_stack = []
 
     def create_bytecode(self, lineno=-1, args=None, defaults=None,
                         first_default_arg=None, splat_arg=None, kwargs=None,

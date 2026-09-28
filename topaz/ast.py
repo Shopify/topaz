@@ -227,7 +227,11 @@ class TryExcept(Node):
             ctx.emit(consts.DISCARD_TOP)
             ctx.retry_targets.append(
                 (retry_block, len(ctx.frame_blocks), ctx.except_depth))
+            if errinfo is not None:
+                ctx.errinfo_stack.append(errinfo)
             handler.body.compile(ctx)
+            if errinfo is not None:
+                ctx.errinfo_stack.pop()
             ctx.retry_targets.pop()
             if errinfo is not None:
                 Variable(errinfo, -1).compile(ctx)
@@ -525,6 +529,11 @@ class Return(BaseStatement):
 
     def compile(self, ctx):
         self.expr.compile(ctx)
+        if ctx.errinfo_stack:
+            # Returning out of a rescue clause restores $! too.
+            Variable(ctx.errinfo_stack[0], -1).compile(ctx)
+            ctx.emit(consts.STORE_GLOBAL, ctx.create_symbol_const("$!"))
+            ctx.emit(consts.DISCARD_TOP)
         if isinstance(ctx.symtable, BlockSymbolTable):
             ctx.emit(consts.RAISE_RETURN)
         else:
