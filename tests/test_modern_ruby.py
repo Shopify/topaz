@@ -1786,3 +1786,21 @@ class TestEvalWithLocation(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == [10, ["g.rb", 42], 8, "e.rb:99:in '<main>'"]
+
+
+class TestBCryptExt(BaseTopazTest):
+    def test_bcrypt_engine(self, space):
+        w_res = space.execute("""
+        begin
+          require "bcrypt_ext"
+        rescue LoadError
+          return :no_libcrypt
+        end
+        salt = BCrypt::Engine.__bc_salt("$2a$", 5, "0123456789abcdef")
+        return [BCrypt::Engine.__bc_crypt("secret", "$2a$04$abcdefghijklmnopqrstuu"),
+                salt[0, 7], salt.size, BCrypt::Engine.__bc_crypt(nil, salt)]
+        """)
+        res = self.unwrap(space, w_res)
+        if res == "no_libcrypt":
+            pytest.skip("libcrypt is not available")
+        assert res == ["$2a$04$abcdefghijklmnopqrstuu2r9OfJnfCsdneAXAGHnS4UpFFP8WIrW", "$2a$05$", 29, None]
