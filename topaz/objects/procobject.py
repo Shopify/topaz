@@ -86,6 +86,13 @@ class W_ProcObject(W_Object):
             else:
                 raise
 
+    @classdef.method("ruby2_keywords")
+    def method_ruby2_keywords(self, space):
+        # Keywords collected by the block's *rest stay marked as keywords
+        # (delegate.rb's delegating blocks). The mark is on the code.
+        self.bytecode.ruby2_keywords = True
+        return self
+
     @classdef.method("lambda?")
     def method_lambda(self, space):
         return space.newbool(self.is_lambda)

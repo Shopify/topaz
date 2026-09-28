@@ -1552,3 +1552,16 @@ class TestJSONParser(BaseTopazTest):
             ["JSON::ParserError", "unexpected character: '@]' at line 1 column 3"],
             4,
         ]
+
+
+class TestProcRuby2Keywords(BaseTopazTest):
+    def test_proc_ruby2_keywords(self, space):
+        w_res = space.execute("""
+        def t(*a, **k) = [a, k]
+        l = lambda { |*args, &b| t(*args, &b) }.ruby2_keywords
+        m = lambda { |*args, &b| t(*args, &b) }
+        return [l.call(1, x: 2), m.call(1, x: 2), l.lambda?]
+        """)
+        res = self.unwrap(space, w_res)
+        assert res == [[[1], {"x": 2}], [[1, {"x": 2}], {}], True]
+
