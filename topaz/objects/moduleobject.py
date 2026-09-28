@@ -278,6 +278,24 @@ class W_ModuleObject(W_RootObject):
                     methods[name] = None
         return methods.keys()
 
+    def methods_by_visibility(self, space, visibilities, inherit=True):
+        """The names of the methods whose effective visibility (that of the
+        method a call finds) is one of visibilities."""
+        result = []
+        for name in self.methods(space, inherit=inherit):
+            if inherit:
+                method = self.find_method(space, name)
+            else:
+                method = self.methods_w.get(name, None)
+            if method is None or isinstance(method, UndefMethod):
+                continue
+            visibility = method.visibility
+            if visibility == W_FunctionObject.MODULE_FUNCTION:
+                visibility = W_FunctionObject.PRIVATE
+            if visibility in visibilities:
+                result.append(name)
+        return result
+
     def set_const(self, space, name, w_obj):
         self.mutated()
         self.constants_w[name] = w_obj
@@ -1009,28 +1027,29 @@ class W_ModuleObject(W_RootObject):
     def method_instance_methods(self, space, inherit=True):
         return space.newarray([
             space.newsymbol(sym)
-            for sym in self.methods(space, inherit=inherit)
+            for sym in self.methods_by_visibility(
+                space, [W_FunctionObject.PUBLIC, W_FunctionObject.PROTECTED], inherit=inherit)
         ])
 
     @classdef.method("public_instance_methods", inherit="bool")
     def method_public_instance_methods(self, space, inherit=True):
         return space.newarray([
             space.newsymbol(sym)
-            for sym in self.methods(space, visibility=W_FunctionObject.PUBLIC, inherit=inherit)
+            for sym in self.methods_by_visibility(space, [W_FunctionObject.PUBLIC], inherit=inherit)
         ])
 
     @classdef.method("protected_instance_methods", inherit="bool")
     def method_protected_instance_methods(self, space, inherit=True):
         return space.newarray([
             space.newsymbol(sym)
-            for sym in self.methods(space, visibility=W_FunctionObject.PROTECTED, inherit=inherit)
+            for sym in self.methods_by_visibility(space, [W_FunctionObject.PROTECTED], inherit=inherit)
         ])
 
     @classdef.method("private_instance_methods", inherit="bool")
     def method_private_instance_methods(self, space, inherit=True):
         return space.newarray([
             space.newsymbol(sym)
-            for sym in self.methods(space, visibility=W_FunctionObject.PRIVATE, inherit=inherit)
+            for sym in self.methods_by_visibility(space, [W_FunctionObject.PRIVATE], inherit=inherit)
         ])
 
     @classdef.method("undef_method")

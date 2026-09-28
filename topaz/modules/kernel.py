@@ -59,7 +59,8 @@ class Kernel(object):
         w_cls = space.getclass(self)
         return space.newarray([
             space.newsymbol(m)
-            for m in w_cls.methods(space, inherit=inherit)
+            for m in w_cls.methods_by_visibility(
+                space, [W_FunctionObject.PUBLIC, W_FunctionObject.PROTECTED], inherit=inherit)
         ])
 
     @moduledef.method("private_methods", inherit="bool")
@@ -67,7 +68,7 @@ class Kernel(object):
         w_cls = space.getclass(self)
         return space.newarray([
             space.newsymbol(m)
-            for m in w_cls.methods(space, visibility=W_FunctionObject.PRIVATE, inherit=inherit)
+            for m in w_cls.methods_by_visibility(space, [W_FunctionObject.PRIVATE], inherit=inherit)
         ])
 
     @moduledef.method("protected_methods", inherit="bool")
@@ -75,7 +76,7 @@ class Kernel(object):
         w_cls = space.getclass(self)
         return space.newarray([
             space.newsymbol(m)
-            for m in w_cls.methods(space, visibility=W_FunctionObject.PROTECTED, inherit=inherit)
+            for m in w_cls.methods_by_visibility(space, [W_FunctionObject.PROTECTED], inherit=inherit)
         ])
 
     @moduledef.method("public_methods", inherit="bool")
@@ -83,7 +84,7 @@ class Kernel(object):
         w_cls = space.getclass(self)
         return space.newarray([
             space.newsymbol(m)
-            for m in w_cls.methods(space, visibility=W_FunctionObject.PUBLIC, inherit=inherit)
+            for m in w_cls.methods_by_visibility(space, [W_FunctionObject.PUBLIC], inherit=inherit)
         ])
 
     @moduledef.method("lambda")

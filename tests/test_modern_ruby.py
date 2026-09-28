@@ -2138,3 +2138,16 @@ class TestEnumerablePatterns(BaseTopazTest):
                 [1, 2].none?(3..5), {a: 1}.any?(Array), [nil, false].all?(nil)]
         """)
         assert self.unwrap(space, w_res) == [True, False, True, True, True, True, False]
+
+
+class TestMethodListsByVisibility(BaseTopazTest):
+    def test_method_lists_use_the_effective_visibility(self, space):
+        w_res = space.execute("""
+        class A; def pub; end; private def priv; end; protected def prot; end; end
+        class B < A; private :pub; end
+        return [Module.instance_methods.grep(/initialize|method_missing/), A.instance_methods(false).sort,
+                A.private_instance_methods(false), B.instance_methods.include?(:pub),
+                B.private_instance_methods.include?(:pub), A.new.methods.include?(:priv),
+                A.new.private_methods.include?(:priv), A.protected_instance_methods(false)]
+        """)
+        assert self.unwrap(space, w_res) == [[], ["prot", "pub"], ["priv"], False, True, False, True, ["prot"]]

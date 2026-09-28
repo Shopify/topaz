@@ -212,3 +212,11 @@ class LoadError
   # The feature that could not be loaded.
   attr_reader :path
 end
+
+module Kernel
+  private :initialize_dup, :initialize_clone
+end
+
+class BasicObject
+  private :method_missing
+end
