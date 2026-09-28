@@ -103,6 +103,32 @@ class W_SymbolObject(W_Object):
     def method_singleton_class(self, space):
         raise space.error(space.w_TypeError, "can't define singleton")
 
+    # Matching goes through String's methods, called from RPython so that
+    # $~ is set in the calling Ruby frame.
+    @classdef.method("=~")
+    def method_match_operator(self, space, w_pattern):
+        return space.send(space.newstr_fromstr(self.symbol), "=~", [w_pattern])
+
+    @classdef.method("match")
+    def method_match(self, space, args_w, block):
+        from topaz.objects.stringobject import W_StringObject
+        w_str = space.newstr_fromstr(self.symbol)
+        assert isinstance(w_str, W_StringObject)
+        if len(args_w) == 0 or len(args_w) > 2:
+            raise space.error(space.w_ArgumentError,
+                "wrong number of arguments (given %d, expected 1..2)" % len(args_w))
+        w_pos = args_w[1] if len(args_w) == 2 else None
+        return w_str.method_match(space, args_w[0], w_pos, block)
+
+    @classdef.method("match?")
+    def method_matchp(self, space, args_w):
+        return space.send(space.newstr_fromstr(self.symbol), "match?", args_w)
+
+    @classdef.method("[]")
+    @classdef.method("slice")
+    def method_subscript(self, space, args_w):
+        return space.send(space.newstr_fromstr(self.symbol), "[]", args_w)
+
     @classdef.method("to_s")
     def method_to_s(self, space):
         return space.newstr_fromstr(self.symbol)

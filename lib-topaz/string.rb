@@ -73,9 +73,7 @@ class String
     end
   end
 
-  def match(pattern)
-    return Regexp.new(pattern).match(self)
-  end
+  # match is in RPython (stringobject.py), so that it sets the caller's $~.
 
   def chomp(sep = $/)
     copy = self.dup

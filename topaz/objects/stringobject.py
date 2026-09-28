@@ -1058,6 +1058,19 @@ class W_StringObject(W_Object):
             val = val.neg()
         return val
 
+    @classdef.method("match")
+    def method_match(self, space, w_pattern, w_pos=None, block=None):
+        from topaz.objects.regexpobject import W_RegexpObject
+        if not isinstance(w_pattern, W_RegexpObject):
+            w_pattern = space.send(space.getclassfor(W_RegexpObject), "new", [w_pattern])
+        args_w = [self]
+        if w_pos is not None:
+            args_w.append(w_pos)
+        w_match = space.send(w_pattern, "match", args_w)
+        if block is not None and w_match is not space.w_nil:
+            return space.invoke_block(block, [w_match])
+        return w_match
+
     @classdef.method("to_i")
     def method_to_i(self, space, w_radix=None):
         if w_radix is None:

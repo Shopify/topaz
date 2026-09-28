@@ -22,15 +22,8 @@ class Symbol
     self.to_s.capitalize.to_sym
   end
 
-  def [](*args)
-    self.to_s[*args]
-  end
-  alias slice []
-
-  def =~(pattern)
-    self.to_s =~ pattern
-  end
-  alias match =~
+  # [], slice, =~, match and match? are in RPython (symbolobject.py), so
+  # that they set the caller's $~.
 
   def swapcase
     self.to_s.swapcase.to_sym

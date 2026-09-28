@@ -1819,3 +1819,19 @@ class TestAutoloadShadowing(BaseTopazTest):
         return [B.autoload?(:Conf).nil?, B.make, A::Conf.new.who]
         """ % (str(f),))
         assert self.unwrap(space, w_res) == [False, "b", "a"]
+
+
+class TestMatchSetsCallersLastMatch(BaseTopazTest):
+    def test_symbol_and_string_match(self, space):
+        w_res = space.execute("""
+        r = []
+        r << (:visit_X =~ /^visit_(.*)$/) << $1
+        m = :abc.match(/b(c)/)
+        r << m[1] << $~[0] << :abc.match?(/z/) << :hello[/l+/] << $~[0]
+        [:visit_A, :visit_B].each { |pim| next unless pim =~ /^visit_(.*)$/; r << $1 }
+        "abc".match(/b(c)/)
+        r << $~[0]
+        "xy".match("y") { |md| r << md[0] }
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [0, "X", "c", "bc", False, "ll", "ll", "A", "B", "bc", "y"]
