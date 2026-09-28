@@ -451,10 +451,22 @@ class W_ModuleObject(W_RootObject):
             return self.is_ancestor_of(w_cls.superclass)
         return False
 
+    def _modules_to_include(self, w_mod):
+        """w_mod and the modules it includes, in its order, less those
+        already among our ancestors: including a module includes what it
+        includes."""
+        ancestors = self.ancestors()
+        result = []
+        for w_m in w_mod.ancestors():
+            if w_m not in ancestors and w_m not in result:
+                result.append(w_m)
+        return result
+
     def include_module(self, space, w_mod):
         assert isinstance(w_mod, W_ModuleObject)
         if w_mod not in self.ancestors():
-            self.included_modules = [w_mod] + self.included_modules
+            self.included_modules = self._modules_to_include(w_mod) + self.included_modules
+            self.mutated()
             w_mod.included(space, self)
 
     def prepend_module(self, space, w_mod):
@@ -472,7 +484,8 @@ class W_ModuleObject(W_RootObject):
     def extend_object(self, space, w_mod):
         if self not in w_mod.ancestors():
             self.descendants.append(w_mod)
-            w_mod.included_modules = [self] + w_mod.included_modules
+            w_mod.included_modules = w_mod._modules_to_include(self) + w_mod.included_modules
+            w_mod.mutated()
 
     def visibility_names(self, space, names_w):
         # Names may come as symbols or strings, or (Ruby 3.0) in an array,

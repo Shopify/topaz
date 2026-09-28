@@ -2244,3 +2244,16 @@ class TestStructToH(BaseTopazTest):
         return [s.to_h, s.to_h { |k, v| [k.to_s, v * 2] }]
         """)
         assert self.unwrap(space, w_res) == [{"a": 1, "b": 2}, {"a": 2, "b": 4}]
+
+
+class TestIncludeFlattensModules(BaseTopazTest):
+    def test_super_reaches_modules_included_by_included_modules(self, space):
+        w_res = space.execute("""
+        module R; def mfh(a) = [:r, a]; end
+        module CM1; include R; end
+        module CM2; def mfh(a) = super(a + [1]); end
+        class C; extend CM1; extend CM2; end
+        class E; include CM1; end
+        return [C.mfh([0]), E.ancestors.take(3).map(&:name)]
+        """)
+        assert self.unwrap(space, w_res) == [["r", [0, 1]], ["E", "CM1", "R"]]
