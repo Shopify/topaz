@@ -80,6 +80,7 @@ class DefineMethodBlock(W_FunctionObject):
         method_block = self.block.copy(space, w_self=w_obj, is_lambda=True)
         if self.w_owner is not None:
             method_block.w_owner = self.w_owner
+        method_block.super_name = self.name
         try:
             return space.invoke_block(method_block, args_w, block)
         except RaiseReturn as e:

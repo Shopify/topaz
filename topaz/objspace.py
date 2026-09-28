@@ -778,6 +778,7 @@ class ObjectSpace(object):
             regexp_match_cell=block.regexp_match_cell,
         )
         frame.w_owner = block.w_owner
+        frame.super_name = block.super_name
         if block.is_lambda:
             frame.handle_args(self, bc, args_w, block_arg)
         else:

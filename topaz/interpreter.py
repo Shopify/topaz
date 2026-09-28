@@ -389,6 +389,7 @@ class Interpreter(object):
             self, frame.top_parent_interp or self, frame.regexp_match_cell
         )
         w_proc.w_owner = frame.w_owner
+        w_proc.super_name = frame.super_name
         frame.push(w_proc)
 
     def BUILD_LAMBDA(self, space, bytecode, frame, pc):
@@ -648,6 +649,11 @@ class Interpreter(object):
         else:
             frame.push(space.w_nil)
 
+    def _super_name(self, space, bytecode, frame, meth_idx):
+        if frame.super_name is not None:
+            return frame.super_name
+        return space.symbol_w(bytecode.consts_w[meth_idx])
+
     def SEND_SUPER_BLOCK(self, space, bytecode, frame, pc, meth_idx, num_args):
         space.getexecutioncontext().last_instr = pc
         w_block = frame.pop()
@@ -663,12 +669,12 @@ class Interpreter(object):
         if w_owner is not None:
             w_res = space.send_super_from(
                 w_owner, w_receiver,
-                space.symbol_w(bytecode.consts_w[meth_idx]), args_w,
+                self._super_name(space, bytecode, frame, meth_idx), args_w,
                 block=w_block)
         else:
             w_res = space.send_super(
                 space.getclass(w_receiver), w_receiver,
-                space.symbol_w(bytecode.consts_w[meth_idx]), args_w,
+                self._super_name(space, bytecode, frame, meth_idx), args_w,
                 block=w_block)
         frame.push(w_res)
 
@@ -692,12 +698,12 @@ class Interpreter(object):
         if w_owner is not None:
             w_res = space.send_super_from(
                 w_owner, w_receiver,
-                space.symbol_w(bytecode.consts_w[meth_idx]), args_w,
+                self._super_name(space, bytecode, frame, meth_idx), args_w,
                 block=w_block)
         else:
             w_res = space.send_super(
                 space.getclass(w_receiver), w_receiver,
-                space.symbol_w(bytecode.consts_w[meth_idx]), args_w,
+                self._super_name(space, bytecode, frame, meth_idx), args_w,
                 block=w_block)
         frame.push(w_res)
 
@@ -984,8 +990,12 @@ class ExceptBlock(FrameBlock):
     def cleanup(self, space, frame):
         self.cleanupstack(frame)
 
+    @jit.unroll_safe
     def handle(self, space, frame, unroller):
-        self.cleanupstack(frame)
+        # The rescue clauses start from the stack as it was at `begin`:
+        # the exception may interrupt an expression that pushed values.
+        while frame.stackpos > self.stackdepth - 1:
+            frame.pop()
         e = unroller.e
         space.globals.set(space, "$!", e.w_value)
         frame.push(unroller)

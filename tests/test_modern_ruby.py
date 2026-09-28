@@ -1349,3 +1349,28 @@ class TestPathnameAndFileNames(BaseTopazTest):
         assert self.unwrap(space, w_res) == [
             ["/a/b/c", "/a/b", "/a", "/"], "/usr/bin", "/a/b/c", "/a/c/d", "../b/c", "x.txt",
             "/a", "/a/b", "#<Pathname:/a>", ["/", "/a", "/a/b", "/a/b/c"]]
+
+
+class TestRescueAndSuper(BaseTopazTest):
+    def test_rescue_inside_an_expression(self, space):
+        w_res = space.execute("""
+        r = []
+        x = "a"
+        r << (begin; x + (raise "q"); rescue; [2]; end)
+        r << (begin; [x, x + (raise "q")]; rescue; 3; end)
+        r << [1, 2].map { |i| begin; i + (i == 2 ? raise("w") : 0); rescue; -i; end }
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [[2], 3, [1, -2]]
+
+    def test_super_in_define_method(self, space):
+        w_res = space.execute("""
+        class A; def f(x, y = nil); "A#{x}#{y}"; end; def g; "Ag"; end; end
+        class B < A
+          define_method(:f) { |x| "B" + super(x, 2) }
+          [:g].each { |m| define_method(m) { [1].map { super() }.first + "B" } }
+        end
+        return [B.new.f(1), B.new.g]
+        """)
+        assert self.unwrap(space, w_res) == ["BA12", "AgB"]
+
