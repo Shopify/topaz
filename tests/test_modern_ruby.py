@@ -2235,3 +2235,12 @@ class TestDirChildren(BaseTopazTest):
                 Dir.new(d).children.sort, Dir.new(d).to_a.size, Dir.home.is_a?(String)]
         """ % (str(tmpdir),))
         assert self.unwrap(space, w_res) == [["a", "b", "s"], ["a", "b", "s"], True, False, ["a", "b", "s"], 5, True]
+
+
+class TestStructToH(BaseTopazTest):
+    def test_struct_to_h(self, space):
+        w_res = space.execute("""
+        s = Struct.new(:a, :b).new(1, 2)
+        return [s.to_h, s.to_h { |k, v| [k.to_s, v * 2] }]
+        """)
+        assert self.unwrap(space, w_res) == [{"a": 1, "b": 2}, {"a": 2, "b": 4}]

@@ -244,3 +244,11 @@ class Struct
     end
   end
 end
+
+class Struct
+  def to_h(&block)
+    pairs = members.zip(values)
+    pairs = pairs.map(&block) if block
+    pairs.to_h
+  end
+end
