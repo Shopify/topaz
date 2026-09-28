@@ -282,6 +282,12 @@ class RegexpBase(object):
         # the branches of an alternation. Saying no is always safe.
         return False
 
+    def is_empty(self):
+        # Whether this node only ever matches the empty string. Every node
+        # needs an answer: a missing one crashes the translated
+        # interpreter when the node is repeated.
+        return False
+
     def compile_folded(self, ctx):
         # Compiles this node as a member of a case-insensitive set.
         self.compile(ctx)
@@ -374,6 +380,9 @@ class AnyAll(RegexpBase):
 class ZeroWidthBase(RegexpBase):
     def getwidth(self):
         return 0, 0
+
+    def is_empty(self):
+        return True
 
     def fix_groups(self):
         pass

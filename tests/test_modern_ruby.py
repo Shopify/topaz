@@ -1660,3 +1660,12 @@ class TestSystemExtensions(BaseTopazTest):
                 Process.uid == Process.euid, Socket.gethostname.is_a?(String)]
         """)
         assert self.unwrap(space, w_res) == [True, True, 2, "#<Addrinfo: 127.0.0.1:80>", False, True, True]
+
+
+class TestRepeatedZeroWidthRegexps(BaseTopazTest):
+    def test_repeated_groups_with_anchors(self, space):
+        w_res = space.execute("""
+        return [/(?:^a)+/.match("aa")&.[](0), /(?:\\bx)*y/.match("xy")&.[](0),
+                /(a)(?:\\1)+/.match("aaa")&.[](0), /[^\\u00e9a]+/.match("bc\\u00e9")&.[](0)]
+        """)
+        assert self.unwrap(space, w_res) == ["a", "xy", "aaa", "bc"]
