@@ -1989,3 +1989,25 @@ class TestClassVariablesInSingletonClassBodies(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [
             ["singleton_method_added", "got", "put", "later", "b"], 5, 5]
+
+
+class TestApproximateRefinements(BaseTopazTest):
+    def test_refinements_add_methods(self, space):
+        w_res = space.execute("""
+        module DC
+          refine Object do
+            def dclone = clone
+          end
+          refine String do
+            def upcase = "never"
+            def shout = upcase + "!"
+          end
+        end
+        using DC
+        class User
+          using DC
+          def run = ["a".dclone, "hi".shout, "x".upcase]
+        end
+        return User.new.run + [DC.refinements.size]
+        """)
+        assert self.unwrap(space, w_res) == ["a", "HI!", "X", 2]

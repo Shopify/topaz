@@ -33,7 +33,7 @@ class Module
   end
 
   def refinements
-    []
+    (@__topaz_refinements || {}).values
   end
 
   private
@@ -42,8 +42,26 @@ class Module
     nil
   end
 
+  # Refinements, approximately: topaz has no lexically scoped method
+  # tables, so a refinement's methods are made visible everywhere, as a
+  # module included into the refined class. The class's own methods win
+  # over them, so a refinement can add methods but not override the
+  # class's; `using` does nothing.
   def refine(klass, &block)
-    raise NotImplementedError, "refinements are not supported by topaz"
+    raise ArgumentError, "no block given" unless block
+    unless klass.is_a?(Module)
+      raise TypeError, "wrong argument type #{klass.class} (expected Class or Module)"
+    end
+    @__topaz_refinements ||= {}
+    refinement = @__topaz_refinements[klass] ||= begin
+      mod = Module.new
+      mod.instance_variable_set(:@__topaz_refined_class, klass)
+      mod.define_singleton_method(:target) { klass }
+      mod
+    end
+    refinement.module_eval(&block)
+    klass.__send__(:include, refinement) unless klass.include?(refinement) || klass.equal?(refinement)
+    refinement
   end
 
   def using(mod)
@@ -832,4 +850,12 @@ class String
     self
   end
   private :initialize
+end
+
+module Kernel
+  # main.using: refinements are always on in topaz (see Module#refine).
+  def using(mod)
+    self
+  end
+  private :using
 end
