@@ -2222,3 +2222,16 @@ class TestStackedQuantifiers(BaseTopazTest):
         return ["aaaa"[/a{2}*/], "aaa"[/a{2}+/], "ab"[/a**b/], "xaaaaax"[/a{2}{2}/]]
         """)
         assert self.unwrap(space, w_res) == ["aaaa", "aa", "ab", "aaaa"]
+
+
+class TestDirChildren(BaseTopazTest):
+    def test_children_each_child_and_each(self, space, tmpdir):
+        tmpdir.join("a").write("")
+        tmpdir.join("b").write("")
+        tmpdir.join("s").ensure(dir=True)
+        w_res = space.execute("""
+        d = %r
+        return [Dir.children(d).sort, Dir.each_child(d).to_a.sort, Dir.empty?(d + "/s"), Dir.empty?(d),
+                Dir.new(d).children.sort, Dir.new(d).to_a.size, Dir.home.is_a?(String)]
+        """ % (str(tmpdir),))
+        assert self.unwrap(space, w_res) == [["a", "b", "s"], ["a", "b", "s"], True, False, ["a", "b", "s"], 5, True]

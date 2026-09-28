@@ -74,3 +74,61 @@ class Dir
     end
   end
 end
+
+class Dir
+  # Entries without "." and "..".
+  def self.children(dirname, encoding: nil)
+    entries(dirname).reject { |name| name == "." || name == ".." }
+  end
+
+  def self.each_child(dirname, encoding: nil, &block)
+    return enum_for(:each_child, dirname) unless block
+    children(dirname).each(&block)
+    nil
+  end
+
+  def self.empty?(dirname)
+    File.directory?(dirname) && children(dirname).empty?
+  end
+
+  def children
+    entries = []
+    each { |name| entries << name unless name == "." || name == ".." }
+    entries
+  end
+
+  def each_child(&block)
+    return enum_for(:each_child) unless block
+    children.each(&block)
+    self
+  end
+end
+
+class Dir
+  include Enumerable
+
+  def each
+    return enum_for(:each) unless block_given?
+    while (name = read)
+      yield name
+    end
+    self
+  end
+
+  def to_path
+    path
+  end
+
+  def fileno
+    raise NotImplementedError, "Dir#fileno is not supported by topaz"
+  end
+
+  def self.home(user = nil)
+    raise ArgumentError, "user homes are not supported by topaz" if user
+    ENV["HOME"] || Etc.getpwuid&.dir
+  end
+
+  def self.tmpdir
+    ENV["TMPDIR"] || "/tmp"
+  end unless respond_to?(:tmpdir)
+end
