@@ -110,23 +110,43 @@ class Kernel(object):
     @staticmethod
     def find_feature(space, path):
         """The absolute path of the file `require path` loads, or `path`
-        itself (with .rb added) if there is no such file."""
+        itself (with .rb added) if there is no such file.
+
+        Topaz cannot load C extensions. lib-ruby/ext has Ruby replacements
+        for some, found for `require "psych.so"`, and for a feature like
+        "strscan" or "date_core" that has no Ruby file on the load path."""
         assert path is not None
+        if path.endswith(".so"):
+            end = len(path) - 3
+            assert end >= 0
+            return Kernel.find_ext_replacement(space, path[:end], path)
         if os.path.isfile(path):
             return rpath.rabspath(path)
+        base = path
+        added_extension = False
         if not path.endswith(".rb"):
             path += ".rb"
+            added_extension = True
 
         if not (path.startswith("/") or path.startswith("./") or path.startswith("../")):
             w_load_path = space.globals.get(space, "$LOAD_PATH")
             for w_base in space.listview(w_load_path):
-                base = Coerce.path(space, w_base)
-                full = os.path.join(base, path)
+                base_dir = Coerce.path(space, w_base)
+                full = os.path.join(base_dir, path)
                 if os.path.isfile(full):
                     return rpath.rabspath(full)
+            if added_extension:
+                return Kernel.find_ext_replacement(space, base, path)
         elif os.path.isfile(path):
             return rpath.rabspath(path)
         return path
+
+    @staticmethod
+    def find_ext_replacement(space, name, default):
+        full = os.path.join(space.ext_lib_path, name + ".rb")
+        if os.path.isfile(full):
+            return rpath.rabspath(full)
+        return default
 
     @staticmethod
     def load_error(space, orig_path):
@@ -138,7 +158,7 @@ class Kernel(object):
 
     @staticmethod
     def load_feature(space, path, orig_path, wrap=False):
-        if not os.path.isfile(path):
+        if not os.path.isfile(path) or path.endswith(".so"):
             raise Kernel.load_error(space, orig_path)
 
         try:

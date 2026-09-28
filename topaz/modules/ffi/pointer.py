@@ -110,10 +110,16 @@ class W_PointerObject(W_AbstractMemoryObject):
 
     @classdef.method('+', other='int')
     def method_plus(self, space, other):
-        ptr = rffi.ptradd(rffi.cast(rffi.CCHARP, self.ptr), other)
-        ptr_val = rffi.cast(lltype.Unsigned, ptr)
-        w_ptr_val = space.newint_or_bigint_fromunsigned(ptr_val)
-        w_res = space.send(space.getclass(self), 'new', [w_ptr_val])
+        # A plain Pointer into the same memory, even for a MemoryPointer,
+        # which owns its memory.
+        w_res = W_PointerObject(space)
+        w_res.ptr = rffi.cast(rffi.VOIDP,
+                              rffi.ptradd(rffi.cast(rffi.CCHARP, self.ptr), other))
+        w_res.sizeof_type = 1
+        if self.sizeof_memory == sys.maxint:
+            w_res.sizeof_memory = sys.maxint
+        else:
+            w_res.sizeof_memory = max(self.sizeof_memory - other, 0)
         return w_res
 
     @classdef.method('slice', size='int')

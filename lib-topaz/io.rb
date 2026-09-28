@@ -500,3 +500,11 @@ module Topaz
     alternatives.flat_map { |alt| expand_braces(head + alt + tail) }
   end
 end
+
+class IO
+  # The open flags, which CRuby's IO gets from File::Constants.
+  [:RDONLY, :WRONLY, :RDWR, :APPEND, :CREAT, :EXCL, :TRUNC, :BINARY, :NONBLOCK,
+   :NOCTTY, :SYNC].each do |name|
+    const_set(name, File.const_get(name)) if File.const_defined?(name) && !const_defined?(name, false)
+  end
+end

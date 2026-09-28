@@ -1231,3 +1231,45 @@ class TestMethodVisibilityAndEval(BaseTopazTest):
         return [o.enum_for(:each_line, chomp: true).to_a, o.enum_for(:each_line).to_a]
         """)
         assert self.unwrap(space, w_res) == [["x", "y"], ["x\n", "y\n"]]
+
+
+class TestExtensionsAndStringIO(BaseTopazTest):
+    def test_missing_c_extension(self, space):
+        with self.raises(space, "LoadError", "cannot load such file -- no_such_extension.so"):
+            space.execute('require "no_such_extension.so"')
+
+    def test_ffi_pointer_bytes_and_strings(self, space):
+        w_res = space.execute("""
+        require "ffi"
+        mp = FFI::MemoryPointer.new(:char, 16)
+        mp.put_bytes(0, "abcdef", 1, 3)
+        mp.put_string(8, "hi")
+        p2 = mp + 8
+        return [mp.get_bytes(0, 3), mp.get_string(8), p2.class.name, p2.get_string(0),
+                (mp.get_bytes(10, 20) rescue $!.class.name)]
+        """)
+        assert self.unwrap(space, w_res) == ["bcd", "hi", "FFI::Pointer", "hi", "IndexError"]
+
+    def test_stringio(self, space):
+        w_res = space.execute("""
+        require "stringio"
+        s = StringIO.new
+        s << "ab" << 1
+        s.puts "x", ["y", "z"]
+        s.printf("%03d", 7)
+        r = [s.string]
+        s.rewind
+        r << s.gets << s.read(2) << s.read << s.read(1) << s.eof?
+        r << StringIO.new("line1\\nline2\\n").readlines << StringIO.new("x\\ny").each_line(chomp: true).to_a
+        u = StringIO.new(+"hello")
+        u.seek(2)
+        u.write("XY")
+        r << u.string
+        a = StringIO.new(+"start", "a")
+        a.write("-end")
+        r << a.string << (StringIO.new("ro".freeze).write("x") rescue $!.class.name)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            "ab1x\ny\nz\n007", "ab1x\n", "y\n", "z\n007", None, True,
+            ["line1\n", "line2\n"], ["x", "y"], "heXYo", "start-end", "IOError"]

@@ -1,259 +1,101 @@
-class IO
-  module Writable
-  end
-  module Readable
-  end
-end
-
+# StringIO: an IO over a String.
 class StringIO
-
   include Enumerable
-  include IO::Writable
-  include IO::Readable
 
-  DEFAULT_RECORD_SEPARATOR = "\n" unless defined?(::DEFAULT_RECORD_SEPARATOR)
-
-  # This is why we need undefined in Ruby
-  Undefined = Object.new
-
-  class Data
-    attr_accessor :string, :pos, :lineno, :encoding
-
-    def initialize(string)
-      @string = string
-      @encoding = string.encoding
-      @pos = @lineno = 0
-    end
-  end
+  VERSION = "3.1.2"
 
   def self.open(*args)
     io = new(*args)
     return io unless block_given?
-
     begin
       yield io
     ensure
-      io.close
-      io.__data__.string = nil
-      self
+      io.close unless io.closed?
     end
   end
 
-  attr_reader :__data__
+  attr_reader :lineno
 
-  def initialize(string=nil, mode=nil)
+  def initialize(string = nil, mode = nil, **opts)
+    mode = opts[:mode] if mode.nil? && opts[:mode]
     if string.nil?
-      @__data__ = Data.new ""
-      set_encoding(nil)
-      mode = IO::RDWR
+      @string = +""
+      mode ||= "r+"
     else
-      string = Rubinius::Type.coerce_to string, String, :to_str
-      @__data__ = Data.new string
+      @string = Topaz.convert_type(string, String, :to_str)
+      mode ||= @string.frozen? ? "r" : "r+"
     end
+    @pos = 0
+    @lineno = 0
+    @closed_read = false
+    @closed_write = false
+    __topaz_set_mode(mode)
+    @string.replace("") if @truncate
+  end
 
-    if mode
-      if mode.is_a?(Integer)
-        mode_from_integer(mode)
-      else
-        mode = StringValue(mode)
-        mode_from_string(mode)
-      end
+  def initialize_copy(other)
+    super
+    self
+  end
+
+  def string
+    @string
+  end
+
+  def string=(string)
+    @string = Topaz.convert_type(string, String, :to_str)
+    @pos = 0
+    @lineno = 0
+    string
+  end
+
+  def reopen(string = nil, mode = nil)
+    if string.is_a?(StringIO)
+      @string = string.string
+      __topaz_set_mode("r+")
     else
-      mode_from_string(string.frozen? ? "r" : "r+")
+      initialize(string, mode)
     end
-
     self
   end
 
-  def initialize_copy(from)
-    from = Rubinius::Type.coerce_to(from, StringIO, :to_strio)
-
-    taint if from.tainted?
-
-    @append = from.instance_variable_get(:@append)
-    @readable = from.instance_variable_get(:@readable)
-    @writable = from.instance_variable_get(:@writable)
-    @__data__ = from.instance_variable_get(:@__data__)
-
-    self
-  end
-
-  def check_readable
-    raise IOError, "not opened for reading" unless @readable
-  end
-
-  private :check_readable
-
-  def check_writable
-    raise IOError, "not opened for writing" unless @writable
-    raise IOError, "unable to modify data" if @__data__.string.frozen?
-  end
-
-  private :check_writable
-
-  def set_encoding(external, internal=nil, options=nil)
-    encoding = external || Encoding.default_external
-    @__data__.encoding = encoding
-    @__data__.string.force_encoding(encoding)
-    self
-  end
-
-  def external_encoding
-    @__data__.encoding
-  end
-
-  def internal_encoding
-    nil
-  end
-
-  def each_byte
-    return to_enum :each_byte unless block_given?
-    check_readable
-
-    d = @__data__
-    string = d.string
-
-    while d.pos < string.length
-      byte = string.getbyte d.pos
-      d.pos += 1
-      yield byte
-    end
-
-    self
-  end
-
-  alias_method :bytes, :each_byte
-
-  def each_char
-    return to_enum :each_char unless block_given?
-    while s = getc
-      yield s
-    end
-
-    self
-  end
-
-  alias_method :chars, :each_char
-
-  def each_codepoint(&block)
-    return to_enum :each_codepoint unless block_given?
-    check_readable
-
-    d = @__data__
-    string = d.string
-
-    while d.pos < string.bytesize
-      char = string.chr_at d.pos
-
-      unless char
-        raise ArgumentError, "invalid byte sequence in #{d.encoding}"
-      end
-
-      d.pos += char.bytesize
-      yield char.ord
-    end
-
-    self
-  end
-
-  alias_method :codepoints, :each_codepoint
-
-  def each(sep=$/, limit=Undefined)
-    return to_enum :each, sep, limit unless block_given?
-    check_readable
-
-    while line = getline(true, sep, limit)
-      yield line
-    end
-
-    self
-  end
-
-  alias_method :each_line, :each
-  alias_method :lines, :each
-
-  def <<(str)
-    write(str)
-    self
-  end
-
-  def binmode
-    self
-  end
-
-  def write(str)
-    check_writable
-
-    str = String(str)
-    return 0 if str.empty?
-
-    d = @__data__
-    pos = d.pos
-    string = d.string
-
-    if @append || pos == string.bytesize
-      string.byte_append str
-      d.pos = string.bytesize
-    elsif pos > string.bytesize
-      m = Rubinius::Mirror.reflect string
-      m.splice string.bytesize, 0, "\000" * (pos - string.bytesize)
-      string.byte_append str
-      d.pos = string.bytesize
-    else
-      stop = string.bytesize - pos
-      if str.bytesize < stop
-        stop = str.bytesize
-      end
-      m = Rubinius::Mirror.reflect string
-      m.splice pos, stop, str
-      d.pos += str.bytesize
-      string.taint if str.tainted?
-    end
-
-    str.bytesize
-  end
-  alias_method :syswrite, :write
-  alias_method :write_nonblock, :write
-
-  def close
-    raise IOError, "closed stream" if closed?
-    @readable = @writable = nil
-  end
+  # IO state
 
   def closed?
-    !@readable && !@writable
+    @closed_read && @closed_write
+  end
+
+  def close
+    @closed_read = @closed_write = true
+    nil
   end
 
   def close_read
-    check_readable
-    @readable = nil
-  end
-
-  def closed_read?
-    !@readable
+    raise IOError, "closing non-duplex IO for reading" unless @readable
+    @closed_read = true
+    nil
   end
 
   def close_write
-    check_writable
-    @writable = nil
+    raise IOError, "closing non-duplex IO for writing" unless @writable
+    @closed_write = true
+    nil
+  end
+
+  def closed_read?
+    @closed_read
   end
 
   def closed_write?
-    !@writable
+    @closed_write
   end
 
-  def eof?
-    d = @__data__
-    d.pos >= d.string.bytesize
-  end
-  alias_method :eof, :eof?
-
-  def fcntl
-    raise NotImplementedError, "StringIO#fcntl is not implemented"
+  def sync
+    true
   end
 
-  def fileno
-    nil
+  def sync=(value)
+    value
   end
 
   def flush
@@ -264,479 +106,389 @@ class StringIO
     0
   end
 
-  def getc
-    check_readable
-    d = @__data__
-
-    return nil if eof?
-
-    char = d.string.find_character(d.pos)
-    d.pos += char.bytesize
-    char
-  end
-
-  def getbyte
-    check_readable
-    d = @__data__
-
-    return nil if eof?
-
-    byte = d.string.getbyte(d.pos)
-    d.pos += 1
-    byte
-  end
-
-  def gets(sep=$/, limit=Undefined)
-    check_readable
-
-    $_ = getline(false, sep, limit)
+  def fileno
+    nil
   end
 
   def isatty
     false
   end
-  alias_method :tty?, :isatty
-
-  def lineno
-    @__data__.lineno
-  end
-
-  def lineno=(line)
-    @__data__.lineno = line
-  end
+  alias tty? isatty
 
   def pid
     nil
   end
 
-  def pos
-    @__data__.pos
+  def binmode
+    @string.force_encoding(Encoding::BINARY) unless @string.frozen?
+    self
   end
 
+  def set_encoding(ext, *rest, **opts)
+    @string.force_encoding(ext) if ext && !@string.frozen?
+    self
+  end
+
+  def set_encoding_by_bom
+    nil
+  end
+
+  def external_encoding
+    @string.encoding
+  end
+
+  def internal_encoding
+    nil
+  end
+
+  def lineno=(n)
+    @lineno = n
+  end
+
+  # Positioning
+
+  def pos
+    @pos
+  end
+  alias tell pos
+
   def pos=(pos)
-    raise Errno::EINVAL if pos < 0
-    @__data__.pos = pos
+    raise Errno::EINVAL, "Invalid argument" if pos < 0
+    @pos = pos
+  end
+
+  def seek(offset, whence = IO::SEEK_SET)
+    case whence
+    when IO::SEEK_SET, :SET then base = 0
+    when IO::SEEK_CUR, :CUR then base = @pos
+    when IO::SEEK_END, :END then base = @string.bytesize
+    else raise Errno::EINVAL, "Invalid argument - invalid whence"
+    end
+    new_pos = base + offset
+    raise Errno::EINVAL, "Invalid argument" if new_pos < 0
+    @pos = new_pos
+    0
+  end
+
+  def rewind
+    @pos = 0
+    @lineno = 0
+    0
+  end
+
+  def eof?
+    __topaz_check_readable
+    @pos >= @string.bytesize
+  end
+  alias eof eof?
+
+  def size
+    @string.bytesize
+  end
+  alias length size
+
+  def truncate(length)
+    raise Errno::EINVAL, "negative length" if length < 0
+    __topaz_check_writable
+    if length < @string.bytesize
+      @string.replace(@string.byteslice(0, length))
+    else
+      @string << "\0" * (length - @string.bytesize)
+    end
+    0
+  end
+
+  # Writing
+
+  def write(*objs)
+    __topaz_check_writable
+    written = 0
+    objs.each do |obj|
+      str = obj.to_s
+      next if str.empty?
+      @pos = @string.bytesize if @append
+      if @pos > @string.bytesize
+        @string << "\0" * (@pos - @string.bytesize)
+      end
+      if @pos == @string.bytesize
+        @string << str
+      else
+        head = @string.byteslice(0, @pos)
+        tail = @string.byteslice(@pos + str.bytesize, @string.bytesize) || ""
+        @string.replace(head + str + tail)
+      end
+      @pos += str.bytesize
+      written += str.bytesize
+    end
+    written
+  end
+  alias syswrite write
+  alias write_nonblock write
+
+  def <<(obj)
+    write(obj)
+    self
   end
 
   def print(*args)
-    check_writable
-    args << $_ if args.empty?
-    write((args << $\).flatten.join)
+    args = [$_] if args.empty?
+    write(args.map(&:to_s).join($, || ""))
+    write($\) if $\
     nil
-  end
-
-  def printf(*args)
-    check_writable
-
-    if args.size > 1
-      write(args.shift % args)
-    else
-      write(args.first)
-    end
-
-    nil
-  end
-
-  def putc(obj)
-    check_writable
-
-    if obj.is_a?(String)
-      char = obj[0]
-    else
-      c = Rubinius::Type.coerce_to obj, Integer, :to_int
-      char = (c & 0xff).chr
-    end
-
-    d = @__data__
-    pos = d.pos
-    string = d.string
-
-    if @append || pos == string.bytesize
-      string.byte_append char
-      d.pos = string.bytesize
-    elsif pos > string.bytesize
-      m = Rubinius::Mirror.reflect string
-      m.splice string.bytesize, 0, "\000" * (pos - string.bytesize)
-      string.byte_append char
-      d.pos = string.bytesize
-    else
-      m = Rubinius::Mirror.reflect string
-      m.splice pos, char.bytesize, char
-      d.pos += char.bytesize
-    end
-
-    obj
   end
 
   def puts(*args)
     if args.empty?
-      write(DEFAULT_RECORD_SEPARATOR)
-    else
-      args.each do |arg|
-        if arg.nil?
-          line = ""
-        elsif Thread.guarding? arg
-          line = "[...]"
-        else
-          begin
-            arg = Rubinius::Type.coerce_to(arg, Array, :to_ary)
-            Thread.recursion_guard arg do
-              arg.each { |a| puts a }
-            end
-            next
-          rescue
-            line = arg.to_s
-          end
-        end
-
-        write(line)
-        write(DEFAULT_RECORD_SEPARATOR) unless line[-1] == ?\n
-      end
+      write("\n")
+      return nil
     end
-
+    args.each do |arg|
+      if arg.is_a?(Array)
+        arg.flatten.each { |a| puts(a) }
+        next
+      end
+      line = arg.nil? ? "" : arg.to_s
+      line += "\n" unless line.end_with?("\n")
+      write(line)
+    end
     nil
   end
 
-  def read(length=nil, buffer=nil)
-    check_readable
-    d = @__data__
-    pos = d.pos
-    string = d.string
+  def printf(format_string, *args)
+    write(format(format_string, *args))
+    nil
+  end
 
-    if length
-      length = Rubinius::Type.coerce_to length, Integer, :to_int
-      raise ArgumentError if length < 0
+  def putc(obj)
+    write(obj.is_a?(Integer) ? (obj & 0xff).chr : obj.to_s[0])
+    obj
+  end
 
-      buffer = StringValue(buffer) if buffer
+  # Reading
 
-      if eof?
-        buffer.clear if buffer
-        if length == 0
-          return "".force_encoding(Encoding::ASCII_8BIT)
-        else
-          return nil
-        end
-      end
-
-      str = string.byteslice(pos, length)
-      str.force_encoding Encoding::ASCII_8BIT
-
-      str = buffer.replace(str) if buffer
+  def read(length = nil, buffer = nil)
+    __topaz_check_readable
+    rest = @pos >= @string.bytesize ? "" : @string.byteslice(@pos, @string.bytesize - @pos)
+    if length.nil?
+      data = rest
+      @pos = @string.bytesize if @pos < @string.bytesize
     else
-      if eof?
-        buffer.clear if buffer
-        return "".force_encoding(Encoding::ASCII_8BIT)
+      length = Topaz.convert_type(length, Integer, :to_int)
+      raise ArgumentError, "negative length #{length} given" if length < 0
+      if rest.empty?
+        buffer&.replace("")
+        return length == 0 ? "" : nil
       end
-
-      str = string.byteslice(pos..-1)
-      buffer.replace str if buffer
+      data = rest.byteslice(0, length)
+      @pos += data.bytesize
+      data.force_encoding(Encoding::BINARY)
     end
+    buffer ? buffer.replace(data) : data
+  end
 
-    d.pos += str.length
-    return str
+  def read_nonblock(length, buffer = nil, exception: true)
+    data = read(length, buffer)
+    if data.nil?
+      raise EOFError, "end of file reached" if exception
+      return nil
+    end
+    data
+  end
+
+  def readpartial(length, buffer = nil)
+    data = read(length, buffer)
+    raise EOFError, "end of file reached" if data.nil?
+    data
+  end
+  alias sysread readpartial
+
+  def pread(length, offset)
+    @string.byteslice(offset, length)
+  end
+
+  def getc
+    __topaz_check_readable
+    return nil if @pos >= @string.bytesize
+    b = @string.getbyte(@pos)
+    n = b < 0x80 ? 1 : b >= 0xf0 ? 4 : b >= 0xe0 ? 3 : b >= 0xc0 ? 2 : 1
+    c = @string.byteslice(@pos, n)
+    @pos += c.bytesize
+    c
+  end
+
+  def getbyte
+    __topaz_check_readable
+    return nil if @pos >= @string.bytesize
+    b = @string.getbyte(@pos)
+    @pos += 1
+    b
   end
 
   def readchar
-    raise IO::EOFError, "end of file reached" if eof?
-    getc
+    c = getc
+    raise EOFError, "end of file reached" if c.nil?
+    c
   end
 
   def readbyte
-    readchar.getbyte(0)
+    b = getbyte
+    raise EOFError, "end of file reached" if b.nil?
+    b
   end
 
-  def readline(sep=$/, limit=Undefined)
-    check_readable
-    raise IO::EOFError, "end of file reached" if eof?
-
-    $_ = getline(true, sep, limit)
-  end
-
-  def readlines(sep=$/, limit=Undefined)
-    check_readable
-
-    ary = []
-    while line = getline(true, sep, limit)
-      ary << line
-    end
-
-    ary
-  end
-
-  def reopen(string=nil, mode=Undefined)
-    if string and not string.kind_of? String and mode.equal? Undefined
-      stringio = Rubinius::Type.coerce_to(string, StringIO, :to_strio)
-
-      taint if stringio.tainted?
-      initialize_copy stringio
+  def ungetc(c)
+    __topaz_check_readable
+    return nil if c.nil?
+    c = c.is_a?(Integer) ? c.chr : c.to_s
+    if @pos == 0
+      @string.replace(c + @string)
+    elsif @pos > @string.bytesize
+      @string << "\0" * (@pos - @string.bytesize)
+      @pos -= c.bytesize
+      @string << c
     else
-      mode = nil if mode.equal? Undefined
-      string = "" unless string
-
-      initialize string, mode
+      @pos -= c.bytesize
+      @pos = 0 if @pos < 0
+      head = @string.byteslice(0, @pos)
+      tail = @string.byteslice(@pos + c.bytesize, @string.bytesize) || ""
+      @string.replace(head + c + tail)
     end
+    nil
+  end
+  alias ungetbyte ungetc
 
+  def gets(*args, chomp: false)
+    __topaz_check_readable
+    sep, limit = __topaz_line_args(args)
+    return nil if @pos >= @string.bytesize
+    rest = @string.byteslice(@pos, @string.bytesize - @pos)
+    line = if sep.nil?
+      rest
+    elsif sep.empty?
+      # Paragraph mode.
+      rest = rest.sub(/\A\n+/, "")
+      skipped = @string.bytesize - @pos - rest.bytesize
+      @pos += skipped
+      i = rest.index(/\n\n/)
+      i ? rest.byteslice(0, i + 2) : rest
+    else
+      i = rest.index(sep)
+      i ? rest.byteslice(0, i + sep.bytesize) : rest
+    end
+    line = line.byteslice(0, limit) if limit && limit >= 0 && line.bytesize > limit
+    @pos += line.bytesize
+    if sep && sep.empty?
+      extra = @string.byteslice(@pos, @string.bytesize - @pos)[/\A\n*/]
+      @pos += extra.bytesize if extra
+    end
+    @lineno += 1
+    if chomp
+      if sep.nil?
+        # nothing
+      elsif sep.empty?
+        line = line.sub(/\n+\z/, "")
+      elsif line.end_with?(sep)
+        line = line.byteslice(0, line.bytesize - sep.bytesize)
+      end
+    end
+    $_ = line
+    line
+  end
+
+  def readline(*args, **opts)
+    line = gets(*args, **opts)
+    raise EOFError, "end of file reached" if line.nil?
+    line
+  end
+
+  def each_line(*args, chomp: false, &block)
+    return enum_for(:each_line, *args, chomp: chomp) unless block
+    while (line = gets(*args, chomp: chomp))
+      block.call(line)
+    end
+    self
+  end
+  alias each each_line
+
+  def readlines(*args, chomp: false)
+    lines = []
+    each_line(*args, chomp: chomp) { |line| lines << line }
+    lines
+  end
+
+  def each_char(&block)
+    return enum_for(:each_char) unless block
+    while (c = getc)
+      block.call(c)
+    end
     self
   end
 
-  def rewind
-    d = @__data__
-    d.pos = d.lineno = 0
+  def each_byte(&block)
+    return enum_for(:each_byte) unless block
+    while (b = getbyte)
+      block.call(b)
+    end
+    self
   end
 
-  def seek(to, whence = IO::SEEK_SET)
-    raise IOError, "closed stream" if self.closed?
-    to = Rubinius::Type.coerce_to to, Integer, :to_int
+  def each_codepoint(&block)
+    return enum_for(:each_codepoint) unless block
+    each_char { |c| block.call(c.ord) }
+  end
 
-    case whence
-    when IO::SEEK_CUR
-      to += @__data__.pos
-    when IO::SEEK_END
-      to += @__data__.string.bytesize
-    when IO::SEEK_SET, nil
+  private
+
+  def __topaz_set_mode(mode)
+    @append = false
+    @truncate = false
+    if mode.is_a?(Integer)
+      access = mode & 3
+      @readable = access == IO::RDONLY || access == IO::RDWR
+      @writable = access == IO::WRONLY || access == IO::RDWR
+      @append = mode & IO::APPEND != 0
+      @truncate = mode & IO::TRUNC != 0
     else
-      raise Errno::EINVAL, "invalid whence"
-    end
-
-    raise Errno::EINVAL if to < 0
-
-    @__data__.pos = to
-
-    return 0
-  end
-
-  def size
-    @__data__.string.bytesize
-  end
-  alias_method :length, :size
-
-  def string
-    @__data__.string
-  end
-
-  def string=(string)
-    d = @__data__
-    d.string = StringValue(string)
-    d.pos = 0
-    d.lineno = 0
-  end
-
-  def sync
-    true
-  end
-
-  def sync=(val)
-    val
-  end
-
-  def sysread(length=nil, buffer="")
-    str = read(length, buffer)
-
-    if str.nil?
-      buffer.clear
-      raise IO::EOFError, "end of file reached"
-    end
-
-    str
-  end
-
-  alias_method :readpartial, :sysread
-  alias_method :read_nonblock, :sysread
-
-  def tell
-    @__data__.pos
-  end
-
-  def truncate(length)
-    check_writable
-    len = Rubinius::Type.coerce_to length, Integer, :to_int
-    raise Errno::EINVAL, "negative length" if len < 0
-    string = @__data__.string
-
-    if len < string.bytesize
-      string[len..string.bytesize] = ""
-    else
-      string << "\000" * (len - string.bytesize)
-    end
-    return length
-  end
-
-  def ungetc(char)
-    check_readable
-
-    d = @__data__
-    pos = d.pos
-    string = d.string
-
-    if char.kind_of? Integer
-      char = Rubinius::Type.coerce_to char, String, :chr
-    else
-      char = Rubinius::Type.coerce_to char, String, :to_str
-    end
-
-    if pos > string.bytesize
-      string[string.bytesize..pos] = "\000" * (pos - string.bytesize)
-      d.pos -= 1
-      string[d.pos] = char
-    elsif pos > 0
-      d.pos -= 1
-      string[d.pos] = char
-    end
-
-    nil
-  end
-
-  def ungetbyte(bytes)
-    check_readable
-
-    return unless bytes
-
-    if bytes.kind_of? Integer
-      bytes = "" << bytes
-    else
-      bytes = StringValue(bytes)
-      return if bytes.bytesize == 0
-    end
-
-    d = @__data__
-    pos = d.pos
-    string = d.string
-
-    enc = string.encoding
-
-    if d.pos == 0
-      d.string = "#{bytes}#{string}"
-    else
-      size = bytes.bytesize
-      a = string.byteslice(0, pos - size) if size < pos
-      b = string.byteslice(pos..-1)
-      d.string = "#{a}#{bytes}#{b}"
-      d.pos = pos > size ? pos - size : 0
-    end
-
-    d.string.force_encoding enc
-    nil
-  end
-
-  def encode_with(coder)
-  end
-
-  def init_with(coder)
-    @__data__ = Data.new("")
-  end
-
-  def to_yaml_properties
-    []
-  end
-
-  def yaml_initialize(type, val)
-    @__data__ = Data.new("")
-  end
-
-  protected
-
-  def mode_from_string(mode)
-    @append = truncate = false
-
-    if mode[0] == ?r
-      @readable = true
-      @writable = mode[-1] == ?+ ? true : false
-    end
-
-    if mode[0] == ?w
-      @writable = truncate = true
-      @readable = mode[-1] == ?+ ? true : false
-    end
-
-    if mode[0] == ?a
-      @append = @writable = true
-      @readable = mode[-1] == ?+ ? true : false
-    end
-
-    d = @__data__
-    raise Errno::EACCES, "Permission denied" if @writable && d.string.frozen?
-    d.string.replace("") if truncate
-  end
-
-  def mode_from_integer(mode)
-    @readable = @writable = @append = false
-    d = @__data__
-
-    if mode == 0 or mode & IO::RDWR != 0
-      @readable = true
-    end
-
-    if mode & (IO::WRONLY | IO::RDWR) != 0
-      raise Errno::EACCES, "Permission denied" if d.string.frozen?
-      @writable = true
-    end
-
-    @append = true if (mode & IO::APPEND) != 0
-    d.string.replace("") if (mode & IO::TRUNC) != 0
-  end
-
-  def getline(arg_error, sep, limit)
-    if limit != Undefined
-      limit = Rubinius::Type.coerce_to limit, Integer, :to_int if limit
-      sep = Rubinius::Type.coerce_to sep, String, :to_str if sep
-    else
-      limit = nil
-
-      unless sep == $/ or sep.nil?
-        osep = sep
-        sep = Rubinius::Type.check_convert_type sep, String, :to_str
-        limit = Rubinius::Type.coerce_to osep, Integer, :to_int unless sep
+      mode = mode.to_s.delete("b").delete("t")
+      mode = mode.split(":").first || "r"
+      case mode
+      when "r" then @readable, @writable = true, false
+      when "r+" then @readable, @writable = true, true
+      when "w" then @readable, @writable, @truncate = false, true, true
+      when "w+" then @readable, @writable, @truncate = true, true, true
+      when "a" then @readable, @writable, @append = false, true, true
+      when "a+" then @readable, @writable, @append = true, true, true
+      else raise ArgumentError, "invalid access mode #{mode}"
       end
     end
+    if @writable && @string.frozen?
+      raise Errno::EACCES, "Permission denied"
+    end
+  end
 
-    raise ArgumentError if arg_error and limit == 0
+  def __topaz_check_readable
+    raise IOError, "not opened for reading" if !@readable || @closed_read
+  end
 
-    return nil if eof?
+  def __topaz_check_writable
+    raise IOError, "not opened for writing" if !@writable || @closed_write
+  end
 
-    d = @__data__
-    pos = d.pos
-    string = d.string
-
-    if sep.nil?
-      if limit
-        line = string.byteslice(pos, limit)
+  def __topaz_line_args(args)
+    sep = $/
+    limit = nil
+    case args.size
+    when 0
+    when 1
+      if args[0].nil? || args[0].is_a?(String)
+        sep = args[0]
       else
-        line = string.byteslice(pos, string.bytesize - pos)
-      end
-      d.pos += line.bytesize
-    elsif sep.empty?
-      if stop = string.find_string("\n\n", pos)
-        stop += 2
-        line = string.byteslice(pos, stop - pos)
-        while string.getbyte(stop) == 10
-          stop += 1
-        end
-        d.pos = stop
-      else
-        line = string.byteslice(pos, string.bytesize - pos)
-        d.pos = string.bytesize
+        limit = Topaz.convert_type(args[0], Integer, :to_int)
       end
     else
-      if stop = string.find_string(sep, pos)
-        if limit && stop - pos >= limit
-          stop = pos + limit
-        else
-          stop += sep.bytesize
-        end
-        line = string.byteslice(pos, stop - pos)
-        d.pos = stop
-      else
-        if limit
-          line = string.byteslice(pos, limit)
-        else
-          line = string.byteslice(pos, string.bytesize - pos)
-        end
-        d.pos += line.bytesize
-      end
+      sep = args[0]
+      limit = args[1] && Topaz.convert_type(args[1], Integer, :to_int)
     end
-
-    d.lineno += 1
-
-    return line
+    [sep, limit]
   end
 end

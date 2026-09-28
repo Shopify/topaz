@@ -63,6 +63,59 @@ class W_AbstractMemoryObject(W_Object):
     def singleton_method_allocate(self, space):
         return W_AbstractMemoryObject(space)
 
+    def check_range(self, space, offset, nbytes):
+        if offset < 0 or nbytes < 0 or offset + nbytes > self.sizeof_memory:
+            raise memory_index_error(space, offset, nbytes)
+
+    # Bytes and C strings, for any pointer (memory from C has an unknown
+    # size, so only MemoryPointer is bounds checked).
+
+    @classdef.method("put_bytes", offset='int', string='str', str_offset='int',
+                     nbytes='int')
+    def method_put_bytes(self, space, offset, string, str_offset=0, nbytes=-1):
+        if str_offset < 0 or str_offset > len(string):
+            raise space.error(space.w_IndexError, "invalid string offset")
+        if nbytes < 0:
+            nbytes = len(string) - str_offset
+        if str_offset + nbytes > len(string):
+            raise space.error(space.w_IndexError, "invalid length")
+        self.check_range(space, offset, nbytes)
+        with rffi.scoped_view_charp(string) as cstring:
+            rffi.c_memcpy(
+                rffi.ptradd(rffi.cast(rffi.CCHARP, self.ptr), offset),
+                rffi.cast(rffi.CONST_VOIDP, rffi.ptradd(cstring, str_offset)),
+                nbytes
+            )
+        return self
+
+    @classdef.method("get_bytes", offset='int', nbytes='int')
+    def method_get_bytes(self, space, offset, nbytes):
+        self.check_range(space, offset, nbytes)
+        return space.newstr_fromstr(rffi.charpsize2str(
+            rffi.ptradd(rffi.cast(rffi.CCHARP, self.ptr), offset), nbytes))
+
+    @classdef.method("get_string", offset='int', length='int')
+    def method_get_string(self, space, offset, length=-1):
+        """The NUL-terminated string at offset, reading at most length
+        bytes."""
+        start = rffi.ptradd(rffi.cast(rffi.CCHARP, self.ptr), offset)
+        limit = self.sizeof_memory - offset
+        if length >= 0 and length < limit:
+            limit = length
+        n = 0
+        while n < limit and start[n] != '\x00':
+            n += 1
+        return space.newstr_fromstr(rffi.charpsize2str(start, n))
+
+    @classdef.method("put_string", offset='int', string='str')
+    def method_put_string(self, space, offset, string):
+        self.check_range(space, offset, len(string) + 1)
+        start = rffi.ptradd(rffi.cast(rffi.CCHARP, self.ptr), offset)
+        for i in range(len(string)):
+            start[i] = string[i]
+        start[len(string)] = '\x00'
+        return self
+
     @classdef.setup_class
     def setup_class(cls, space, w_cls):
         long_in_bits = 8 * rffi.sizeof(rffi.LONG)
