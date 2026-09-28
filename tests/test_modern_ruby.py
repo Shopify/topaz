@@ -2040,3 +2040,17 @@ class TestSingletonClassesAreNotSubclasses(BaseTopazTest):
         return [r, P.subclasses.map(&:name), x.hi]
         """)
         assert self.unwrap(space, w_res) == [["Q"], ["Q"], 1]
+
+
+class TestDirGlobBase(BaseTopazTest):
+    def test_glob_with_base_and_several_patterns(self, space, tmpdir):
+        tmpdir.join("a", "b").ensure(dir=True)
+        tmpdir.join("a", "x.rb").write("")
+        tmpdir.join("a", "b", "y.rb").write("")
+        tmpdir.join("z.txt").write("")
+        w_res = space.execute("""
+        base = %r
+        return [Dir.glob("**/*.rb", base: base), Dir.glob("*", base: base + "/"),
+                Dir.glob([base + "/*.txt", base + "/a/*.rb"]).map { |f| File.basename(f) }]
+        """ % (str(tmpdir),))
+        assert self.unwrap(space, w_res) == [["a/b/y.rb", "a/x.rb"], ["a", "z.txt"], ["z.txt", "x.rb"]]
