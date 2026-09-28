@@ -1700,3 +1700,21 @@ class TestParameters(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [
             [1, 2, 3], "missing keywords: :k, :m", "missing keyword: :m"]
+
+    def test_parameters(self, space):
+        w_res = space.execute("""
+        class C
+          def a(x, y = 1, *r, k:, **kw, &b); end
+          def c(*, **, &); end
+          attr_reader :e
+          define_method(:f) { |q, w = 1| }
+        end
+        return [C.instance_method(:a).parameters, C.instance_method(:c).parameters,
+                C.instance_method(:e).parameters, C.instance_method(:f).parameters,
+                proc { |x, y| }.parameters, lambda { |x, y| }.parameters,
+                proc { |x| }.parameters(lambda: true), [].method(:push).parameters]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [["req", "x"], ["opt", "y"], ["rest", "r"], ["keyreq", "k"], ["keyrest", "kw"], ["block", "b"]],
+            [["rest", "*"], ["keyrest", "**"], ["block", "&"]], [], [["req", "q"], ["opt", "w"]],
+            [["opt", "x"], ["opt", "y"]], [["req", "x"], ["req", "y"]], [["req", "x"]], [["rest"]]]

@@ -39,6 +39,10 @@ class W_FunctionObject(W_BaseObject):
     def arity(self, space):
         return space.newint(0)
 
+    def parameters(self, space):
+        # Functions written in RPython take any arguments.
+        return space.newarray([space.newarray([space.newsymbol("rest")])])
+
     def source_location(self, space):
         return space.w_nil
 
@@ -79,6 +83,9 @@ class W_UserFunction(W_FunctionObject):
 
     def arity(self, space):
         return space.newint(self.bytecode.arity(negative_defaults=True))
+
+    def parameters(self, space):
+        return self.bytecode.parameters(space, True)
 
     def source_location(self, space):
         return space.newarray([

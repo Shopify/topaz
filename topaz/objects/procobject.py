@@ -93,6 +93,16 @@ class W_ProcObject(W_Object):
         self.bytecode.ruby2_keywords = True
         return self
 
+    @classdef.method("parameters")
+    def method_parameters(self, space, w_opts=None):
+        is_lambda = self.is_lambda
+        if w_opts is not None and w_opts is not space.w_nil:
+            # parameters(lambda: true) reports a proc as if it were a lambda.
+            w_lambda = space.send(w_opts, "[]", [space.newsymbol("lambda")])
+            if w_lambda is not space.w_nil:
+                is_lambda = space.is_true(w_lambda)
+        return self.bytecode.parameters(space, is_lambda)
+
     @classdef.method("lambda?")
     def method_lambda(self, space):
         return space.newbool(self.is_lambda)

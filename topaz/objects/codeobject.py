@@ -101,6 +101,42 @@ class W_CodeObject(W_BaseObject):
         obj.ruby2_keywords = self.ruby2_keywords
         return obj
 
+    def parameters(self, space, is_lambda):
+        """Method#parameters and Proc#parameters: [type, name] pairs. A
+        proc's required arguments are optional. Arguments after a rest
+        argument are listed before it."""
+        params_w = []
+        first_default = -1
+        if self.default_arg_begin != -1:
+            for i in range(len(self.arg_pos)):
+                if self.arg_pos[i] == self.default_arg_begin:
+                    first_default = i
+                    break
+        for i in range(len(self.arg_pos)):
+            name = self.cellvars[self.arg_pos[i]]
+            if first_default != -1 and first_default <= i < first_default + len(self.defaults):
+                kind = "opt"
+            else:
+                kind = "req" if is_lambda else "opt"
+            params_w.append(self._parameter(space, kind, name))
+        if self.splat_arg_pos != -1:
+            params_w.append(self._parameter(space, "rest", self.cellvars[self.splat_arg_pos]))
+        for i in range(len(self.kwarg_names)):
+            kind = "key" if i < len(self.kw_defaults) else "keyreq"
+            params_w.append(self._parameter(space, kind, self.kwarg_names[i]))
+        if self.kwrest_pos != -1:
+            params_w.append(self._parameter(space, "keyrest", self.cellvars[self.kwrest_pos]))
+        if self.block_arg_pos != -1:
+            params_w.append(self._parameter(space, "block", self.cellvars[self.block_arg_pos]))
+        return space.newarray(params_w)
+
+    def _parameter(self, space, kind, name):
+        items_w = [space.newsymbol(kind)]
+        # Hidden names (an unnamed destructuring argument) are left out.
+        if name and (name[0].isalpha() or name[0] == "_" or name in ["*", "**", "&"] or ord(name[0]) >= 0x80):
+            items_w.append(space.newsymbol(name))
+        return space.newarray(items_w)
+
     def arity(self, negative_defaults=False):
         args_count = len(self.arg_pos) - len(self.defaults)
         if self.splat_arg_pos != -1 or (negative_defaults and len(self.defaults) > 0):

@@ -28,6 +28,9 @@ class AttributeReader(W_FunctionObject):
     def call(self, space, w_obj, args_w, block):
         return space.find_instance_var(w_obj, self.varname) or space.w_nil
 
+    def parameters(self, space):
+        return space.newarray([])
+
 
 class AttributeWriter(W_FunctionObject):
     _immutable_fields_ = ["varname"]
@@ -48,6 +51,9 @@ class AttributeWriter(W_FunctionObject):
 
     def arity(self, space):
         return space.newint(1)
+
+    def parameters(self, space):
+        return space.newarray([space.newarray([space.newsymbol("req")])])
 
 
 class UndefMethod(W_FunctionObject):
@@ -89,6 +95,9 @@ class DefineMethodBlock(W_FunctionObject):
     def arity(self, space):
         return space.newint(self.block.bytecode.arity(negative_defaults=True))
 
+    def parameters(self, space):
+        return self.block.bytecode.parameters(space, True)
+
 
 class DefineMethodMethod(W_FunctionObject):
     _immutable_fields_ = ["name", "w_unbound_method"]
@@ -101,6 +110,9 @@ class DefineMethodMethod(W_FunctionObject):
     def call(self, space, w_obj, args_w, block):
         w_bound_method = space.send(self.w_unbound_method, "bind", [w_obj])
         return space.send(w_bound_method, "call", args_w, block)
+
+    def parameters(self, space):
+        return space.send(self.w_unbound_method, "parameters")
 
 
 class W_Autoload(W_RootObject):

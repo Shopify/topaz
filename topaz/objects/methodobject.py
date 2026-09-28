@@ -82,6 +82,10 @@ class W_MethodObject(W_Object):
     def method_arity(self, space):
         return self.w_function.arity(space)
 
+    @classdef.method("parameters")
+    def method_parameters(self, space):
+        return self.w_function.parameters(space)
+
 
 class W_UnboundMethodObject(W_Object):
     _immutable_fields_ = ["w_owner", "w_function"]
@@ -117,3 +121,7 @@ class W_UnboundMethodObject(W_Object):
     @classdef.method("arity")
     def method_arity(self, space):
         return self.w_function.arity(space)
+
+    @classdef.method("parameters")
+    def method_parameters(self, space):
+        return self.w_function.parameters(space)
