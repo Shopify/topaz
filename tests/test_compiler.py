@@ -266,20 +266,16 @@ class TestCompiler(object):
         """)
 
         self.assert_compiles(space, "begin puts 5 end while true", """
+        SETUP_LOOP 26
         LOAD_SELF
         LOAD_CONST 0
         SEND 1 1
         DISCARD_TOP
-        SETUP_LOOP 36
         LOAD_CONST 2
-        JUMP_IF_FALSE 32
-        LOAD_SELF
-        LOAD_CONST 3
-        SEND 1 1
-        DISCARD_TOP
-        JUMP 13
+        JUMP_IF_FALSE 22
+        JUMP 3
         POP_BLOCK
-        LOAD_CONST 4
+        LOAD_CONST 3
 
         RETURN
         """)

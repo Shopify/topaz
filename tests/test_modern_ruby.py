@@ -1669,3 +1669,24 @@ class TestRepeatedZeroWidthRegexps(BaseTopazTest):
                 /(a)(?:\\1)+/.match("aaa")&.[](0), /[^\\u00e9a]+/.match("bc\\u00e9")&.[](0)]
         """)
         assert self.unwrap(space, w_res) == ["a", "xy", "aaa", "bc"]
+
+
+class TestPostCheckLoops(BaseTopazTest):
+    def test_break_and_next_in_begin_end_while(self, space):
+        w_res = space.execute("""
+        r = []
+        i = 0
+        begin
+          i += 1
+          break if i == 3
+          r << i
+        end until false
+        j = 0
+        begin
+          j += 1
+          next if j == 2
+          r << j
+        end while j < 4
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [1, 2, 1, 3, 4]

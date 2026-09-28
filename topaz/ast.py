@@ -105,18 +105,28 @@ class BaseLoop(Node):
         end = ctx.new_block()
         loop = ctx.new_block()
 
-        if self.post_check:
-            self.body.compile(ctx)
-            ctx.emit(consts.DISCARD_TOP)
         ctx.emit_jump(consts.SETUP_LOOP, end)
         with ctx.enter_frame_block(ctx.F_BLOCK_LOOP, loop):
-            ctx.use_next_block(loop)
-            self.cond.compile(ctx)
-            ctx.emit_jump(self.cond_instr, anchor)
+            if self.post_check:
+                # `begin ... end while cond`: the body runs once before the
+                # first check, inside the loop (break and next work there;
+                # next goes to the check).
+                body = ctx.new_block()
+                ctx.use_next_block(body)
+                self.body.compile(ctx)
+                ctx.emit(consts.DISCARD_TOP)
+                ctx.use_next_block(loop)
+                self.cond.compile(ctx)
+                ctx.emit_jump(self.cond_instr, anchor)
+                ctx.emit_jump(consts.JUMP, body)
+            else:
+                ctx.use_next_block(loop)
+                self.cond.compile(ctx)
+                ctx.emit_jump(self.cond_instr, anchor)
 
-            self.body.compile(ctx)
-            ctx.emit(consts.DISCARD_TOP)
-            ctx.emit_jump(consts.JUMP, loop)
+                self.body.compile(ctx)
+                ctx.emit(consts.DISCARD_TOP)
+                ctx.emit_jump(consts.JUMP, loop)
 
             ctx.use_next_block(anchor)
             ctx.emit(consts.POP_BLOCK)
