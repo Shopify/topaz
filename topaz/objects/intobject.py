@@ -415,9 +415,22 @@ class W_FixnumObject(W_RootObject):
 
     @classdef.method("[]", idx="int")
     def method_subscript(self, space, idx):
-        if not 0 <= idx < LONG_BIT:
+        if idx < 0:
             return space.newint(0)
+        if idx >= LONG_BIT:
+            return space.newint(1 if self.intvalue < 0 else 0)
         return space.newint(int(bool(self.intvalue & (1 << idx))))
+
+    @classdef.method("bit_length")
+    def method_bit_length(self, space):
+        value = self.intvalue
+        if value < 0:
+            value = ~value
+        n = 0
+        while value:
+            value >>= 1
+            n += 1
+        return space.newint(n)
 
 
 class W_MutableFixnumObject(W_FixnumObject):

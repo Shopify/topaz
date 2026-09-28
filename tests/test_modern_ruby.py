@@ -757,3 +757,104 @@ class TestSystem(BaseTopazTest):
                 system({"TOPAZ_X" => "y"}, 'test "$TOPAZ_X" = y')]
         """)
         assert self.unwrap(space, w_res) == [True, False, 3, True]
+
+
+class TestIntegerBits(BaseTopazTest):
+    def test_bignum_bit_operations(self, space):
+        w_res = space.execute("""
+        big = 2 ** 70
+        return [big >> 68, big[70], big[3], (~big) + big, big.bit_length, 255.bit_length,
+                (-1).bit_length, (-1)[100], ((big & 5).class == Integer), (big >> 69) + 1]
+        """)
+        assert self.unwrap(space, w_res) == [4, 1, 0, -1, 71, 8, 0, 1, True, 3]
+
+
+class TestPack(BaseTopazTest):
+    def test_pack(self, space):
+        w_res = space.execute("""
+        return [[1, 2].pack("C*"), [1].pack("N"), [-2].pack("s>"), ["abc"].pack("m0"),
+                ["abc"].pack("m"), ["4a6f"].pack("H*"), [0x263a].pack("U"), [300].pack("w"),
+                ["ab"].pack("A4"), ["1011"].pack("B*")]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "\x01\x02", "\x00\x00\x00\x01", "\xff\xfe", "YWJj", "YWJj\n", "Jo",
+            "\xe2\x98\xba", "\x82\x2c", "ab  ", "\xb0"]
+
+    def test_unpack(self, space):
+        w_res = space.execute("""
+        return ["\\x01\\x02".unpack("C*"), "\\xff\\xfe".unpack("s>"), "YWJj".unpack1("m0"),
+                "Jo".unpack1("H*"), "\\xe2\\x98\\xba".unpack("U*"), "ab  ".unpack1("A*"),
+                "\\x00\\x00\\x00\\x00\\x00\\x00\\xf8\\x3f".unpack1("E"), "abc".unpack("N"),
+                "\\x01\\x02".unpack1("C", offset: 1)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 2], [-2], "abc", "4a6f", [0x263a], "ab", 1.5, [None], 2]
+
+    def test_errors(self, space):
+        with self.raises(space, "ArgumentError", "invalid base64"):
+            space.execute('"!!!!".unpack1("m0")')
+        with self.raises(space, "ArgumentError", "unknown unpack directive 'y' in 'y'"):
+            space.execute('"x".unpack("y")')
+
+
+class TestThreads(BaseTopazTest):
+    def test_deferred_threads(self, space):
+        w_res = space.execute("""
+        r = []
+        t = Thread.new(2) { |x| r << :ran; x * 21 }
+        r << t.alive?
+        r << t.value
+        r << t.alive?
+        never = Thread.new { loop { sleep 1 } }
+        r << never.alive?
+        failing = Thread.new { raise "boom" }
+        begin
+          failing.join
+        rescue => e
+          r << e.message
+        end
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [True, "ran", 42, False, True, "boom"]
+
+    def test_mutex_queue_condition_variable(self, space):
+        w_res = space.execute("""
+        m = Mutex.new
+        r = [m.synchronize { m.locked? }, m.locked?, m.try_lock, m.try_lock]
+        m.unlock
+        q = Queue.new
+        q << 1 << 2
+        r << q.pop << q.size
+        begin
+          Queue.new.pop(true)
+        rescue ThreadError => e
+          r << e.message
+        end
+        cv = ConditionVariable.new
+        r << cv.signal.equal?(cv)
+        r << (Thread::Mutex.equal?(Mutex))
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            True, False, True, False, 1, 1, "queue empty", True, True]
+
+    def test_weak_map(self, space):
+        w_res = space.execute("""
+        m = ObjectSpace::WeakMap.new
+        k = "key"
+        m[k] = 1
+        return [m[k], m.key?(k), m.key?("key".dup), m.size]
+        """)
+        assert self.unwrap(space, w_res) == [1, True, False, 1]
+
+
+class TestSecureRandomSupport(BaseTopazTest):
+    def test_random_bytes_and_formatter(self, space):
+        w_res = space.execute("""
+        f = Object.new
+        def f.bytes(n) = "\\x01" * n
+        f.extend(Random::Formatter)
+        return [Random.urandom(8).bytesize, Random.bytes(3).bytesize, Random.new_seed.class,
+                f.random_number(1000).class, f.random_number.class, f.rand(3..3)]
+        """)
+        assert self.unwrap(space, w_res) == [8, 3, space.w_integer, space.w_integer, space.w_float, 3]

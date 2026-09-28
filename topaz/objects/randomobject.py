@@ -1,3 +1,4 @@
+import copy
 import os
 import time
 
@@ -18,6 +19,12 @@ class W_RandomObject(W_Object):
         W_Object.__init__(self, space, klass)
         self.w_seed = None
         self.random = Random(abs(seed))
+
+    def __deepcopy__(self, memo):
+        obj = super(W_RandomObject, self).__deepcopy__(memo)
+        obj.w_seed = copy.deepcopy(self.w_seed, memo)
+        obj.random = copy.deepcopy(self.random, memo)
+        return obj
 
     @classdef.setup_class
     def setup_class(cls, space, w_cls):

@@ -7,8 +7,8 @@ from topaz.objects.objectobject import W_Object
 class W_ThreadObject(W_Object):
     classdef = ClassDef("Thread", W_Object.classdef)
 
-    def __init__(self, space):
-        W_Object.__init__(self, space)
+    def __init__(self, space, klass=None):
+        W_Object.__init__(self, space, klass)
         # TODO: This should be a map dict.
         self.local_storage = {}
 
@@ -16,6 +16,18 @@ class W_ThreadObject(W_Object):
         obj = super(W_ThreadObject, self).__deepcopy__(memo)
         obj.local_storage = copy.deepcopy(self.local_storage, memo)
         return obj
+
+    @classdef.singleton_method("allocate")
+    def method_allocate(self, space):
+        return W_ThreadObject(space, self)
+
+    @classdef.method("key?", key="str")
+    def method_keyp(self, space, key):
+        return space.newbool(key in self.local_storage)
+
+    @classdef.method("keys")
+    def method_keys(self, space):
+        return space.newarray([space.newsymbol(key) for key in self.local_storage])
 
     @classdef.singleton_method("current")
     def method_current(self, space):

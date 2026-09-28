@@ -89,7 +89,7 @@ class TestFixnumObject(BaseTopazTest):
 
     def test_substraction_bigint(self, space):
         w_res = space.execute("return 1 - %d" % (sys.maxint + 1))
-        assert self.unwrap(space, w_res) == rbigint.fromlong(1 - sys.maxint - 1)
+        assert self.unwrap(space, w_res) == 1 - sys.maxint - 1
 
     def test_division(self, space):
         w_res = space.execute("return 3 / 5")

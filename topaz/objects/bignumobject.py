@@ -16,6 +16,11 @@ class W_BignumObject(W_IntegerObject):
         W_IntegerObject.__init__(self, space)
         self.bigint = bigint
 
+    def __deepcopy__(self, memo):
+        obj = super(W_BignumObject, self).__deepcopy__(memo)
+        obj.bigint = self.bigint
+        return obj
+
     def get_flag(self, space, name):
         # Integers are always frozen.
         if name == "frozen?":
@@ -109,6 +114,30 @@ class W_BignumObject(W_IntegerObject):
             return space.newbigint_fromrbigint(self.bigint.lshift(other))
         else:
             return space.newbigint_fromrbigint(self.bigint.rshift(-other))
+
+    @classdef.method(">>", other="int")
+    def method_right_shift(self, space, other):
+        if other >= 0:
+            return space.newbigint_fromrbigint(self.bigint.rshift(other))
+        else:
+            return space.newbigint_fromrbigint(self.bigint.lshift(-other))
+
+    @classdef.method("[]", idx="int")
+    def method_subscript(self, space, idx):
+        if idx < 0:
+            return space.newint(0)
+        return space.newint(self.bigint.rshift(idx).int_and_(1).toint())
+
+    @classdef.method("~")
+    def method_invert(self, space):
+        return space.newbigint_fromrbigint(self.bigint.invert())
+
+    @classdef.method("bit_length")
+    def method_bit_length(self, space):
+        bigint = self.bigint
+        if bigint.get_sign() < 0:
+            bigint = bigint.invert()
+        return space.newint(bigint.bit_length())
 
     @classdef.method("&", other="bigint")
     def method_and(self, space, other):

@@ -439,7 +439,12 @@ class ObjectSpace(object):
         return W_BignumObject.newbigint_fromfloat(self, floatvalue)
 
     def newbigint_fromrbigint(self, bigint):
-        return W_BignumObject.newbigint_fromrbigint(self, bigint)
+        # Integers that fit in a machine word are Fixnums, whatever computed
+        # them.
+        try:
+            return self.newint(bigint.toint())
+        except OverflowError:
+            return W_BignumObject.newbigint_fromrbigint(self, bigint)
 
     @specialize.argtype(1)
     def newint_or_bigint(self, someinteger):

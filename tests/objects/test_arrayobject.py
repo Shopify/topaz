@@ -416,8 +416,10 @@ class TestArrayObject(BaseTopazTest):
 class TestArrayPack(BaseTopazTest):
     def test_garbage_format(self, space):
         assert space.str_w(space.execute("return [].pack ''")) == ""
-        assert space.str_w(space.execute("return [].pack 'yy'")) == ""
-        assert space.str_w(space.execute("return [1, 2].pack 'y3'")) == ""
+        with self.raises(space, "ArgumentError", "unknown pack directive 'y' in 'yy'"):
+            space.execute("[].pack 'yy'")
+        with self.raises(space, "ArgumentError", "unknown pack directive 'y' in 'y3'"):
+            space.execute("[1, 2].pack 'y3'")
 
     def test_padding(self, space):
         assert space.str_w(space.execute("return [].pack 'xx'")) == "\0\0"
@@ -437,11 +439,11 @@ class TestArrayPack(BaseTopazTest):
         assert space.str_w(space.execute("return [255].pack 'C'")) == struct.pack("B", 255)
         assert space.str_w(space.execute("return [256].pack 'C'")) == struct.pack("B", 256 % 256)
         assert space.str_w(space.execute("return [-255].pack 'C'")) == struct.pack("B", -255 % 256)
-        with self.raises(space, "ArgumentError", "> allowed only after types SsIiLlQq"):
+        with self.raises(space, "ArgumentError", "'>' allowed only after types sSiIlLqQjJ"):
             space.execute("[-255].pack 'C>'")
-        with self.raises(space, "ArgumentError", "! allowed only after types SsIiLl"):
+        with self.raises(space, "ArgumentError", "'!' allowed only after types sSiIlLqQjJ"):
             space.execute("[-255].pack 'C!'")
-        with self.raises(space, "ArgumentError", "< allowed only after types SsIiLlQq"):
+        with self.raises(space, "ArgumentError", "'<' allowed only after types sSiIlLqQjJ"):
             space.execute("[-255].pack 'C<'")
 
     def test_short(self, space):

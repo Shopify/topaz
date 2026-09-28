@@ -247,6 +247,19 @@ module MonitorMixin
     end
   end
 
+  public
+
+  # Ruby 2.x additions.
+  def mon_locked?
+    @mon_count > 0
+  end
+
+  def mon_owned?
+    @mon_count > 0 && @mon_owner == Thread.current
+  end
+
+  private
+
   def mon_enter_for_cond(count)
     @mon_owner = Thread.current
     @mon_count = count
@@ -275,6 +288,15 @@ class Monitor
   alias try_enter try_mon_enter
   alias enter mon_enter
   alias exit mon_exit
+
+  def wait_for_cond(cond, timeout)
+    count = mon_exit_for_cond
+    begin
+      cond.wait(@mon_mutex, timeout)
+    ensure
+      mon_enter_for_cond(count)
+    end
+  end
 end
 
 

@@ -235,7 +235,10 @@ class W_HashObject(W_Object):
     @classdef.method("[]=")
     @check_frozen()
     def method_subscript_assign(self, space, w_key, w_value):
+        # String keys are copied and frozen, unless the hash compares keys
+        # by identity.
         if (space.is_kind_of(w_key, space.w_string) and
+            self.strategy is not space.fromcache(IdentityDictStrategy) and
             not space.is_true(space.send(w_key, "frozen?"))):
 
             w_key = space.send(w_key, "dup")
