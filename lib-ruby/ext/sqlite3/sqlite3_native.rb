@@ -71,6 +71,11 @@ module SQLite3
     attach_function :sqlite3_free, [:pointer], :void
     attach_function :sqlite3_stmt_status, [:pointer, :int, :int], :int
     attach_function :sqlite3_status64, [:int, :pointer, :pointer, :int], :int
+    attach_function :sqlite3_backup_init, [:pointer, :string, :pointer, :string], :pointer
+    attach_function :sqlite3_backup_step, [:pointer, :int], :int
+    attach_function :sqlite3_backup_finish, [:pointer], :int
+    attach_function :sqlite3_backup_remaining, [:pointer], :int
+    attach_function :sqlite3_backup_pagecount, [:pointer], :int
 
     OK = 0
     ROW = 100
@@ -541,9 +546,44 @@ module SQLite3
     end
   end
 
+  # Copies one database into another (sqlite3_backup_*).
   class Backup
-    def initialize(*)
-      raise NotImplementedError, "SQLite3::Backup is not supported by topaz's sqlite3"
+    def initialize(destination, destination_name, source, source_name)
+      @destination = destination
+      @backup = LibSQLite.sqlite3_backup_init(destination.__topaz_db, destination_name.to_s,
+                                              source.__topaz_db, source_name.to_s)
+      SQLite3.__raise(destination.__topaz_db, LibSQLite.sqlite3_errcode(destination.__topaz_db)) if @backup.null?
+    end
+
+    # Copies up to pages pages (-1 for all); returns the result code
+    # (SQLite3::Constants::ErrorCode::DONE once finished).
+    def step(pages)
+      status = LibSQLite.sqlite3_backup_step(__topaz_backup, Integer(pages))
+      unless status == LibSQLite::OK || status == LibSQLite::DONE || status == 5 || status == 6
+        SQLite3.__raise(@destination.__topaz_db, status)
+      end
+      status
+    end
+
+    def finish
+      LibSQLite.sqlite3_backup_finish(__topaz_backup)
+      @backup = nil
+      nil
+    end
+
+    def remaining
+      LibSQLite.sqlite3_backup_remaining(__topaz_backup)
+    end
+
+    def pagecount
+      LibSQLite.sqlite3_backup_pagecount(__topaz_backup)
+    end
+
+    private
+
+    def __topaz_backup
+      raise SQLite3::Exception, "backup already finished" if @backup.nil?
+      @backup
     end
   end
 end
