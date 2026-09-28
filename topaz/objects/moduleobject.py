@@ -6,6 +6,7 @@ from rpython.rlib.objectmodel import specialize
 from topaz.celldict import CellDict, VersionTag
 from topaz.coerce import Coerce
 from topaz.module import ClassDef, check_frozen
+from topaz.objects.arrayobject import W_ArrayObject
 from topaz.objects.functionobject import W_FunctionObject, W_UserFunction
 from topaz.objects.objectobject import W_RootObject
 from topaz.objects.procobject import W_ProcObject
@@ -369,13 +370,34 @@ class W_ModuleObject(W_RootObject):
             self.descendants.append(w_mod)
             w_mod.included_modules = [self] + w_mod.included_modules
 
+    def visibility_names(self, space, names_w):
+        # Names may come as symbols or strings, or (Ruby 3.0) in an array,
+        # as in `private attr_reader :a, :b`.
+        names = []
+        for w_name in names_w:
+            if isinstance(w_name, W_ArrayObject):
+                for w_item in space.listview(w_name):
+                    names.append(Coerce.symbol(space, w_item))
+            else:
+                names.append(Coerce.symbol(space, w_name))
+        return names
+
     def set_visibility(self, space, names_w, visibility):
-        names = [space.symbol_w(w_name) for w_name in names_w]
+        names = self.visibility_names(space, names_w)
         if names:
             for name in names:
                 self.set_method_visibility(space, name, visibility)
         else:
             self.set_default_visibility(space, visibility)
+
+    def visibility_result(self, space, names_w):
+        """What private, public and protected return (Ruby 3.0): nil, the
+        name, or the array of names."""
+        if not names_w:
+            return space.w_nil
+        if len(names_w) == 1:
+            return names_w[0]
+        return space.newarray(names_w)
 
     def set_default_visibility(self, space, visibility):
         frame = space.getexecutioncontext().gettoprubyframe()
@@ -492,33 +514,48 @@ class W_ModuleObject(W_RootObject):
         else:
             raise space.error(space.w_ArgumentError, "tried to create Proc object without a block")
 
+    # The attr_* methods return the names of the methods they define
+    # (Ruby 3.0), so that `private attr_reader :a` works.
+
     @classdef.method("attr_accessor")
     def method_attr_accessor(self, space, args_w):
-        self.method_attr_reader(space, args_w)
-        self.method_attr_writer(space, args_w)
-
-    @classdef.method("attr_reader")
-    def method_attr_reader(self, space, args_w):
+        names_w = []
         for w_arg in args_w:
             varname = Coerce.symbol(space, w_arg)
             self.define_method(space, varname, AttributeReader("@" + varname))
+            self.define_method(space, varname + "=", AttributeWriter("@" + varname))
+            names_w.append(space.newsymbol(varname))
+            names_w.append(space.newsymbol(varname + "="))
+        return space.newarray(names_w)
+
+    @classdef.method("attr_reader")
+    def method_attr_reader(self, space, args_w):
+        names_w = []
+        for w_arg in args_w:
+            varname = Coerce.symbol(space, w_arg)
+            self.define_method(space, varname, AttributeReader("@" + varname))
+            names_w.append(space.newsymbol(varname))
+        return space.newarray(names_w)
 
     @classdef.method("attr_writer")
     def method_attr_writer(self, space, args_w):
+        names_w = []
         for w_arg in args_w:
             varname = Coerce.symbol(space, w_arg)
             self.define_method(space, varname + "=", AttributeWriter("@" + varname))
+            names_w.append(space.newsymbol(varname + "="))
+        return space.newarray(names_w)
 
     @classdef.method("attr")
     def method_attr(self, space, args_w):
         if len(args_w) == 2 and (args_w[1] is space.w_true or args_w[1] is space.w_false):
             [w_name, w_writable] = args_w
             if space.is_true(w_writable):
-                self.method_attr_accessor(space, [w_name])
+                return self.method_attr_accessor(space, [w_name])
             else:
-                self.method_attr_reader(space, [w_name])
+                return self.method_attr_reader(space, [w_name])
         else:
-            self.method_attr_reader(space, args_w)
+            return self.method_attr_reader(space, args_w)
 
     @classdef.method("ruby2_keywords")
     def method_ruby2_keywords(self, space, args_w):
@@ -607,17 +644,17 @@ class W_ModuleObject(W_RootObject):
     @classdef.method("private")
     def method_private(self, space, args_w):
         self.set_visibility(space, args_w, W_FunctionObject.PRIVATE)
-        return self
+        return self.visibility_result(space, args_w)
 
     @classdef.method("public")
     def method_public(self, space, args_w):
         self.set_visibility(space, args_w, W_FunctionObject.PUBLIC)
-        return self
+        return self.visibility_result(space, args_w)
 
     @classdef.method("protected")
     def method_protected(self, space, args_w):
         self.set_visibility(space, args_w, W_FunctionObject.PROTECTED)
-        return self
+        return self.visibility_result(space, args_w)
 
     @classdef.method("private_constant")
     def method_private_constant(self, space, args_w):
@@ -730,9 +767,36 @@ class W_ModuleObject(W_RootObject):
             "class variable %s not defined for %s" % (name, space.obj_to_s(self))
         )
 
-    @classdef.method("method_defined?", name="str")
-    def method_method_definedp(self, space, name):
-        return space.newbool(self.find_method(space, name) is not None)
+    def defined_method_visibility(self, space, name, inherit):
+        """The visibility of the method `name`, or -1 if it is not defined."""
+        if inherit:
+            w_method = self.find_method(space, name)
+        else:
+            w_method = self._find_method_pure(space, name, self.version)
+        if w_method is None or isinstance(w_method, UndefMethod):
+            return -1
+        return w_method.visibility
+
+    @classdef.method("method_defined?", name="str", inherit="bool")
+    def method_method_definedp(self, space, name, inherit=True):
+        visibility = self.defined_method_visibility(space, name, inherit)
+        return space.newbool(visibility == W_FunctionObject.PUBLIC or
+                             visibility == W_FunctionObject.PROTECTED)
+
+    @classdef.method("public_method_defined?", name="str", inherit="bool")
+    def method_public_method_definedp(self, space, name, inherit=True):
+        visibility = self.defined_method_visibility(space, name, inherit)
+        return space.newbool(visibility == W_FunctionObject.PUBLIC)
+
+    @classdef.method("private_method_defined?", name="str", inherit="bool")
+    def method_private_method_definedp(self, space, name, inherit=True):
+        visibility = self.defined_method_visibility(space, name, inherit)
+        return space.newbool(visibility == W_FunctionObject.PRIVATE)
+
+    @classdef.method("protected_method_defined?", name="str", inherit="bool")
+    def method_protected_method_definedp(self, space, name, inherit=True):
+        visibility = self.defined_method_visibility(space, name, inherit)
+        return space.newbool(visibility == W_FunctionObject.PROTECTED)
 
     @classdef.method("===")
     def method_eqeqeq(self, space, w_obj):

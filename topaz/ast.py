@@ -765,6 +765,14 @@ class And(Node):
         ConstantString("expression").compile(ctx)
 
 
+def receiver_may_be_undefined(node):
+    """Whether `defined?(node.m)` has to check `defined?(node)` first."""
+    return (isinstance(node, BaseSend) or isinstance(node, Constant) or
+            isinstance(node, LookupConstant) or isinstance(node, Global) or
+            isinstance(node, InstanceVariable) or
+            isinstance(node, ClassVariable))
+
+
 class BaseSend(Node):
     def __init__(self, receiver, args, block_arg, lineno):
         Node.__init__(self, lineno)
@@ -817,8 +825,22 @@ class BaseSend(Node):
         ctx.emit(consts.SEND, ctx.create_symbol_const(self.method + "="), 1)
 
     def compile_defined(self, ctx):
+        if not receiver_may_be_undefined(self.receiver):
+            self.compile_receiver(ctx)
+            ctx.emit(self.defined, self.method_name_const(ctx))
+            return
+        # `defined?(a.b)` is nil when `a` itself is not defined, instead of
+        # evaluating it (e.g. `defined?(Undefined.foo)`).
+        undefined = ctx.new_block()
+        end = ctx.new_block()
+        self.receiver.compile_defined(ctx)
+        ctx.emit_jump(consts.JUMP_IF_FALSE, undefined)
         self.compile_receiver(ctx)
         ctx.emit(self.defined, self.method_name_const(ctx))
+        ctx.emit_jump(consts.JUMP, end)
+        ctx.use_next_block(undefined)
+        ctx.emit(consts.LOAD_CONST, ctx.create_const(ctx.space.w_nil))
+        ctx.use_next_block(end)
 
 
 class Send(BaseSend):
@@ -1028,8 +1050,21 @@ class LookupConstant(Node):
         ctx.emit(consts.STORE_CONSTANT, ctx.create_symbol_const(self.name))
 
     def compile_defined(self, ctx):
+        if self.scope is None or not receiver_may_be_undefined(self.scope):
+            self.compile_receiver(ctx)
+            ctx.emit(consts.DEFINED_CONSTANT, ctx.create_symbol_const(self.name))
+            return
+        # `defined?(A::B)` is nil when A is not defined.
+        undefined = ctx.new_block()
+        end = ctx.new_block()
+        self.scope.compile_defined(ctx)
+        ctx.emit_jump(consts.JUMP_IF_FALSE, undefined)
         self.compile_receiver(ctx)
         ctx.emit(consts.DEFINED_CONSTANT, ctx.create_symbol_const(self.name))
+        ctx.emit_jump(consts.JUMP, end)
+        ctx.use_next_block(undefined)
+        ctx.emit(consts.LOAD_CONST, ctx.create_const(ctx.space.w_nil))
+        ctx.use_next_block(end)
 
 
 class Self(Node):

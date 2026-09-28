@@ -14,16 +14,24 @@ class << ENV
     self
   end
 
-  def update(hash, &block)
-    hash = Topaz.convert_type(hash, Hash, :to_hash)
-    hash.each do |k, v|
-      if block && self[k]
-        self[k] = yield(k, self[k], v)
-      else
-        self[k] = v
+  def update(*hashes, &block)
+    hashes.each do |hash|
+      hash = Topaz.convert_type(hash, Hash, :to_hash)
+      hash.each do |k, v|
+        v = yield(k, self[k], v) if block && self[k]
+        if v.nil?
+          delete(k)
+        else
+          self[k] = v
+        end
       end
     end
     self
+  end
+  alias merge! update
+
+  def to_h(&block)
+    to_hash.to_h(&block)
   end
 
   def clear

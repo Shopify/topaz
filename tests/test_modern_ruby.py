@@ -535,3 +535,80 @@ class TestBreakAndLazy(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [
             [6, 12, 18], [2, 6, 10], [1, 2, 3], [1, 2, 3], [1, 2, 4, 8, 16]]
+
+
+class TestDefinitionValues(BaseTopazTest):
+    def test_def_returns_the_method_name(self, space):
+        w_res = space.execute("""
+        a = def f = 1
+        b = def self.g; end
+        return [a, b]
+        """)
+        assert self.unwrap(space, w_res) == ["f", "g"]
+
+    def test_attr_methods_return_names(self, space):
+        w_res = space.execute("""
+        class A
+          R = [attr_reader(:a, :b), attr_writer(:c), attr_accessor(:d), attr(:e)]
+        end
+        return A::R
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["a", "b"], ["c="], ["d", "d="], ["e"]]
+
+    def test_visibility_with_arrays_and_return_values(self, space):
+        w_res = space.execute("""
+        class A
+          R1 = private(attr_reader :a, :b)
+          R2 = private def f = 1
+          R3 = private
+          R4 = public(:f, "a")
+          def g = 2
+          public
+        end
+        return [A::R1, A::R2, A::R3, A::R4, A.private_instance_methods(false),
+                A.public_method_defined?(:g), A.private_method_defined?(:g),
+                A.private_method_defined?(:b), A.method_defined?(:b), A.method_defined?(:f),
+                A.public_method_defined?(:to_s), A.public_method_defined?(:to_s, false)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["a", "b"], "f", None, ["f", "a"], ["b", "g"], False, True,
+            True, False, True, True, False]
+
+    def test_defined_on_undefined_receivers(self, space):
+        w_res = space.execute("""
+        @y = 1
+        return [defined?(Undefined.foo), defined?(Undefined::X), defined?(Comparable::Undefined.x),
+                defined?(@x.to_s), defined?($undefined.to_s), defined?(@y.to_s),
+                defined?(String.new), defined?(nil.nil?), defined?(x.y)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            None, None, None, None, None, "method", "method", "method", None]
+
+
+class TestEnvironmentModules(BaseTopazTest):
+    def test_rbconfig(self, space):
+        w_res = space.execute("""
+        require "rbconfig"
+        c = RbConfig::CONFIG
+        return [RbConfig.ruby.end_with?("/bin/topaz"), c["ruby_version"], c["MAJOR"],
+                c["host_os"], c["DLEXT"], c["rubylibdir"].end_with?("lib-ruby")]
+        """)
+        assert self.unwrap(space, w_res) == [True, "4.0.0", "4", "linux", "so", True]
+
+    def test_env_merge_and_to_h(self, space):
+        w_res = space.execute("""
+        ENV["TOPAZ_TEST_A"] = "1"
+        ENV.merge!({"TOPAZ_TEST_A" => nil, "TOPAZ_TEST_B" => "2"})
+        r = [ENV["TOPAZ_TEST_A"], ENV["TOPAZ_TEST_B"], ENV.to_h.class, ENV.to_h["TOPAZ_TEST_B"]]
+        ENV.delete("TOPAZ_TEST_B")
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [None, "2", space.w_hash, "2"]
+
+    def test_gc(self, space):
+        w_res = space.execute("""
+        return [GC.start, GC.count, GC.stat[:count], GC.stat(:count), GC.disable,
+                GC.respond_to?(:auto_compact)]
+        """)
+        assert self.unwrap(space, w_res) == [None, 0, 0, 0, False, False]

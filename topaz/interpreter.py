@@ -533,7 +533,8 @@ class Interpreter(object):
                 """can't define singleton method "%s" for %s""" % (
                     space.symbol_w(w_name), space.getclass(frame.w_self).name))
         w_scope.define_method(space, space.symbol_w(w_name), w_func)
-        frame.push(space.w_nil)
+        # `def` evaluates to the method's name (Ruby 2.1).
+        frame.push(w_name)
 
     def ATTACH_FUNCTION(self, space, bytecode, frame, pc):
         w_func = frame.pop()
@@ -545,7 +546,7 @@ class Interpreter(object):
                 space.w_TypeError, "no class/module to add method")
         assert isinstance(w_func, W_FunctionObject)
         w_obj.attach_method(space, space.symbol_w(w_name), w_func)
-        frame.push(space.w_nil)
+        frame.push(w_name)
 
     def EVALUATE_MODULE(self, space, bytecode, frame, pc):
         space.getexecutioncontext().last_instr = pc

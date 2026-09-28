@@ -160,7 +160,7 @@ class TestInterpreter(BaseTopazTest):
 
     def test_def_function(self, space):
         w_res = space.execute("return def f() end")
-        assert w_res is space.w_nil
+        assert space.symbol_w(w_res) == "f"
 
         w_res = space.execute("""
         def f(a, b)
