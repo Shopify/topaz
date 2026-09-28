@@ -54,9 +54,10 @@ class Range
       rescue ArgumentError
         raise TypeError, "no implicit conversion to float from #{from.class}"
       end
-    else
+    elsif !(step_size.is_a?(Numeric) && first.is_a?(Numeric))
       step_size = Topaz.convert_type(step_size, Integer, :to_int)
     end
+    # A Rational (or other Numeric) step is used as it is.
 
     if step_size <= 0
       raise ArgumentError, "step can't be negative" if step_size < 0

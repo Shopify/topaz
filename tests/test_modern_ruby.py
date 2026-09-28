@@ -2286,3 +2286,11 @@ class TestWhenSplat(BaseTopazTest):
         return [r, w, (case 5; when *[] then 1; else 0; end)]
         """)
         assert self.unwrap(space, w_res) == [[1, 2, 2], 2, 0]
+
+
+class TestRangeStepRational(BaseTopazTest):
+    def test_rational_steps(self, space):
+        w_res = space.execute("""
+        return [((0r..1r) % 0.25r).map(&:to_s), (1..2).step(1/2r).map(&:to_s), (1..10).step(3).to_a]
+        """)
+        assert self.unwrap(space, w_res) == [["0/1", "1/4", "1/2", "3/4", "1/1"], ["1", "3/2", "2/1"], [1, 4, 7, 10]]
