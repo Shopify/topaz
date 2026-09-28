@@ -1690,3 +1690,13 @@ class TestPostCheckLoops(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == [1, 2, 1, 3, 4]
+
+
+class TestParameters(BaseTopazTest):
+    def test_required_keywords_before_optional_ones(self, space):
+        w_res = space.execute("""
+        def a(k:, j: 2, m:) = [k, j, m]
+        return [a(k: 1, m: 3), (a rescue $!.message), (a(k: 1) rescue $!.message)]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 2, 3], "missing keywords: :k, :m", "missing keyword: :m"]

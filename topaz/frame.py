@@ -111,9 +111,12 @@ class Frame(BaseFrame):
 
         if (len(bytecode.kw_defaults) < len(bytecode.kwarg_names) and
                 not keywords_hash):
+            # The keywords without defaults come last.
+            missing = [":" + name for name in bytecode.kwarg_names[len(bytecode.kw_defaults):]]
             raise space.error(
                 space.w_ArgumentError,
-                "missing keywords: %s" % ",".join(bytecode.kwarg_names))
+                "%s: %s" % ("missing keyword" if len(missing) == 1 else "missing keywords",
+                            ", ".join(missing)))
 
         pre = 0
         post = len(args_w)
@@ -196,9 +199,21 @@ class Frame(BaseFrame):
                 try:
                     bc = bytecode.kw_defaults[i]
                 except IndexError:
+                    missing = []
+                    for j in range(i, len(bytecode.kwarg_names)):
+                        present = False
+                        if keywords_hash is not None:
+                            try:
+                                keywords_hash.getitem(space.newsymbol(bytecode.kwarg_names[j]))
+                                present = True
+                            except KeyError:
+                                pass
+                        if not present:
+                            missing.append(":" + bytecode.kwarg_names[j])
                     raise space.error(
                         space.w_ArgumentError,
-                        "missing keyword: %s" % name)
+                        "%s: %s" % ("missing keyword" if len(missing) == 1 else "missing keywords",
+                                    ", ".join(missing)))
                 self.bytecode = bc
                 w_value = Interpreter().run(space, self, bc)
             self._set_arg(space, bytecode.cellvars.index(name), w_value)
