@@ -1,20 +1,39 @@
+import copy
+
 from topaz.astcompiler import SymbolTable
+from topaz.closure import ClosureCell
 from topaz.module import ClassDef
 from topaz.objects.objectobject import W_Object
 
 
 class W_BindingObject(W_Object):
     classdef = ClassDef("Binding", W_Object.classdef)
-    _immutable_fields_ = ["names[*]", "cells[*]", "w_self", "lexical_scope"]
+    # names and cells grow when local_variable_set defines a variable.
+    _immutable_fields_ = ["w_self", "lexical_scope"]
 
     def __init__(self, space, names, cells, w_self, lexical_scope):
         W_Object.__init__(self, space)
-        self.names = names
-        self.cells = cells
+        self.names = names[:]
+        self.cells = cells[:]
         self.w_self = w_self
         self.lexical_scope = lexical_scope
 
+    def __deepcopy__(self, memo):
+        obj = super(W_BindingObject, self).__deepcopy__(memo)
+        obj.names = self.names[:]
+        obj.cells = copy.deepcopy(self.cells, memo)
+        obj.w_self = copy.deepcopy(self.w_self, memo)
+        obj.lexical_scope = copy.deepcopy(self.lexical_scope, memo)
+        return obj
+
     classdef.undefine_allocator()
+
+    @classdef.method("dup")
+    @classdef.method("clone")
+    def method_dup(self, space, args_w):
+        # A copy sharing the same variables (ERB evaluates templates in
+        # TOPLEVEL_BINDING.dup).
+        return W_BindingObject(space, self.names, self.cells, self.w_self, self.lexical_scope)
 
     @classdef.method("eval", source="str", filepath="str", lineno="int")
     def method_eval(self, space, source, filepath="(eval)", lineno=1):
@@ -54,8 +73,10 @@ class W_BindingObject(W_Object):
     def method_local_variable_set(self, space, name, w_value):
         j = self.find_local(name)
         if j < 0:
-            raise space.error(space.w_NotImplementedError,
-                "defining a new local variable through a binding")
+            # A new variable, visible to code evaluated in this binding.
+            self.names.append(name)
+            self.cells.append(ClosureCell(w_value))
+            return w_value
         self.cells[j].set(space, None, 0, w_value)
         return w_value
 

@@ -2163,3 +2163,17 @@ class TestRecursiveSubexpCalls(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res)[:5] == [True, True, True, False, "(())"]
         assert space.str_w(space.send(space.listview(w_res)[5], "name")) == "RegexpError"
+
+
+class TestBindingDupAndNewLocals(BaseTopazTest):
+    def test_dup_and_new_local_variables(self, space):
+        w_res = space.execute("""
+        x = 1
+        b = binding.dup
+        b.local_variable_set(:y, 5)
+        b2 = TOPLEVEL_BINDING.dup
+        b2.local_variable_set(:name, "w")
+        return [b.eval("x + y"), b.local_variable_get(:y), b.local_variable_defined?(:y),
+                b2.eval("name * 2"), defined?(y)]
+        """)
+        assert self.unwrap(space, w_res) == [6, 5, True, "ww", None]
