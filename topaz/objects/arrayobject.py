@@ -269,7 +269,7 @@ class W_ArrayObject(W_Object):
     def method_join(self, space, w_sep=None):
         if not self.items_w:
             return space.newstr_fromstr("")
-        if w_sep is None:
+        if w_sep is None or w_sep is space.w_nil:
             separator = ""
         elif space.respond_to(w_sep, "to_str"):
             separator = space.str_w(space.send(w_sep, "to_str"))
@@ -278,10 +278,33 @@ class W_ArrayObject(W_Object):
                 space.w_TypeError,
                 "can't convert %s into String" % space.getclass(w_sep).name
             )
-        return space.newstr_fromstr(separator.join([
-            space.str_w(space.send(w_o, "to_s"))
-            for w_o in self.items_w
-        ]))
+        parts = []
+        self._join_into(space, parts, [])
+        return space.newstr_fromstr(separator.join(parts))
+
+    def _join_into(self, space, parts, seen_w):
+        """Array#join's pieces: nested arrays are joined in place, with the
+        same separator."""
+        for w_seen in seen_w:
+            if w_seen is self:
+                raise space.error(space.w_ArgumentError, "recursive array join")
+        seen_w.append(self)
+        for w_o in self.items_w:
+            if space.is_kind_of(w_o, space.w_string):
+                parts.append(space.str_w(w_o))
+            elif isinstance(w_o, W_ArrayObject):
+                w_o._join_into(space, parts, seen_w)
+            elif space.respond_to(w_o, "to_str"):
+                parts.append(space.str_w(space.send(w_o, "to_str")))
+            elif space.respond_to(w_o, "to_ary"):
+                w_ary = space.send(w_o, "to_ary")
+                if isinstance(w_ary, W_ArrayObject):
+                    w_ary._join_into(space, parts, seen_w)
+                else:
+                    parts.append(space.str_w(space.send(w_o, "to_s")))
+            else:
+                parts.append(space.str_w(space.send(w_o, "to_s")))
+        seen_w.pop()
 
     @classdef.method("pop")
     @check_frozen()

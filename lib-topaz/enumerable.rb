@@ -425,6 +425,8 @@ module Enumerable
     if block
       self.each do |elm|
         if pattern === elm
+          # The block sees the match in $~, as with CRuby's grep.
+          block.__topaz_set_last_match($~) if pattern.is_a?(Regexp)
           ret << yield(elm)
         end
       end

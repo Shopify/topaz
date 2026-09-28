@@ -1844,3 +1844,27 @@ class TestUndefAndRemoveSeveralMethods(BaseTopazTest):
         return [A.method_defined?(:a), A.method_defined?(:b), A.method_defined?(:c), A.method_defined?(:d)]
         """)
         assert self.unwrap(space, w_res) == [False, False, False, False]
+
+
+class TestJoinNewAndGrep(BaseTopazTest):
+    def test_join_flattens_nested_arrays(self, space):
+        w_res = space.execute("""
+        a = [1]
+        a << a
+        return [[["a", "b"], "c"].join(" | "), [1, [2, [3]]].join(","), [:x, nil, 2.5].join("-"),
+                [1, 2].join(nil), (a.join rescue $!.message)]
+        """)
+        assert self.unwrap(space, w_res) == ["a | b | c", "1,2,3", "x--2.5", "12", "recursive array join"]
+
+    def test_string_new_with_encoding_and_capacity(self, space):
+        w_res = space.execute("""
+        return [String.new.encoding.to_s, String.new("x").encoding.to_s,
+                String.new(encoding: "UTF-8").encoding.to_s, String.new("ab", capacity: 10)]
+        """)
+        assert self.unwrap(space, w_res) == ["ASCII-8BIT", "UTF-8", "UTF-8", "ab"]
+
+    def test_grep_block_sees_the_match(self, space):
+        w_res = space.execute("""
+        return [%w[on_a xb on_c].grep(/\\Aon_/) { $'.to_sym }, %w[a1 b2].grep(/(\\d)/) { $1 }]
+        """)
+        assert self.unwrap(space, w_res) == [["a", "c"], ["1", "2"]]

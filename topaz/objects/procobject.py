@@ -86,6 +86,14 @@ class W_ProcObject(W_Object):
             else:
                 raise
 
+    @classdef.method("__topaz_set_last_match")
+    def method_topaz_set_last_match(self, space, w_match):
+        """Sets $~ as the block sees it: for methods written in Ruby that
+        match on the block's behalf (Enumerable#grep)."""
+        if self.regexp_match_cell is not None:
+            self.regexp_match_cell.set(space, None, 0, w_match)
+        return w_match
+
     @classdef.method("ruby2_keywords")
     def method_ruby2_keywords(self, space):
         # Keywords collected by the block's *rest stay marked as keywords
