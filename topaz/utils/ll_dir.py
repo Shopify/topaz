@@ -33,10 +33,12 @@ else:
         save_err=rffi.RFFI_SAVE_ERRNO,
         macro=True
     )
+    # errno is zeroed before the call: readdir leaves it alone at the end
+    # of the directory, and a stale errno would read as an error.
     os_readdir = rffi.llexternal("readdir",
         [DIRP], DIRENTP,
         compilation_info=eci,
-        save_err=rffi.RFFI_SAVE_ERRNO,
+        save_err=rffi.RFFI_ZERO_ERRNO_BEFORE | rffi.RFFI_SAVE_ERRNO,
         macro=True
     )
     os_closedir = rffi.llexternal("closedir",
@@ -56,7 +58,6 @@ else:
         os_closedir(dirp)
 
     def readdir(dirp):
-        rposix.set_saved_errno(0)
         direntp = os_readdir(dirp)
         if not direntp:
             if rposix.get_saved_errno() == 0:
