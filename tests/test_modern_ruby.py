@@ -1516,3 +1516,39 @@ class TestStringScanner(BaseTopazTest):
             " hello", "hello", ["hello"], " ", "worl", False, "world\n", True,
             18, 11, True, "#<StringScanner fin>", "b", "c", 1, -42, 1, 31]
 
+
+class TestJSONParser(BaseTopazTest):
+    def test_parse(self, space):
+        w_res = space.execute("""
+        module JSON
+          class JSONError < StandardError; end
+          class ParserError < JSONError; attr_reader :line, :column; end
+          class NestingError < ParserError; end
+        end
+        require "json/ext/parser"
+        parse = ->(source, opts = nil) do
+          JSON::Ext::ParserConfig.new(opts).parse(source)
+        rescue JSON::ParserError => e
+          [e.class.name, e.message]
+        end
+        return [
+          parse.('{"a":[1,2.5,"x",null,true,false,{"b":-1e3}],"c":"\\u00e9\\n"}'),
+          parse.('{"a":1}', symbolize_names: true),
+          parse.('[1, 2,]', allow_trailing_comma: true),
+          parse.('[[1]] // x', max_nesting: 1),
+          parse.('[1 2]'), parse.('{"a" 1}'), parse.('01'), parse.('"abc'),
+          parse.("[1,\\n  @]"), parse.('"\\ud83d\\ude00"').bytesize,
+        ]
+        """)
+        assert self.unwrap(space, w_res) == [
+            {"a": [1, 2.5, "x", None, True, False, {"b": -1000.0}], "c": "\xc3\xa9\n"},
+            {"a": 1},
+            [1, 2],
+            ["JSON::NestingError", "nesting of 2 is too deep"],
+            ["JSON::ParserError", "expected ',' or ']' after array value at line 1 column 4"],
+            ["JSON::ParserError", "expected ':' after object key at line 1 column 6"],
+            ["JSON::ParserError", "invalid number: '01' at line 1 column 1"],
+            ["JSON::ParserError", 'unexpected end of input, expected closing " at line 1 column 5'],
+            ["JSON::ParserError", "unexpected character: '@]' at line 1 column 3"],
+            4,
+        ]
