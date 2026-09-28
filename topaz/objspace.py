@@ -988,10 +988,19 @@ class ObjectSpace(object):
             self.getnonsingletonclass(w_obj))
 
     def undefined_method_error(self, name, w_receiver):
-        return self.error(
+        error = self.error(
             self.w_NoMethodError,
             "undefined method '%s' for %s" % (
                 name, self.describe_receiver(w_receiver)))
+        self.set_name_error_details(error.w_value, name, w_receiver)
+        return error
+
+    def set_name_error_details(self, w_error, name, w_receiver):
+        """NameError#name and #receiver."""
+        from topaz.objects.exceptionobject import W_NameError
+        if isinstance(w_error, W_NameError):
+            w_error.w_name = self.newsymbol(name)
+        w_error.set_instance_var(self, "@__topaz_receiver", w_receiver)
 
     def compare(self, w_a, w_b, block=None):
         if block is None:

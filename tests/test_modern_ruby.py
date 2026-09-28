@@ -2257,3 +2257,20 @@ class TestIncludeFlattensModules(BaseTopazTest):
         return [C.mfh([0]), E.ancestors.take(3).map(&:name)]
         """)
         assert self.unwrap(space, w_res) == [["r", [0, 1]], ["E", "CM1", "R"]]
+
+
+class TestNameErrorReceiver(BaseTopazTest):
+    def test_name_and_receiver(self, space):
+        w_res = space.execute("""
+        r = []
+        begin; Nope; rescue NameError => e; r << [e.name, e.receiver == Object]; end
+        module Mm; end
+        begin; Mm::Zz; rescue NameError => e; r << [e.name, e.receiver == Mm]; end
+        begin; 5.nope_x; rescue NameError => e; r << [e.name, e.receiver]; end
+        e = NameError.new("m", :x, receiver: 3)
+        r << [e.name, e.receiver]
+        r << (begin; NameError.new("m").receiver; rescue ArgumentError => x; x.message; end)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            ["Nope", True], ["Zz", True], ["nope_x", 5], ["x", 3], "no receiver is available"]
