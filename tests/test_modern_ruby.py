@@ -1184,3 +1184,50 @@ class TestNumbers(BaseTopazTest):
             "   42|42   |00042|+42|007|ff|0XFF|10|101|0003.142|1.234568e+04|0.0001234|hi    |he|nil|A|%",
             "..f01|..70", "x-002.2", "1/2", "    1", "b a", "2.68", "0.1", "0.2",
             "2.67499999999999982236", "a and b"]
+
+
+class TestMethodVisibilityAndEval(BaseTopazTest):
+    def test_module_function_and_inherited_visibility(self, space):
+        w_res = space.execute("""
+        module M1; module_function; def f = 1; end
+        class A1; def pub = 1; end
+        class B1 < A1; private :pub; end
+        return [M1.f, M1.respond_to?(:f), M1.private_instance_methods(false),
+                A1.new.respond_to?(:pub), B1.new.respond_to?(:pub)]
+        """)
+        assert self.unwrap(space, w_res) == [1, True, ["f"], True, False]
+
+    def test_eval_bindings(self, space):
+        w_res = space.execute("""
+        t = 5
+        r = []
+        [1].each { |e| r << eval("t") }
+        x = 7
+        [2].each { |q| y = 3; r << eval("[q, y, x, t]") }
+        b = binding
+        b.local_variable_set(:x, 8)
+        r << b.local_variable_get(:x) << x << b.local_variable_defined?(:zz)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [5, [2, 3, 7, 5], 8, 8, False]
+
+    def test_module_eval_string_sees_the_callers_constants(self, space):
+        w_res = space.execute("""
+        module Outer
+          module Nodes; X = 1; end
+          class Builder
+            class_eval "def x = Nodes::X"
+          end
+        end
+        return Outer::Builder.new.x
+        """)
+        assert self.unwrap(space, w_res) == 1
+
+    def test_enumerator_keeps_keywords(self, space):
+        w_res = space.execute("""
+        def lines(chomp: false) = chomp ? ["a"] : ["a\\n"]
+        o = Object.new
+        def o.each_line(chomp: false, &b) = (chomp ? ["x", "y"] : ["x\\n", "y\\n"]).each(&b)
+        return [o.enum_for(:each_line, chomp: true).to_a, o.enum_for(:each_line).to_a]
+        """)
+        assert self.unwrap(space, w_res) == [["x", "y"], ["x\n", "y\n"]]

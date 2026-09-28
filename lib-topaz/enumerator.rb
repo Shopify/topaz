@@ -9,6 +9,8 @@ class Enumerator
     @args = args
     self
   end
+  # Keyword arguments reach the method when the enumerator runs it.
+  ruby2_keywords :initialize
 
   def each(&block)
     if block

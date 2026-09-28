@@ -95,7 +95,7 @@ class W_CodeObject(W_BaseObject):
         obj.block_arg_pos = self.block_arg_pos
         obj.splat_arg_pos = self.splat_arg_pos
         obj.default_arg_begin = self.default_arg_begin
-        obj.kw_defaults = self.kw_defaults
+        obj.kw_defaults = copy.deepcopy(self.kw_defaults, memo)
         obj.kwrest_pos = self.kwrest_pos
         obj.kwarg_names = self.kwarg_names
         obj.ruby2_keywords = self.ruby2_keywords

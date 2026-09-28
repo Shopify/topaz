@@ -176,8 +176,12 @@ class W_ModuleObject(W_RootObject):
         Overridden by classes with hidden implementation subclasses."""
 
     def define_method(self, space, name, method):
-        if (name == "initialize" or name == "initialize_copy" or
-            method.visibility == W_FunctionObject.MODULE_FUNCTION):
+        if method.visibility == W_FunctionObject.MODULE_FUNCTION:
+            # After a bare `module_function`: a public singleton method and
+            # a private instance method.
+            self.attach_method(space, name, method.with_visibility(W_FunctionObject.PUBLIC))
+            method = method.with_visibility(W_FunctionObject.PRIVATE)
+        if name == "initialize" or name == "initialize_copy":
             method.update_visibility(W_FunctionObject.PRIVATE)
         self.mutated()
         self.methods_w[name] = method
@@ -482,7 +486,12 @@ class W_ModuleObject(W_RootObject):
             raise space.error(space.w_NameError,
                 "undefined method '%s' for class '%s'" % (name, cls_name)
             )
-        w_method.update_visibility(visibility)
+        if self._find_method_pure(space, name, self.version) is w_method:
+            w_method.update_visibility(visibility)
+        else:
+            # The method comes from an ancestor: change it only here.
+            self.mutated()
+            self.methods_w[name] = w_method.with_visibility(visibility)
 
     def method_added(self, space, w_name):
         space.send(self, "method_added", [w_name])
@@ -701,7 +710,7 @@ class W_ModuleObject(W_RootObject):
                 raise space.error(space.w_NameError,
                     "undefined method '%s' for class '%s'" % (name, cls_name)
                 )
-            self.attach_method(space, name, w_method)
+            self.attach_method(space, name, w_method.with_visibility(W_FunctionObject.PUBLIC))
             self.set_method_visibility(space, name, W_FunctionObject.PRIVATE)
         return self
 
@@ -809,7 +818,11 @@ class W_ModuleObject(W_RootObject):
                 lineno = space.int_w(w_lineno)
             else:
                 lineno = 1
-            return space.execute(string, self, lexical_scope=StaticScope(self, None), filepath=filename, initial_lineno=lineno)
+            # Constants are looked up in the module, then in the lexical
+            # scope of the code calling module_eval.
+            frame = space.getexecutioncontext().gettoprubyframe()
+            backscope = frame.lexical_scope if frame is not None else None
+            return space.execute(string, self, lexical_scope=StaticScope(self, backscope), filepath=filename, initial_lineno=lineno)
         elif block is None:
             raise space.error(space.w_ArgumentError, "block not supplied")
         else:

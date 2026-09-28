@@ -26,6 +26,13 @@ class W_FunctionObject(W_BaseObject):
     def update_visibility(self, visibility):
         self.visibility = visibility
 
+    def with_visibility(self, visibility):
+        """This method with another visibility, for a module that changes
+        the visibility of a method it does not define itself. Kinds of
+        method that cannot be copied are changed in place."""
+        self.visibility = visibility
+        return self
+
     def is_undefined(self):
         return False
 
@@ -52,6 +59,11 @@ class W_UserFunction(W_FunctionObject):
         obj.lexical_scope = copy.deepcopy(self.lexical_scope, memo)
         obj.w_owner = copy.deepcopy(self.w_owner, memo)
         return obj
+
+    def with_visibility(self, visibility):
+        w_copy = W_UserFunction(self.name, self.bytecode, self.lexical_scope, visibility)
+        w_copy.w_owner = self.w_owner
+        return w_copy
 
     def call(self, space, w_receiver, args_w, block):
         frame = space.create_frame(
@@ -86,6 +98,9 @@ class W_BuiltinFunction(W_FunctionObject):
         obj = super(W_BuiltinFunction, self).__deepcopy__(memo)
         obj.func = self.func
         return obj
+
+    def with_visibility(self, visibility):
+        return W_BuiltinFunction(self.name, self.w_class, self.func, visibility)
 
     def call(self, space, w_receiver, args_w, block):
         from topaz.frame import BuiltinFrame
