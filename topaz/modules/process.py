@@ -68,6 +68,26 @@ class Process(object):
     def method_pid(self, space):
         return space.newint(os.getpid())
 
+    @moduledef.function("uid")
+    def method_uid(self, space):
+        return space.newint(os.getuid())
+
+    @moduledef.function("gid")
+    def method_gid(self, space):
+        return space.newint(os.getgid())
+
+    @moduledef.function("euid")
+    def method_euid(self, space):
+        return space.newint(os.geteuid())
+
+    @moduledef.function("egid")
+    def method_egid(self, space):
+        return space.newint(os.getegid())
+
+    @moduledef.function("ppid")
+    def method_ppid(self, space):
+        return space.newint(os.getppid())
+
     @moduledef.function("waitpid", pid="int")
     def method_waitpid(self, space, pid=-1):
         try:

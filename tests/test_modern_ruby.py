@@ -1648,3 +1648,15 @@ class TestLineReading(BaseTopazTest):
             ["a\nbb\n\n", "ccc\nd"], "a\n", "bb", "\n", 2, "\n\nccc\nd", None, "", None,
             "x\n", ["y\n"]]
 
+
+class TestSystemExtensions(BaseTopazTest):
+    def test_etc_socket_and_nonblock(self, space):
+        w_res = space.execute("""
+        require "etc"
+        require "socket"
+        require "io/nonblock"
+        return [Etc.nprocessors > 0, Etc.getpwuid.is_a?(Etc::Passwd), Socket::AF_INET,
+                Addrinfo.tcp("127.0.0.1", 80).inspect, $stdout.nonblock?,
+                Process.uid == Process.euid, Socket.gethostname.is_a?(String)]
+        """)
+        assert self.unwrap(space, w_res) == [True, True, 2, "#<Addrinfo: 127.0.0.1:80>", False, True, True]
