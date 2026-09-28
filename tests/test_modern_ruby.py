@@ -1731,3 +1731,46 @@ class TestInheritedHook(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == [["B", 1], [None, 1]]
+
+
+class TestSQLite3Native(BaseTopazTest):
+    def test_native_layer(self, space):
+        w_res = space.execute("""
+        begin
+          require "sqlite3/sqlite3_native"
+        rescue LoadError
+          return :no_libsqlite3
+        end
+        module SQLite3
+          class Exception < ::StandardError; attr_reader :code; end
+          class SQLException < Exception; end
+          class ConstraintException < Exception; end
+        end
+        db = SQLite3::Database.allocate
+        db.__send__(:open_v2, ":memory:", 6, nil)
+        run = ->(sql, *binds) do
+          st = SQLite3::Statement.allocate
+          st.__send__(:prepare, db, sql)
+          binds.each_with_index { |v, i| st.bind_param(i + 1, v) }
+          rows = []
+          while (row = st.step)
+            rows << row
+          end
+          st.close
+          rows
+        end
+        run.("create table t (id integer primary key, name text, score real)")
+        run.("insert into t (name, score) values (?, ?)", "alice", 1.5)
+        run.("insert into t (name, score) values (?, ?)", "bob", nil)
+        r = [run.("select id, name, score from t order by id"), db.last_insert_row_id, db.changes]
+        r << (begin; run.("select nope from t"); rescue SQLite3::SQLException => e; e.message; end)
+        r << (begin; run.("insert into t (id) values (1)"); rescue SQLite3::ConstraintException => e; e.message; end)
+        r << db.exec_batch("create table u(x); insert into u values (1); select x from u; -- done", false)
+        db.close
+        return r
+        """)
+        res = self.unwrap(space, w_res)
+        if res == "no_libsqlite3":
+            pytest.skip("libsqlite3 is not available")
+        assert res == [[[1, "alice", 1.5], [2, "bob", None]], 2, 1, "no such column: nope",
+                       "UNIQUE constraint failed: t.id", [[1]]]
