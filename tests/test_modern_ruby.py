@@ -1575,3 +1575,29 @@ class TestLargeIntegerParsing(BaseTopazTest):
         assert self.unwrap(space, w_res) == [
             "123456789012345678901", "-99999999999999999999", "123456789012345678901",
             "1208925819614629174706175"]
+
+
+class TestBigDecimal(BaseTopazTest):
+    def test_bigdecimal(self, space):
+        w_res = space.execute("""
+        require "bigdecimal"
+        b = ->(s) { BigDecimal(s) }
+        return [
+          (b.("1") / 3).to_s, (b.("2") / 3).to_s, (b.("1.23456789012345678901") / 3).to_s,
+          b.("1.23").to_s, b.("-0.00123").to_s, b.("1.23").to_s("F"), b.("100").to_s("F"),
+          b.("-0").to_s, b.("12345.678").to_s("3F"), b.("1.235").round(2).to_s,
+          b.("1.245").round(2, :half_even).to_s, b.("-1.5").round, b.("123.456").floor(1).to_s,
+          b.("1.23").precision, b.("0.001").scale, b.("0.00123").exponent,
+          (b.("0.1") + b.("0.2")).to_s, (b.("1.5") * 0.1).to_s, b.("-7").divmod(3).map(&:to_s),
+          b.("1") == 1, b.("1.5") <=> Rational(3, 2), (b.("1") / 0).to_s, b.("10").div(3),
+          b.("10").div(3, 5).to_s, BigDecimal("1_000.5").to_s,
+          (BigDecimal("1.5x") rescue $!.message), BigDecimal(Rational(1, 3), 5).to_s,
+        ]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "0.33333333333333333333333333333333e0", "0.66666666666666666666666666666667e0",
+            "0.4115226300411522630033333333333333333e0", "0.123e1", "-0.123e-2", "1.23",
+            "100.0", "-0.0", "12 345.678", "0.124e1", "0.124e1", -2, "0.1234e3", 3, 3, -2,
+            "0.3e0", "0.15e0", ["-0.3e1", "0.2e1"], True, 0, "Infinity", 3, "0.33333e1",
+            "0.10005e4", 'invalid value for BigDecimal(): "1.5x"', "0.33333e0"]
+
