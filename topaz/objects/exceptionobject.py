@@ -9,7 +9,7 @@ def new_exception_allocate(classdef):
 
 
 class W_ExceptionObject(W_Object):
-    _attrs_ = ["msg", "frame", "last_instructions", "w_backtrace"]
+    _attrs_ = ["msg", "frame", "last_instructions", "w_backtrace", "w_cause"]
 
     classdef = ClassDef("Exception", W_Object.classdef)
 
@@ -18,6 +18,7 @@ class W_ExceptionObject(W_Object):
         self.msg = ""
         self.frame = None
         self.w_backtrace = None
+        self.w_cause = None
 
     def __str__(self):
         return "%s(%s)" % (self.__class__.__name__, self.msg)
@@ -31,6 +32,7 @@ class W_ExceptionObject(W_Object):
         self.msg = w_other.msg
         self.frame = w_other.frame
         self.w_backtrace = w_other.w_backtrace
+        self.w_cause = w_other.w_cause
 
     @classdef.method("initialize")
     def method_initialize(self, space, w_msg=None):
@@ -58,6 +60,10 @@ class W_ExceptionObject(W_Object):
     @classdef.method("message")
     def method_message(self, space):
         return space.send(self, "to_s")
+
+    @classdef.method("cause")
+    def method_cause(self, space):
+        return self.w_cause or space.w_nil
 
     @classdef.method("backtrace")
     def method_backtrace(self, space):

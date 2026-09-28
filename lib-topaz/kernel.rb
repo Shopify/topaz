@@ -95,6 +95,47 @@ module Kernel
   end
   private :`
 
+  # system and spawn are built from fork, exec and waitpid. Only the
+  # :chdir and :exception options are supported; redirections are ignored.
+  def spawn(*args)
+    env = args.first.respond_to?(:to_hash) ? args.shift.to_hash : nil
+    opts = args.last.respond_to?(:to_hash) ? args.pop.to_hash : {}
+    raise ArgumentError, "wrong number of arguments (given 0, expected 1+)" if args.empty?
+    Process.fork do
+      env.each { |k, v| ENV[k] = v } if env
+      Dir.chdir(opts[:chdir]) if opts[:chdir]
+      begin
+        exec(*args)
+      rescue SystemCallError
+        exit!(127)
+      end
+    end
+  end
+  private :spawn
+
+  def system(*args)
+    exception = false
+    if args.last.respond_to?(:to_hash)
+      opts = args.last.to_hash
+      if opts.key?(:exception)
+        opts = opts.dup
+        exception = opts.delete(:exception)
+        args = args[0...-1] + [opts]
+      end
+    end
+    Process.waitpid(spawn(*args))
+    status = $?
+    if status.exitstatus == 127
+      raise Errno::ENOENT, args.grep(String).first.to_s if exception
+      return nil
+    end
+    if exception && !status.success?
+      raise RuntimeError, "Command failed with exit #{status.exitstatus}: #{args.grep(String).join(" ")}"
+    end
+    status.success?
+  end
+  private :system
+
   def to_enum(method = :each, *args)
     Enumerator.new(self, method, *args)
   end
@@ -127,16 +168,18 @@ module Kernel
   end
   private :caller
 
+  # A relative file name in a backtrace is relative to the directory the
+  # program started in (the main script), not to the current directory.
   def require_relative(path)
     caller[0] =~ /^(.*):\d+:/
     caller_file = $1
-    require File.join(File.dirname(File.expand_path(caller_file)), path)
+    require File.expand_path(path, File.dirname(File.expand_path(caller_file, Topaz::STARTUP_DIR)))
   end
 
   def __dir__
     caller[0] =~ /^(.*):\d+:/
     caller_file = $1
-    File.dirname(File.expand_path(caller_file))
+    File.dirname(File.expand_path(caller_file, Topaz::STARTUP_DIR))
   end
 end
 
@@ -166,4 +209,9 @@ module Kernel
   end
   alias format sprintf
   private :sprintf, :format
+end
+
+class LoadError
+  # The feature that could not be loaded.
+  attr_reader :path
 end

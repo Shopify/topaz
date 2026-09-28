@@ -1,0 +1,14 @@
+"x"
+nil
+"b"
+"a"
+nil
+["inner", "inner"]
+"outer"
+nil
+"c"
+["b", "a", nil]
+nil
+"c"
+["x.rb:1"]
+nil

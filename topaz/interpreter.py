@@ -960,6 +960,7 @@ class ExceptBlock(FrameBlock):
     def handle(self, space, frame, unroller):
         self.cleanupstack(frame)
         e = unroller.e
+        space.globals.set(space, "$!", e.w_value)
         frame.push(unroller)
         frame.push(e.w_value)
         return self.target_pc
@@ -975,6 +976,9 @@ class FinallyBlock(FrameBlock):
 
     def handle(self, space, frame, unroller):
         self.cleanupstack(frame)
+        if isinstance(unroller, ApplicationException):
+            # `$!` is the exception being propagated while ensure runs.
+            space.globals.set(space, "$!", unroller.e.w_value)
         frame.push(unroller)
         frame.push(space.w_nil)
         return self.target_pc

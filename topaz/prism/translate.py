@@ -135,7 +135,8 @@ class Translator(nodes.Visitor):
                     [self.standard_error(lineno)], None,
                     ast.Block([self.statement(node.rescue_expression)])
                 )],
-                ast.Nil()
+                ast.Nil(),
+                self.new_temp(lineno)
             ))
         return self.as_statement(self.expr(node))
 
@@ -163,7 +164,8 @@ class Translator(nodes.Visitor):
             if else_clause is not None:
                 assert isinstance(else_clause, nodes.ElseNode)
                 else_body = self.block(else_clause.statements)
-            body = ast.TryExcept(body, handlers, else_body)
+            body = ast.TryExcept(body, handlers, else_body,
+                                 self.new_temp(self.line(node)))
         elif else_clause is not None:
             assert isinstance(else_clause, nodes.ElseNode)
             body = ast.TryExcept(
@@ -1035,7 +1037,8 @@ class Translator(nodes.Visitor):
                 [self.standard_error(lineno)], None,
                 self.expr(node.rescue_expression)
             )],
-            ast.Nil()
+            ast.Nil(),
+            self.new_temp(lineno)
         )
 
     def visit_alias_method_node(self, node):

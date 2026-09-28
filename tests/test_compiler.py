@@ -1142,28 +1142,34 @@ class TestCompiler(object):
             puts "zero!"
         end
         """, """
-        SETUP_EXCEPT 18
-        LOAD_CONST 0
+        LOAD_GLOBAL 0
+        STORE_DEREF 0
+        DISCARD_TOP
+        SETUP_EXCEPT 25
         LOAD_CONST 1
-        SEND 2 1
+        LOAD_CONST 2
+        SEND 3 1
         POP_BLOCK
-        JUMP 51
+        JUMP 65
         DUP_TOP
         LOAD_SCOPE
-        LOAD_LOCAL_CONSTANT 3
+        LOAD_LOCAL_CONSTANT 4
         ROT_TWO
-        SEND 4 1
-        JUMP_IF_TRUE 35
-        JUMP 50
+        SEND 5 1
+        JUMP_IF_TRUE 42
+        JUMP 64
         DISCARD_TOP
         DISCARD_TOP
         LOAD_SELF
-        LOAD_CONST 5
+        LOAD_CONST 6
         COERCE_STRING
-        SEND 6 1
-        JUMP 55
+        SEND 7 1
+        LOAD_DEREF 0
+        STORE_GLOBAL 0
+        DISCARD_TOP
+        JUMP 69
         END_FINALLY
-        LOAD_CONST 7
+        LOAD_CONST 8
         DISCARD_TOP
 
         RETURN
@@ -1175,28 +1181,34 @@ class TestCompiler(object):
             puts e
         end
         """, """
-        SETUP_EXCEPT 18
-        LOAD_CONST 0
+        LOAD_GLOBAL 0
+        STORE_DEREF 0
+        DISCARD_TOP
+        SETUP_EXCEPT 25
         LOAD_CONST 1
-        SEND 2 1
+        LOAD_CONST 2
+        SEND 3 1
         POP_BLOCK
-        JUMP 53
+        JUMP 67
         DUP_TOP
         LOAD_SCOPE
-        LOAD_LOCAL_CONSTANT 3
+        LOAD_LOCAL_CONSTANT 4
         ROT_TWO
-        SEND 4 1
-        JUMP_IF_TRUE 35
-        JUMP 52
-        STORE_DEREF 0
+        SEND 5 1
+        JUMP_IF_TRUE 42
+        JUMP 66
+        STORE_DEREF 1
         DISCARD_TOP
         DISCARD_TOP
         LOAD_SELF
+        LOAD_DEREF 1
+        SEND 6 1
         LOAD_DEREF 0
-        SEND 5 1
-        JUMP 57
+        STORE_GLOBAL 0
+        DISCARD_TOP
+        JUMP 71
         END_FINALLY
-        LOAD_CONST 6
+        LOAD_CONST 7
         DISCARD_TOP
 
         RETURN
@@ -1209,18 +1221,24 @@ class TestCompiler(object):
             5
         end
         """, """
-        SETUP_EXCEPT 18
-        LOAD_CONST 0
+        LOAD_GLOBAL 0
+        STORE_DEREF 0
+        DISCARD_TOP
+        SETUP_EXCEPT 25
         LOAD_CONST 1
-        SEND 2 1
+        LOAD_CONST 2
+        SEND 3 1
         POP_BLOCK
-        JUMP 27
+        JUMP 41
         DISCARD_TOP
         DISCARD_TOP
-        LOAD_CONST 3
-        JUMP 31
-        END_FINALLY
         LOAD_CONST 4
+        LOAD_DEREF 0
+        STORE_GLOBAL 0
+        DISCARD_TOP
+        JUMP 45
+        END_FINALLY
+        LOAD_CONST 5
         DISCARD_TOP
 
         RETURN

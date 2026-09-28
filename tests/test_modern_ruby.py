@@ -665,3 +665,95 @@ class TestGsubAndScan(BaseTopazTest):
         assert self.unwrap(space, w_res) == [
             "a11b22", "a<1>b<2>", "he[ll|l|ll]o", "he<he>o", "ab!ab!", "a+b=c",
             None, "b", ""]
+
+
+class TestErrinfo(BaseTopazTest):
+    def test_errinfo_is_set_and_restored(self, space):
+        w_res = space.execute("""
+        r = []
+        r << (raise "x" rescue $!.message)
+        r << $!
+        begin
+          raise "a"
+        rescue
+          begin
+            raise "b"
+          rescue
+            r << $!.message
+          end
+          r << $!.message
+        end
+        r << $!
+        begin
+          begin
+            raise "c"
+          rescue
+            begin; raise "d"; rescue; end
+            raise
+          end
+        rescue => e
+          r << e.message
+        end
+        return r
+        """)
+        assert self.unwrap(space, w_res) == ["x", None, "b", "a", None, "c"]
+
+    def test_cause(self, space):
+        w_res = space.execute("""
+        r = []
+        begin
+          begin
+            raise "a"
+          rescue
+            raise "b"
+          end
+        rescue => e
+          r << e.cause.message << e.cause.cause
+        end
+        begin
+          begin
+            raise "a"
+          rescue
+            raise TypeError, "t", cause: nil
+          end
+        rescue => e
+          r << e.cause
+        end
+        begin
+          raise IOError, "bt", ["x.rb:1"]
+        rescue => e
+          r << e.backtrace
+        end
+        return r
+        """)
+        assert self.unwrap(space, w_res) == ["a", None, None, ["x.rb:1"]]
+
+
+class TestRequire(BaseTopazTest):
+    def test_circular_require_and_load_error(self, space, tmpdir):
+        a = tmpdir.join("circ_a.rb")
+        b = tmpdir.join("circ_b.rb")
+        a.write("$circ << :a\nrequire %r\n" % str(b))
+        b.write("$circ << :b\n$circ << require(%r)\n" % str(a))
+        w_res = space.execute("""
+        $circ = []
+        require %r
+        begin
+          require "does/not/exist"
+        rescue LoadError => e
+          $circ << e.path << e.message
+        end
+        return $circ
+        """ % str(a))
+        assert self.unwrap(space, w_res) == [
+            "a", "b", False, "does/not/exist",
+            "cannot load such file -- does/not/exist"]
+
+
+class TestSystem(BaseTopazTest):
+    def test_system(self, space):
+        w_res = space.execute("""
+        return [system("true"), system("exit 3"), $?.exitstatus,
+                system({"TOPAZ_X" => "y"}, 'test "$TOPAZ_X" = y')]
+        """)
+        assert self.unwrap(space, w_res) == [True, False, 3, True]

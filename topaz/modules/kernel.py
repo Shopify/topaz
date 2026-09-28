@@ -4,6 +4,7 @@ import errno
 import os
 import time
 
+from rpython.rlib import rpath
 from rpython.rlib.objectmodel import compute_identity_hash
 from rpython.rlib.rfloat import round_double
 from rpython.rlib.streamio import open_file_as_stream
@@ -15,6 +16,7 @@ from topaz.modules.process import Process
 from topaz.objects.bindingobject import W_BindingObject
 from topaz.objects.exceptionobject import W_ExceptionObject
 from topaz.objects.functionobject import W_FunctionObject
+from topaz.objects.hashobject import W_HashObject
 from topaz.objects.moduleobject import W_ModuleObject
 from topaz.objects.procobject import W_ProcObject
 from topaz.objects.randomobject import W_RandomObject
@@ -107,9 +109,11 @@ class Kernel(object):
 
     @staticmethod
     def find_feature(space, path):
+        """The absolute path of the file `require path` loads, or `path`
+        itself (with .rb added) if there is no such file."""
         assert path is not None
         if os.path.isfile(path):
-            return path
+            return rpath.rabspath(path)
         if not path.endswith(".rb"):
             path += ".rb"
 
@@ -119,14 +123,23 @@ class Kernel(object):
                 base = Coerce.path(space, w_base)
                 full = os.path.join(base, path)
                 if os.path.isfile(full):
-                    path = os.path.join(base, path)
-                    break
+                    return rpath.rabspath(full)
+        elif os.path.isfile(path):
+            return rpath.rabspath(path)
         return path
 
     @staticmethod
+    def load_error(space, orig_path):
+        error = space.error(space.w_LoadError,
+                            "cannot load such file -- %s" % orig_path)
+        error.w_value.set_instance_var(space, "@path",
+                                       space.newstr_fromstr(orig_path))
+        return error
+
+    @staticmethod
     def load_feature(space, path, orig_path, wrap=False):
-        if not os.path.exists(path):
-            raise space.error(space.w_LoadError, orig_path)
+        if not os.path.isfile(path):
+            raise Kernel.load_error(space, orig_path)
 
         try:
             f = open_file_as_stream(path, buffering=0)
@@ -150,14 +163,20 @@ class Kernel(object):
         path = Kernel.find_feature(space, path)
 
         w_loaded_features = space.globals.get(space, '$"')
-        w_already_loaded = space.send(
-            w_loaded_features, "include?", [space.newstr_fromstr(path)]
-        )
+        w_path = space.newstr_fromstr(path)
+        w_already_loaded = space.send(w_loaded_features, "include?", [w_path])
         if space.is_true(w_already_loaded):
             return space.w_false
 
-        Kernel.load_feature(space, path, orig_path)
-        w_loaded_features.method_lshift(space, space.newstr_fromstr(path))
+        # The feature counts as loaded while it loads, so that circular
+        # requires return false instead of recursing, and it is forgotten if
+        # loading fails.
+        w_loaded_features.method_lshift(space, w_path)
+        try:
+            Kernel.load_feature(space, path, orig_path)
+        except RubyError:
+            space.send(w_loaded_features, "delete", [w_path])
+            raise
         return space.w_true
 
     @moduledef.function("load", path="path", wrap="bool")
@@ -170,7 +189,26 @@ class Kernel(object):
 
     @moduledef.method("fail")
     @moduledef.method("raise")
-    def method_raise(self, space, w_str_or_exception=None, w_string=None, w_array=None):
+    def method_raise(self, space, args_w):
+        # raise(exception = $!, message = nil, backtrace = nil, cause: $!)
+        w_cause = None
+        if args_w:
+            w_last = args_w[-1]
+            if isinstance(w_last, W_HashObject) and w_last.is_keywords:
+                args_w = args_w[:-1]
+                w_key = space.newsymbol("cause")
+                if space.is_true(space.send(w_last, "key?", [w_key])):
+                    w_cause = space.send(w_last, "[]", [w_key])
+        if len(args_w) > 3:
+            raise space.error(space.w_ArgumentError,
+                "wrong number of arguments (given %d, expected 0..3)" % len(args_w))
+        w_str_or_exception = args_w[0] if len(args_w) > 0 else None
+        w_string = args_w[1] if len(args_w) > 1 else None
+        w_array = args_w[2] if len(args_w) > 2 else None
+        return Kernel.do_raise(space, w_str_or_exception, w_string, w_array, w_cause)
+
+    @staticmethod
+    def do_raise(space, w_str_or_exception, w_string, w_array, w_cause):
         w_exception = None
         if w_str_or_exception is None:
             w_exception = space.globals.get(space, "$!") or space.w_nil
@@ -192,16 +230,22 @@ class Kernel(object):
         else:
             w_exc = space.send(w_exception, "exception")
 
-        if w_array is not None:
-            raise space.error(
-                space.w_NotImplementedError,
-                "custom backtrace for Kernel#raise"
-            )
-
         if not isinstance(w_exc, W_ExceptionObject):
             raise space.error(space.w_TypeError,
                 "exception object expected"
             )
+
+        if w_array is not None and w_array is not space.w_nil:
+            space.send(w_exc, "set_backtrace", [w_array])
+
+        # The exception being handled becomes the cause of the new one.
+        if w_cause is None:
+            if w_exc.w_cause is None:
+                w_errinfo = space.globals.get(space, "$!")
+                if w_errinfo is not None and w_errinfo is not w_exc:
+                    w_exc.w_cause = w_errinfo
+        elif w_cause is not w_exc:
+            w_exc.w_cause = w_cause
 
         if w_exc.frame is None:
             # The backtrace starts at the caller, not at raise itself.
@@ -296,10 +340,6 @@ class Kernel(object):
                 os.execv(shell, [argv0, "-c", cmd])
             except OSError as e:
                 raise error_for_oserror(space, e)
-
-    @moduledef.function("system")
-    def method_system(self, space, args_w):
-        raise space.error(space.w_NotImplementedError, "Kernel#system()")
 
     @moduledef.function("fork")
     def method_fork(self, space, block):

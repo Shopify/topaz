@@ -1,4 +1,7 @@
 module Topaz
+  # Relative paths of loaded files are relative to this directory.
+  STARTUP_DIR = Dir.pwd
+
   def self.recursion_guard_outer(identifier, obj, &block)
     # We want to throw something less likely to be caught accidentally outside
     # our own code than the recursion identifier. Ideally this should be an

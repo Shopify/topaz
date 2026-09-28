@@ -162,15 +162,29 @@ class Break(BaseStatement):
 
 
 class TryExcept(Node):
-    def __init__(self, body, except_handlers, else_body):
+    def __init__(self, body, except_handlers, else_body, errinfo=None):
         self.body = body
         self.except_handlers = except_handlers
         self.else_body = else_body
+        # A hidden local that saves `$!` while the body runs, so that it can
+        # be restored when a rescue clause finishes.
+        self.errinfo = errinfo
+
+    def __eq__(self, other):
+        # errinfo is a compilation detail; the parser tests leave it out.
+        return (isinstance(other, TryExcept) and self.body == other.body and
+                self.except_handlers == other.except_handlers and
+                self.else_body == other.else_body)
 
     def compile(self, ctx):
         exc = ctx.new_block()
         else_block = ctx.new_block()
         end = ctx.new_block()
+        errinfo = self.errinfo
+        if errinfo is not None and self.except_handlers:
+            ctx.emit(consts.LOAD_GLOBAL, ctx.create_symbol_const("$!"))
+            Variable(errinfo, -1).compile_store(ctx)
+            ctx.emit(consts.DISCARD_TOP)
         # `retry` in a rescue clause jumps back here.
         retry_block = ctx.new_block()
         ctx.use_next_block(retry_block)
@@ -215,6 +229,10 @@ class TryExcept(Node):
                 (retry_block, len(ctx.frame_blocks), ctx.except_depth))
             handler.body.compile(ctx)
             ctx.retry_targets.pop()
+            if errinfo is not None:
+                Variable(errinfo, -1).compile(ctx)
+                ctx.emit(consts.STORE_GLOBAL, ctx.create_symbol_const("$!"))
+                ctx.emit(consts.DISCARD_TOP)
             ctx.emit_jump(consts.JUMP, end)
             ctx.use_next_block(next_except)
 
