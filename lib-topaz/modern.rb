@@ -922,3 +922,16 @@ class Regexp
   end
   private :initialize
 end
+
+module Topaz
+  # `when *values`: matches what any of the values matches.
+  class CaseSplat
+    def initialize(values)
+      @values = values
+    end
+
+    def ===(other)
+      @values.any? { |value| value === other }
+    end
+  end
+end

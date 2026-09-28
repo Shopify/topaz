@@ -993,13 +993,28 @@ class Translator(nodes.Visitor):
         self.save_and_pop_scope(block)
         return ast.Send(collection, "each", [], block, lineno)
 
+    def when_condition(self, cond, has_subject):
+        """`when *values` matches if any of the values does: with a subject,
+        through a Topaz::CaseSplat whose === asks each value; without one,
+        if any value is true."""
+        if not isinstance(cond, nodes.SplatNode):
+            return self.expr(cond)
+        lineno = self.line(cond)
+        values = ast.Send(ast.LookupConstant(None, "Kernel", lineno), "Array",
+                          [self.expr(cond.expression)], None, lineno)
+        if has_subject:
+            return ast.Send(
+                ast.LookupConstant(ast.LookupConstant(None, "Topaz", lineno), "CaseSplat", lineno),
+                "new", [values], None, lineno)
+        return ast.Send(values, "any?", [], None, lineno)
+
     def visit_case_node(self, node):
         whens = []
         for condition in node.conditions:
             assert isinstance(condition, nodes.WhenNode)
             conds = []
             for cond in condition.conditions:
-                conds.append(self.expr(cond))
+                conds.append(self.when_condition(cond, node.predicate is not None))
             whens.append(ast.When(
                 conds, self.block(condition.statements),
                 self.line(condition)))

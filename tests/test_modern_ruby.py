@@ -2274,3 +2274,15 @@ class TestNameErrorReceiver(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [
             ["Nope", True], ["Zz", True], ["nope_x", 5], ["x", 3], "no receiver is available"]
+
+
+class TestWhenSplat(BaseTopazTest):
+    def test_when_with_splat(self, space):
+        w_res = space.execute("""
+        a = [:a, :b]
+        b = [:c]
+        r = [:a, :c, :z].map { |n| case n; when *a then 1; when *b, :z then 2; else 3; end }
+        w = case; when *[false, nil] then 1; when *[nil, 2] then 2; end
+        return [r, w, (case 5; when *[] then 1; else 0; end)]
+        """)
+        assert self.unwrap(space, w_res) == [[1, 2, 2], 2, 0]
