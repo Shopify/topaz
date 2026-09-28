@@ -2214,3 +2214,11 @@ class TestSearchAnchor(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [
             ["(", "send", " ", "$", "_", " ", ".", ".", ".", ")"], ["a", "a"], [], "__12"]
+
+
+class TestStackedQuantifiers(BaseTopazTest):
+    def test_quantifiers_stack(self, space):
+        w_res = space.execute("""
+        return ["aaaa"[/a{2}*/], "aaa"[/a{2}+/], "ab"[/a**b/], "xaaaaax"[/a{2}{2}/]]
+        """)
+        assert self.unwrap(space, w_res) == ["aaaa", "aa", "ab", "aaaa"]

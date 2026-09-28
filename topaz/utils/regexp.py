@@ -1120,23 +1120,29 @@ def _parse_sequence(source, info):
 
 def _parse_item(source, info):
     element = _parse_element(source, info)
-    counts = _parse_quantifier(source, info)
-    if counts is not None:
-        min_count, max_count = counts.min_count, counts.max_count
-
-        if element.is_empty() or min_count == max_count == 1:
+    # Quantifiers stack, as in Onigmo: a{2}* is (?:a{2})*.
+    while True:
+        counts = _parse_quantifier(source, info)
+        if counts is None:
             return element
+        element = _apply_quantifier(source, info, element, counts)
 
-        if source.match("?"):
-            return LazyRepeat(element, min_count, max_count)
-        elif source.match("+"):
-            if counts.limited_quantifier:
-                return GreedyRepeat(GreedyRepeat(element, min_count, max_count), 1, MAX_REPEAT)
-            else:
-                return make_atomic(info, GreedyRepeat(element, min_count, max_count))
+
+def _apply_quantifier(source, info, element, counts):
+    min_count, max_count = counts.min_count, counts.max_count
+
+    if element.is_empty() or min_count == max_count == 1:
+        return element
+
+    if source.match("?"):
+        return LazyRepeat(element, min_count, max_count)
+    elif source.match("+"):
+        if counts.limited_quantifier:
+            return GreedyRepeat(GreedyRepeat(element, min_count, max_count), 1, MAX_REPEAT)
         else:
-            return GreedyRepeat(element, min_count, max_count)
-    return element
+            return make_atomic(info, GreedyRepeat(element, min_count, max_count))
+    else:
+        return GreedyRepeat(element, min_count, max_count)
 
 
 def _parse_element(source, info):
