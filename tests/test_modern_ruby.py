@@ -2116,3 +2116,16 @@ class TestSubexpCallsAndGroupNumbers(BaseTopazTest):
                 /a*+(b)/.match("aab")[1], /(?<n>a)*+(?<m>b)/.match("aab")[:m]]
         """)
         assert self.unwrap(space, w_res) == [["a", "b-c"], {"a": [1], "b": [2]}, ["x", "z"], ["a", "c"], "b", "b"]
+
+
+class TestFileReadOptions(BaseTopazTest):
+    def test_file_read_with_length_offset_and_encodings(self, space, tmpdir):
+        f = tmpdir.join("rd.txt")
+        f.write("hello world")
+        w_res = space.execute("""
+        path = %r
+        return [File.read(path), File.read(path, 5), File.read(path, 3, 6),
+                File.read(path, external_encoding: Encoding::UTF_8, internal_encoding: Encoding::UTF_8).encoding.to_s,
+                File.read(path, mode: "rb").encoding.to_s, File.read(path, 5).encoding.to_s]
+        """ % (str(f),))
+        assert self.unwrap(space, w_res) == ["hello world", "hello", "wor", "UTF-8", "ASCII-8BIT", "ASCII-8BIT"]

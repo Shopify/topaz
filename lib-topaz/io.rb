@@ -159,9 +159,28 @@ class IO
 
   public
 
-  def self.read(name)
-    File.open(name) do |f|
-      f.read
+  # IO.read(name, length = nil, offset = nil, mode:, encoding:,
+  # external_encoding:, ...). The text is tagged with the external
+  # encoding (binary for a "b" mode).
+  def self.read(name, length = nil, offset = nil, mode: "r", encoding: nil,
+                external_encoding: nil, internal_encoding: nil, binmode: false, **opts)
+    name = name.to_path if name.respond_to?(:to_path)
+    File.open(name, mode.to_s.sub(/:.*\z/, "")) do |f|
+      f.seek(offset) if offset
+      data = length ? f.read(length) : f.read
+      return data if data.nil?
+      # A read of a given length is binary, as IO#read(length) is.
+      return data.force_encoding(Encoding::ASCII_8BIT) if length
+      mode_encoding = mode.to_s[/:([^:]+)/, 1]
+      enc = external_encoding || (encoding && encoding.to_s.split(":").first) || mode_encoding
+      if enc
+        data.force_encoding(enc)
+      elsif binmode || mode.to_s.include?("b")
+        data.force_encoding(Encoding::ASCII_8BIT)
+      else
+        data.force_encoding(Encoding.default_external)
+      end
+      data
     end
   end
 
