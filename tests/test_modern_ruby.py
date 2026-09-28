@@ -2024,3 +2024,19 @@ class TestTopLevelAutoload(BaseTopazTest):
         return r + [A::B.f]
         """ % (str(f),))
         assert self.unwrap(space, w_res) == [False, 1]
+
+
+class TestSingletonClassesAreNotSubclasses(BaseTopazTest):
+    def test_inherited_is_not_called_for_singleton_classes(self, space):
+        w_res = space.execute("""
+        r = []
+        class P; def self.inherited(k) = (@@r << k.name); end
+        P.class_variable_set(:@@r, r)
+        class Q < P; end
+        x = Q.new
+        class << x; def hi = 1; end
+        y = P.new
+        def y.z = 2
+        return [r, P.subclasses.map(&:name), x.hi]
+        """)
+        assert self.unwrap(space, w_res) == [["Q"], ["Q"], 1]
