@@ -1936,3 +1936,19 @@ class TestRedo(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == [[1, 1], [1, 2], [1, 3], [2, 4], 1, 3, 3]
+
+
+class TestModuleNewBlockConstants(BaseTopazTest):
+    def test_constants_from_where_the_block_is_written(self, space):
+        w_res = space.execute("""
+        class Outer
+          K = 7
+          H = Module.new do
+            module_function
+            def get = K
+          end
+          C = Class.new { def k = K }
+        end
+        return [Outer::H.get, Outer::C.new.k]
+        """)
+        assert self.unwrap(space, w_res) == [7, 7]

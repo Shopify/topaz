@@ -1106,7 +1106,9 @@ class W_ModuleObject(W_RootObject):
             block.copy(
                 space,
                 w_self=self,
-                lexical_scope=StaticScope(self, None)
+                # def defines methods in the module; constants are found
+                # there and then where the block was written.
+                lexical_scope=StaticScope(self, block.lexical_scope)
             ),
             args_w
         )
