@@ -895,3 +895,30 @@ class Module
     nil
   end
 end
+
+class Regexp
+  alias __topaz_initialize initialize
+  private :__topaz_initialize
+
+  # Regexp.new(source, options): options may also be true or false, nil
+  # or a string of flags ("mix"), as in CRuby; timeout: is accepted.
+  def initialize(source, options = nil, encoding = nil, timeout: nil)
+    return __topaz_initialize(source) if source.is_a?(Regexp)
+    flags = case options
+            when Integer then options
+            when nil, false then 0
+            when String
+              options.each_char.inject(0) do |acc, c|
+                case c
+                when "i" then acc | IGNORECASE
+                when "m" then acc | MULTILINE
+                when "x" then acc | EXTENDED
+                else raise ArgumentError, "unknown regexp option: #{options}"
+                end
+              end
+            else IGNORECASE
+            end
+    __topaz_initialize(source, flags)
+  end
+  private :initialize
+end
