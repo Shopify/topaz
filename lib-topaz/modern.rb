@@ -879,3 +879,19 @@ class Module
     true
   end
 end
+
+class Module
+  alias __topaz_autoload? autoload?
+  private :__topaz_autoload?
+
+  # autoload?(name, inherit = true): with inherit, ancestors are asked too.
+  def autoload?(name, inherit = true)
+    path = __topaz_autoload?(name)
+    return path if path || !inherit
+    ancestors.drop(1).each do |mod|
+      path = mod.__send__(:__topaz_autoload?, name)
+      return path if path
+    end
+    nil
+  end
+end
