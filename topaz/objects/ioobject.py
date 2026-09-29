@@ -269,10 +269,12 @@ class W_IOObject(W_Object):
 
     @classdef.method("close")
     def method_close(self, space):
-        self.ensure_not_closed(space)
+        # Closing a closed stream does nothing.
+        if self.fd < 0:
+            return space.w_nil
         os.close(self.fd)
         self.fd = -1
-        return self
+        return space.w_nil
 
     @classdef.method("closed?")
     def method_closedp(self, space):

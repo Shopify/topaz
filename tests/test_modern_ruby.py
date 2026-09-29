@@ -2486,3 +2486,14 @@ class TestModernSet(BaseTopazTest):
                 Set[1].disjoint?(Set[2]), Set[1, 2].join("-"), Set[3] === 3]
         """)
         assert self.unwrap(space, w_res) == [True, False, True, None, -1, True, True, True, "1-2", True]
+
+
+class TestCloseTwice(BaseTopazTest):
+    def test_closing_a_closed_io_does_nothing(self, space, tmpdir):
+        f = tmpdir.join("f.txt")
+        f.write("x")
+        w_res = space.execute("""
+        f = File.open("%s")
+        return [f.close, f.close, f.closed?]
+        """ % f)
+        assert self.unwrap(space, w_res) == [None, None, True]
