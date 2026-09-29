@@ -211,6 +211,8 @@ def _parse_argv(space, argv):
 
 
 def _entry_point(space, argv):
+    if os.environ.get("TOPAZ_INTERP_PROFILE"):
+        space.interp_profile.enabled = True
     try:
         (
             flag_globals_w,

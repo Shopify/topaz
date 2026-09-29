@@ -2799,3 +2799,19 @@ class TestStringAndSymbolEquality(BaseTopazTest):
                 "a".eql?(o), :a == :a, :a == "a", h[SEQ.new("k")], String.instance_method(:==).owner.name]
         """)
         assert self.unwrap(space, w_res) == [True, False, False, True, True, False, True, False, 1, "String"]
+
+
+class TestInterpProfile(BaseTopazTest):
+    def test_interp_profile(self, space):
+        space.interp_profile.enabled = True
+        try:
+            w_res = space.execute("""
+            def ipf(x) = x + 1
+            5.times { |i| ipf(i) }
+            prof = Topaz.interp_profile(true)
+            row = prof.find { |name, *| name == "ipf" }
+            return [row[4], row[3] > 0, Topaz.interp_profile.none? { |name, *| name == "ipf" }]
+            """)
+        finally:
+            space.interp_profile.enabled = False
+        assert self.unwrap(space, w_res) == [5, True, True]

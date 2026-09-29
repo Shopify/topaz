@@ -91,6 +91,14 @@ class LibPaths(object):
     def __init__(self, ext_lib_path):
         self.ext_lib_path = ext_lib_path
 
+class InterpProfile(object):
+    """For Topaz.interp_profile (the space itself is a prebuilt constant)."""
+
+    def __init__(self):
+        self.enabled = False
+        self.codes_w = []
+
+
 class ObjectSpace(object):
     def __init__(self, config):
         self.config = config
@@ -101,6 +109,9 @@ class ObjectSpace(object):
         self.globals = GlobalsDict()
         self.bootstrap = True
         self.exit_handlers_w = []
+        # Topaz.interp_profile: code objects run by the interpreter (outside
+        # compiled code), counted when TOPAZ_INTERP_PROFILE is set.
+        self.interp_profile = InterpProfile()
 
         self.w_true = W_TrueObject(self)
         self.w_false = W_FalseObject(self)

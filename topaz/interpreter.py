@@ -61,6 +61,10 @@ class Interpreter(object):
     @rvmprof.vmprof_execute_code("topaz", _get_vmprof_code)
     def interpret(self, space, frame, bytecode):
         pc = 0
+        if not jit.we_are_jitted() and space.interp_profile.enabled:
+            if bytecode.interp_entries == 0 and bytecode.interp_instrs == 0:
+                space.interp_profile.codes_w.append(bytecode)
+            bytecode.interp_entries += 1
         try:
             while True:
                 self.jitdriver.jit_merge_point(
@@ -89,6 +93,10 @@ class Interpreter(object):
             self.finished = True
 
     def _interpret(self, space, pc, frame, bytecode):
+        if not jit.we_are_jitted() and space.interp_profile.enabled:
+            if bytecode.interp_entries == 0 and bytecode.interp_instrs == 0:
+                space.interp_profile.codes_w.append(bytecode)
+            bytecode.interp_instrs += 1
         prev_pc = frame.last_instr
         frame.last_instr = pc
         if (space.getexecutioncontext().hastraceproc() and

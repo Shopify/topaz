@@ -27,6 +27,31 @@ class Topaz(object):
             for name, code in ERRNO_LIST
         ]))
 
+    @moduledef.function("interp_profile")
+    def method_interp_profile(self, space, w_clear=None):
+        """[[name, file, line, instructions, entries], ...] for code run
+        outside compiled code since the last clear (TOPAZ_INTERP_PROFILE
+        must be set); with true, also clears the counts."""
+        from topaz.objects.codeobject import W_CodeObject
+        result_w = []
+        for w_code in space.interp_profile.codes_w:
+            assert isinstance(w_code, W_CodeObject)
+            if w_code.interp_instrs or w_code.interp_entries:
+                result_w.append(space.newarray([
+                    space.newstr_fromstr(w_code.name),
+                    space.newstr_fromstr(w_code.filepath),
+                    space.newint(w_code.lineno),
+                    space.newint(w_code.interp_instrs),
+                    space.newint(w_code.interp_entries),
+                ]))
+        if w_clear is not None and space.is_true(w_clear):
+            for w_code in space.interp_profile.codes_w:
+                assert isinstance(w_code, W_CodeObject)
+                w_code.interp_instrs = 0
+                w_code.interp_entries = 0
+            space.interp_profile.codes_w = []
+        return space.newarray(result_w)
+
     @moduledef.function("method_cache_stats")
     def method_method_cache_stats(self, space):
         """[hits, misses, invalidations, {module name => invalidations}]

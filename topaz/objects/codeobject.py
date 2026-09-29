@@ -80,6 +80,10 @@ class W_CodeObject(W_BaseObject):
         # Set by Module#ruby2_keywords: keyword arguments collected by the
         # rest parameter stay keywords when splatted into another call.
         self.ruby2_keywords = False
+        # Instructions and entries run outside compiled code (see
+        # Topaz.interp_profile).
+        self.interp_instrs = 0
+        self.interp_entries = 0
 
         rvmprof.register_code(self, get_vmprof_name)
 
@@ -90,6 +94,8 @@ class W_CodeObject(W_BaseObject):
         obj.lineno = self.lineno
         obj.code = self.code
         obj.max_stackdepth = self.max_stackdepth
+        obj.interp_instrs = 0
+        obj.interp_entries = 0
         obj.consts_w = copy.deepcopy(self.consts_w, memo)
         obj.defaults = copy.deepcopy(self.defaults, memo)
         obj.cellvars = self.cellvars
