@@ -2,6 +2,7 @@ from __future__ import absolute_import
 import os
 import sys
 
+from rpython.rlib import rutf8
 from rpython.rlib.rarithmetic import intmask
 from rpython.rlib.rtermios import tcsetattr, tcgetattr, all_constants
 
@@ -51,6 +52,14 @@ class Topaz(object):
                 w_code.interp_entries = 0
             space.interp_profile.codes_w = []
         return space.newarray(result_w)
+
+    @moduledef.function("valid_utf8?", s="str")
+    def method_valid_utf8p(self, space, s):
+        try:
+            rutf8.check_utf8(s, False)
+        except rutf8.CheckError:
+            return space.w_false
+        return space.w_true
 
     @moduledef.function("method_cache_stats")
     def method_method_cache_stats(self, space):

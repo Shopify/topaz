@@ -307,18 +307,7 @@ module Topaz
     end
 
     def self.valid_utf8?(str)
-      i = 0
-      n = str.bytesize
-      while i < n
-        if str.getbyte(i) < 0x80
-          i += 1
-          next
-        end
-        len = utf8_char_length(str, i, n)
-        return false if len == 0
-        i += len
-      end
-      true
+      Topaz.valid_utf8?(str)
     end
 
     # Replaces invalid UTF-8 in str, yielding each invalid sequence.

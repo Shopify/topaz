@@ -2815,3 +2815,13 @@ class TestInterpProfile(BaseTopazTest):
         finally:
             space.interp_profile.enabled = False
         assert self.unwrap(space, w_res) == [5, True, True]
+
+
+class TestValidUtf8(BaseTopazTest):
+    def test_valid_encoding(self, space):
+        w_res = space.execute("""
+        return ["abc", "h\\u00e9llo", "\\xff".b, "\\xed\\xa0\\x80".b, "\\xf4\\x90\\x80\\x80".b, "\\xc0\\x80".b, "\\xe2\\x82".b, "\\u{10ffff}"].map { |s|
+          s.dup.force_encoding("UTF-8").valid_encoding?
+        }
+        """)
+        assert self.unwrap(space, w_res) == [True, True, False, False, False, False, False, True]
