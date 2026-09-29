@@ -424,11 +424,6 @@ class Regexp
 
   # names and named_captures are in RPython (regexpobject.py).
 
-  def self.last_match(n = nil)
-    m = $~
-    return m if n.nil? || m.nil?
-    m[n]
-  end
 
   def timeout
     nil

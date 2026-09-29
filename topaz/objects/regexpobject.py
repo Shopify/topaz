@@ -254,6 +254,16 @@ class W_RegexpObject(W_Object):
         matched = self.rsre_search(ctx)
         return self.get_match_result(space, ctx, s, matched)
 
+    @classdef.singleton_method("last_match")
+    def singleton_method_last_match(self, space, w_n=None):
+        # In RPython, so that it reads the calling Ruby frame's $~.
+        w_match = W_RegexpObject._get_regexp_match(space)
+        if w_match is None:
+            w_match = space.w_nil
+        if w_n is None or w_match is space.w_nil:
+            return w_match
+        return space.send(w_match, "[]", [w_n])
+
     @classdef.method("names")
     def method_names(self, space):
         self._check_initialized(space)

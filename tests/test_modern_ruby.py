@@ -2347,3 +2347,17 @@ class TestLastMatchNilAndErrinfo(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == [None, None]
+
+
+class TestRegexpLastMatch(BaseTopazTest):
+    def test_last_match_in_a_scan_block(self, space):
+        w_res = space.execute("""
+        r = []
+        "a1b2".scan(/([a-z])(\\d)/) { r << [Regexp.last_match.begin(0), Regexp.last_match(2)] }
+        "x" =~ /(x)/
+        r << Regexp.last_match(1)
+        "y" =~ /z/
+        r << Regexp.last_match
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [[0, "1"], [2, "2"], "x", None]
