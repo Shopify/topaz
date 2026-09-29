@@ -300,6 +300,10 @@ def _entry_point(space, argv):
     w_exit_error = None
     explicit_status = False
     jit.set_param(None, "trace_limit", 16000)
+    # Don't decay the JIT's counters: RPython decays them after every
+    # compilation, and in a program as broad as a Rails app the warm code
+    # then never gets hot. (--jit decay=N sets it back.)
+    jit.set_param(None, "decay", 0)
     if jit_params:
         # Work around TraceLimitTooHigh by setting any trace_limit explicitly
         parts = jit_params.split(",")
