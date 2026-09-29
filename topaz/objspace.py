@@ -531,7 +531,14 @@ class ObjectSpace(object):
                 "undefined method '%s' for class '%s'" % (
                     name, self.obj_to_s(w_cls)))
         else:
-            return W_UnboundMethodObject(self, w_cls, w_function)
+            # The owner is the ancestor that defines the method.
+            w_owner = w_cls
+            for w_mod in w_cls.ancestors():
+                assert isinstance(w_mod, W_ModuleObject)
+                if w_mod.find_local_method(self, name) is not None:
+                    w_owner = w_mod
+                    break
+            return W_UnboundMethodObject(self, w_owner, w_function)
 
     def newproc(self, bytecode, w_self, lexical_scope, cells, block,
                 parent_interp, top_parent_interp, regexp_match_cell,

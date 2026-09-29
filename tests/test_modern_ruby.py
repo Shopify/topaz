@@ -2361,3 +2361,15 @@ class TestRegexpLastMatch(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == [[0, "1"], [2, "2"], "x", None]
+
+
+class TestMethodOwner(BaseTopazTest):
+    def test_owner_is_the_defining_module(self, space):
+        w_res = space.execute("""
+        module CM; def ds; end; end
+        class B; extend CM; end
+        class U < B; end
+        return [U.method(:ds).owner.name, B.is_a?(U.method(:ds).owner),
+                U.new.method(:to_s).owner.name, U.instance_method(:inspect).owner.name]
+        """)
+        assert self.unwrap(space, w_res) == ["CM", True, "Kernel", "Kernel"]
