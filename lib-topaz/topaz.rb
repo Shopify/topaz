@@ -5,6 +5,15 @@ module Topaz
   FLOAT_DIGITS = /\A[+-]?(?:\d+(?:_\d+)*)?(?:\.(?:\d+(?:_\d+)*)?)?(?:[eE][+-]?\d+(?:_\d+)*)?\z/
   HEX_FLOAT = /\A([+-]?)0[xX](\h+(?:_\h+)*)?(?:\.(\h*))?(?:[pP]([+-]?\d+))?\z/
 
+  # A random integer in [0, n) from a Random or an object with #rand.
+  def self.random_below(random, n)
+    # CRuby draws nothing from its own generators for a range of one.
+    return 0 if n <= 1 && (random.equal?(::Random) || random.instance_of?(::Random))
+    value = Topaz.convert_type(random.rand(n), Integer, :to_int)
+    raise ::RangeError, "random number too big #{value}" if value < 0 || value >= n
+    value
+  end
+
   # Kernel#Float's strict parse of a String.
   def self.strict_float(str)
     raise ::ArgumentError, "string for Float contains null byte" if str.include?("\0")

@@ -365,11 +365,14 @@ class Array
     c
   end
 
+  # Draws as CRuby does, so a seeded Random gives the same order.
   def shuffle!(random: Random)
     raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    (self.length - 1).downto(1) do |idx|
-      other = random.rand(idx + 1)
-      self[other], self[idx] = self[idx], self[other]
+    i = length
+    while i > 1
+      j = Topaz.random_below(random, i)
+      i -= 1
+      self[i], self[j] = self[j], self[i]
     end
     self
   end
@@ -536,27 +539,45 @@ class Array
     raise ArgumentError.new("negative sample number") if count and count < 0
 
     rng = options[:random] if options
-    rng = Kernel unless rng && rng.respond_to?(:rand)
+    rng = Random unless rng
 
+    # Draws as CRuby does for one, two or three elements, so a seeded
+    # Random picks the same ones.
+    len = size
     unless count
-      random = Topaz.convert_type(rng.rand, Float, :to_f)
-      raise RangeError.new("random number too big #{random}") if random < 0 || random >= 1.0
-
-      return self[random * size]
+      return len < 2 ? self[0] : self[Topaz.random_below(rng, len)]
     end
 
-    count = size if count > size
+    count = len if count > len
+    case count
+    when 0
+      return []
+    when 1
+      return [self[Topaz.random_below(rng, len)]]
+    when 2
+      i = Topaz.random_below(rng, len)
+      j = Topaz.random_below(rng, len - 1)
+      j += 1 if j >= i
+      return [self[i], self[j]]
+    when 3
+      i = Topaz.random_below(rng, len)
+      j = Topaz.random_below(rng, len - 1)
+      k = Topaz.random_below(rng, len - 2)
+      l, g = j, i
+      if j >= i
+        l = i
+        g = (j += 1)
+      end
+      k += 1 if k >= l && (k += 1) >= g
+      return [self[i], self[j], self[k]]
+    end
+
     out = Array.new(self)
-
     count.times do |i|
-      random = Topaz.convert_type(rng.rand, Float, :to_f)
-      raise RangeError.new("random number too big #{random}") if random < 0 || random >= 1.0
-
-      r = (random * size).to_i
+      r = Topaz.random_below(rng, len - i) + i
       out[i], out[r] = out[r], out[i]
     end
-
-    return (count == size) ? out : out[0, count]
+    out[0, count]
   end
 
   def self.try_convert(arg)

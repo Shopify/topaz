@@ -2609,3 +2609,19 @@ class TestFiddle(BaseTopazTest):
         return [getpid.call == Process.pid, r, maxrss > 0, buffer.encoding.name]
         """)
         assert self.unwrap(space, w_res) == [True, 0, True, "ASCII-8BIT"]
+
+
+class TestRandomMatchesCRuby(BaseTopazTest):
+    def test_seeded_sequences(self, space):
+        w_res = space.execute("""
+        r = [Random.new(5).rand, Random.new(0x1be52551fc152997).rand]
+        g = Random.new(7)
+        r << 5.times.map { g.rand(10) }
+        r << (1..10).to_a.shuffle(random: Random.new(3)) << (1..10).to_a.sample(random: Random.new(3))
+        r << (1..10).to_a.sample(3, random: Random.new(11)) << Random.new(9).rand(1..6) << Random.new(9).bytes(5).bytes
+        return r
+        """)
+        # The values CRuby 4.0 gives.
+        assert self.unwrap(space, w_res) == [
+            0.22199317108973948, 0.2754808424719215, [4, 9, 6, 3, 3],
+            [6, 5, 2, 3, 10, 7, 8, 1, 4, 9], 9, [10, 1, 5], 5, [126, 225, 167, 2, 92]]
