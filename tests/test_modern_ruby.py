@@ -2386,3 +2386,17 @@ class TestBindModuleMethods(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == [1, 1, "bind argument must be an instance of String"]
+
+
+class TestBlockArgsDoNotMutate(BaseTopazTest):
+    def test_destructuring_leaves_the_array_alone(self, space):
+        w_res = space.execute("""
+        a = [1, 2, 3]
+        proc { |x, y| }.call(a)
+        b = [4, 5, 6]
+        [b].each { |x, y| }
+        c = [7]
+        [c].each { |x, y, z| }
+        return [a, b, c, [[1, 2, 3]].select { |x, y| true }]
+        """)
+        assert self.unwrap(space, w_res) == [[1, 2, 3], [4, 5, 6], [7], [[1, 2, 3]]]

@@ -75,7 +75,9 @@ class Frame(BaseFrame):
                                            raise_error=True,
                                            reraise_error=True)
             if space.is_kind_of(w_arg, space.w_array):
-                args_w = space.listview(w_arg)
+                # A copy: the padding and trimming below must not change
+                # the array.
+                args_w = space.listview(w_arg)[:]
         minargc = len(bytecode.arg_pos) - len(bytecode.defaults)
         if len(args_w) < minargc:
             args_w.extend([space.w_nil] * (minargc - len(args_w)))
