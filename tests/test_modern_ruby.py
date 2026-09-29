@@ -2497,3 +2497,16 @@ class TestCloseTwice(BaseTopazTest):
         return [f.close, f.close, f.closed?]
         """ % f)
         assert self.unwrap(space, w_res) == [None, None, True]
+
+
+class TestFileUtime(BaseTopazTest):
+    def test_utime(self, space, tmpdir):
+        f = tmpdir.join("f.txt")
+        f.write("x")
+        w_res = space.execute("""
+        n = File.utime(Time.at(1000000), Time.at(2000000), "%s")
+        m = File.mtime("%s").to_i
+        File.utime(nil, nil, "%s")
+        return [n, m, File.mtime("%s").to_i > 2000000]
+        """ % (f, f, f, f))
+        assert self.unwrap(space, w_res) == [1, 2000000, True]

@@ -1,5 +1,6 @@
 import os
 import stat
+import time
 
 from topaz.coerce import Coerce
 from topaz.error import error_for_oserror
@@ -382,6 +383,31 @@ class W_FileObject(W_IOObject):
             except OSError as e:
                 raise error_for_oserror(space, e)
         return space.newint(len(args_w))
+
+    @classdef.singleton_method("utime")
+    def singleton_method_utime(self, space, w_atime, w_mtime, args_w):
+        # nil for both times means now.
+        now = w_atime is space.w_nil and w_mtime is space.w_nil
+        atime = mtime = 0.0
+        if not now:
+            atime = W_FileObject._utime_seconds(space, w_atime)
+            mtime = W_FileObject._utime_seconds(space, w_mtime)
+        for arg_w in args_w:
+            path = Coerce.path(space, arg_w)
+            try:
+                if now:
+                    os.utime(path, None)
+                else:
+                    os.utime(path, (atime, mtime))
+            except OSError as e:
+                raise error_for_oserror(space, e)
+        return space.newint(len(args_w))
+
+    @staticmethod
+    def _utime_seconds(space, w_time):
+        if w_time is space.w_nil:
+            return time.time()
+        return space.float_w(space.send(w_time, "to_f"))
 
     @classdef.singleton_method("stat", filename="path")
     def singleton_method_stat(self, space, filename):
