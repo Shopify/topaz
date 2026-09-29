@@ -50,7 +50,11 @@ class W_DynamicLibraryObject(W_Object):
 
     @classdef.method('find_variable', name='symbol')
     def method_find_variable(self, space, name):
-        funcsym = self.cdll.getaddressindll(name)
+        try:
+            funcsym = self.cdll.getaddressindll(name)
+        except KeyError:
+            # Not in the library (dlsym failed).
+            return space.w_nil
         # w_sym = space.find_const(space.getclass(self), 'Symbol')
         return W_DL_SymbolObject(space, funcsym)
 

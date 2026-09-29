@@ -81,3 +81,9 @@ class TestDynamicLibrary_find_variable(BaseFFITest):
         dl = FFI::DynamicLibrary.new('%s')
         dl.method(:find_function) == dl.method(:find_variable)
         """ % libm)
+
+    def test_it_returns_nil_for_a_missing_symbol(self, space):
+        w_res = space.execute("""
+        FFI::DynamicLibrary.new('%s').find_function(:no_such_function_in_libm)
+        """ % libm)
+        assert w_res is space.w_nil
