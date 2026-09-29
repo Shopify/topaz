@@ -464,6 +464,23 @@ class String
     s.force_encoding(Encoding::BINARY)
   end
 
+  # These keep the encoding tag, which lives in an instance variable the
+  # RPython methods do not see.
+  alias __topaz_times *
+  def *(times)
+    s = __topaz_times(times)
+    s.force_encoding(@__topaz_encoding) if @__topaz_encoding
+    s
+  end
+
+  alias __topaz_replace replace
+  def replace(other)
+    __topaz_replace(other)
+    enc = other.instance_variable_get(:@__topaz_encoding) if other.is_a?(String)
+    @__topaz_encoding = enc
+    self
+  end
+
   def ascii_only?
     Topaz::EncodingSupport.ascii_only?(self)
   end

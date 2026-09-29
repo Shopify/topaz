@@ -2570,3 +2570,16 @@ class TestStrictFloat(BaseTopazTest):
         assert self.unwrap(space, w_res) == [
             1.5, 1.5, 1000.0, 26.0, 3.0, 1000.5, 0.5, 1.0, "err", "err", "err", "err", "err",
             None, None, 3.0]
+
+
+class TestStringEncodingKept(BaseTopazTest):
+    def test_times_and_replace_keep_encoding(self, space):
+        w_res = space.execute("""
+        b = "\\0".b * 4
+        y = +"q"
+        y.replace("ab".b)
+        z = +"q".b
+        z.replace("w")
+        return [b.encoding.name, y.encoding.name, z.encoding.name, ("ab" * 2).encoding.name]
+        """)
+        assert self.unwrap(space, w_res) == ["ASCII-8BIT", "ASCII-8BIT", "UTF-8", "UTF-8"]
