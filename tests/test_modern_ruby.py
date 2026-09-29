@@ -2510,3 +2510,19 @@ class TestFileUtime(BaseTopazTest):
         return [n, m, File.mtime("%s").to_i > 2000000]
         """ % (f, f, f, f))
         assert self.unwrap(space, w_res) == [1, 2000000, True]
+
+
+class TestFileRenameChown(BaseTopazTest):
+    def test_rename_and_chown(self, space, tmpdir):
+        a = tmpdir.join("a.txt")
+        a.write("x")
+        b = tmpdir.join("b.txt")
+        w_res = space.execute("""
+        st = File.stat("%s")
+        r = [File.chown(st.uid, st.gid, "%s"), File.chown(nil, -1, "%s"), File.rename("%s", "%s")]
+        f = File.open("%s")
+        r << f.chown(nil, nil) << File.exist?("%s") << File.exist?("%s")
+        f.close
+        return r
+        """ % (a, a, a, a, b, b, a, b))
+        assert self.unwrap(space, w_res) == [1, 1, 0, 0, False, True]

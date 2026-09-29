@@ -384,6 +384,49 @@ class W_FileObject(W_IOObject):
                 raise error_for_oserror(space, e)
         return space.newint(len(args_w))
 
+    @classdef.singleton_method("rename", old_name="path", new_name="path")
+    def singleton_method_rename(self, space, old_name, new_name):
+        try:
+            os.rename(old_name, new_name)
+        except OSError as e:
+            raise error_for_oserror(space, e)
+        return space.newint(0)
+
+    @classdef.singleton_method("chown")
+    def singleton_method_chown(self, space, w_owner, w_group, args_w):
+        return W_FileObject._chown(space, w_owner, w_group, args_w, False)
+
+    @classdef.singleton_method("lchown")
+    def singleton_method_lchown(self, space, w_owner, w_group, args_w):
+        return W_FileObject._chown(space, w_owner, w_group, args_w, True)
+
+    @staticmethod
+    def _chown(space, w_owner, w_group, args_w, link):
+        # nil or -1 leaves the owner or group as it is.
+        uid = -1 if w_owner is space.w_nil else space.int_w(w_owner)
+        gid = -1 if w_group is space.w_nil else space.int_w(w_group)
+        for arg_w in args_w:
+            path = Coerce.path(space, arg_w)
+            try:
+                if link:
+                    os.lchown(path, uid, gid)
+                else:
+                    os.chown(path, uid, gid)
+            except OSError as e:
+                raise error_for_oserror(space, e)
+        return space.newint(len(args_w))
+
+    @classdef.method("chown")
+    def method_chown(self, space, w_owner, w_group):
+        uid = -1 if w_owner is space.w_nil else space.int_w(w_owner)
+        gid = -1 if w_group is space.w_nil else space.int_w(w_group)
+        self.ensure_not_closed(space)
+        try:
+            os.fchown(self.fd, uid, gid)
+        except OSError as e:
+            raise error_for_oserror(space, e)
+        return space.newint(0)
+
     @classdef.singleton_method("utime")
     def singleton_method_utime(self, space, w_atime, w_mtime, args_w):
         # nil for both times means now.
