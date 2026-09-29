@@ -224,7 +224,13 @@ class W_ModuleObject(W_RootObject):
 
     def mutated(self):
         self.version = VersionTag()
-        method_cache_state.state += 1
+        if self.descendants:
+            # Other classes' lookups may pass through this module.
+            method_cache_state.state += 1
+        else:
+            # Only this module's own lookups do (a singleton class that
+            # extend or def obj.m just changed, say).
+            self.method_cache_state = -1
 
     def shadow_hidden_subclasses(self, name):
         """Called whenever the method `name` is (re)defined or removed here.
