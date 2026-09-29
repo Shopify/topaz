@@ -2770,3 +2770,18 @@ class TestMethodCacheStats(BaseTopazTest):
         return [hits > 5, misses >= 0, state >= 0, bumps.is_a?(Hash)]
         """)
         assert self.unwrap(space, w_res) == [True, True, True, True]
+
+
+class TestFileNewAutoclose(BaseTopazTest):
+    def test_file_new_on_a_descriptor_with_autoclose_false(self, space, tmpdir):
+        f = tmpdir.join("f.txt")
+        f.write("abc")
+        w_res = space.execute("""
+        File.open("%s") do |f|
+          g = File.new(f.fileno, autoclose: false, path: "")
+          a = g.autoclose?
+          g.close
+          return [a, g.path, f.read]
+        end
+        """ % f)
+        assert self.unwrap(space, w_res) == [False, "", "abc"]

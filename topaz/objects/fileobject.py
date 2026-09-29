@@ -129,6 +129,9 @@ class W_FileObject(W_IOObject):
             w_value = space.send(w_opts, "[]", [space.newsymbol("path")])
             if w_value is not space.w_nil:
                 path_option = Coerce.path(space, w_value)
+            # autoclose: false, for a File sharing another's descriptor.
+            w_value = space.send(w_opts, "fetch", [space.newsymbol("autoclose"), space.w_true])
+            self.autoclose = space.is_true(w_value)
         if w_mode is None:
             w_mode = space.w_nil
         mode, encoding = map_filemode(space, w_mode)
