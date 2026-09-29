@@ -773,6 +773,23 @@ class W_StringObject(W_Object):
             self.strategy.delslice(space, self.str_storage, start, start + 1)
             return w_string
 
+    # In RPython: Comparable#== (Ruby, with a rescue) was String#==, and
+    # every Hash lookup with a String key calls eql?.
+    @classdef.method("==")
+    @classdef.method("===")
+    def method_eq(self, space, w_other):
+        if isinstance(w_other, W_StringObject):
+            return space.newbool(space.str_w(self) == space.str_w(w_other))
+        if space.respond_to(w_other, "to_str"):
+            return space.newbool(space.is_true(space.send(w_other, "==", [self])))
+        return space.w_false
+
+    @classdef.method("eql?")
+    def method_eqlp(self, space, w_other):
+        if isinstance(w_other, W_StringObject):
+            return space.newbool(space.str_w(self) == space.str_w(w_other))
+        return space.w_false
+
     @classdef.method("<=>")
     def method_comparator(self, space, w_other):
         if isinstance(w_other, W_StringObject):

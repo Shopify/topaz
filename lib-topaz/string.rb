@@ -1,11 +1,4 @@
 class String
-  def eql?(other)
-    if !other.kind_of?(String)
-      false
-    else
-      self == other
-    end
-  end
 
   def swapcase
     copy = self.dup

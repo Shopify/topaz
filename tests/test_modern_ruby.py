@@ -2785,3 +2785,17 @@ class TestFileNewAutoclose(BaseTopazTest):
         end
         """ % f)
         assert self.unwrap(space, w_res) == [False, "", "abc"]
+
+
+class TestStringAndSymbolEquality(BaseTopazTest):
+    def test_equality(self, space):
+        w_res = space.execute("""
+        o = Object.new
+        def o.to_str = "abc"
+        def o.==(x) = x == "abc"
+        class SEQ < String; end
+        h = {"k" => 1}
+        return ["abc" == "abc", "abc" == "abd", "abc" == :abc, "abc" == o, "abc".eql?(SEQ.new("abc")),
+                "a".eql?(o), :a == :a, :a == "a", h[SEQ.new("k")], String.instance_method(:==).owner.name]
+        """)
+        assert self.unwrap(space, w_res) == [True, False, False, True, True, False, True, False, 1, "String"]

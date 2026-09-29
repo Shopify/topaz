@@ -98,6 +98,12 @@ class W_SymbolObject(W_Object):
     def singleton_method_all_symbols(self, space):
         return space.newarray(space.symbol_cache.values())
 
+    # Symbols are unique: identity, not Comparable#== (Ruby, with a rescue).
+    @classdef.method("==")
+    @classdef.method("===")
+    def method_eq(self, space, w_other):
+        return space.newbool(self is w_other)
+
     @classdef.method("extend")
     @classdef.method("singleton_class")
     def method_singleton_class(self, space):
