@@ -2542,3 +2542,17 @@ class TestIOAutoclose(BaseTopazTest):
         return [a, b, w2.closed?, r.read]
         """)
         assert self.unwrap(space, w_res) == [True, False, True, "x"]
+
+
+class TestDateCoercedComparison(BaseTopazTest):
+    def test_date_compare_coerces(self, space):
+        w_res = space.execute("""
+        require "date"
+        class Wrap
+          def initialize(v) = @v = v
+          def coerce(other) = [other, @v]
+        end
+        d = DateTime.new(2020, 1, 1)
+        return [d <=> Wrap.new(3600), d <=> Object.new, Date.new(2020, 1, 2) <=> Wrap.new(Date.new(2020, 1, 1))]
+        """)
+        assert self.unwrap(space, w_res) == [1, None, 1]

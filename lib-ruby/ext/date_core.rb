@@ -487,6 +487,15 @@ class Date
       ajd <=> other.ajd
     when Numeric
       ajd <=> other
+    else
+      # As with Numeric, let the other object coerce the comparison.
+      return nil unless other.respond_to?(:coerce)
+      begin
+        a, b = other.coerce(self)
+      rescue StandardError
+        return nil
+      end
+      a <=> b
     end
   end
 
