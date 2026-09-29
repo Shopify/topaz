@@ -1495,7 +1495,8 @@ class DynamicString(Node):
             strvalue.compile(ctx)
             if not isinstance(strvalue, ConstantString):
                 ctx.emit(consts.SEND, ctx.create_symbol_const("to_s"), 0)
-        if len(self.strvalues) != 1:
+        # "#{x}" is a new String, not x.to_s itself.
+        if len(self.strvalues) != 1 or not isinstance(self.strvalues[0], ConstantString):
             ctx.emit(consts.BUILD_STRING, len(self.strvalues))
 
     def compile_defined(self, ctx):

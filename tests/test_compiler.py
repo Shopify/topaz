@@ -466,6 +466,7 @@ class TestCompiler(object):
         self.assert_compiles(space, ':"#{2}"', """
         LOAD_CONST 0
         SEND 1 0
+        BUILD_STRING 1
         SEND 2 0
 
         RETURN
@@ -1491,6 +1492,7 @@ class TestCompiler(object):
         self.assert_compiles(space, "/#{2}/", """
         LOAD_CONST 0
         SEND 1 0
+        BUILD_STRING 1
         LOAD_CONST 2
         BUILD_REGEXP
 

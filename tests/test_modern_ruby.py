@@ -2627,6 +2627,18 @@ class TestRandomMatchesCRuby(BaseTopazTest):
             [6, 5, 2, 3, 10, 7, 8, 1, 4, 9], 9, [10, 1, 5], 5, [126, 225, 167, 2, 92]]
 
 
+class TestStringCopies(BaseTopazTest):
+    def test_interpolation_and_to_s_make_new_strings(self, space):
+        w_res = space.execute("""
+        a = +"abc"
+        s = "#{a}"
+        s << "x"
+        class SB < String; end
+        b = SB.new("q")
+        return [a, s, "#{b}".class.name, b.to_s.class.name, b.to_str.class.name, a.to_s.equal?(a)]
+        """)
+        assert self.unwrap(space, w_res) == ["abc", "abcx", "String", "String", "String", True]
+
 
 class TestStringRangeAssignment(BaseTopazTest):
     def test_range_assignment(self, space):

@@ -605,7 +605,14 @@ class W_StringObject(W_Object):
     @classdef.method("to_str")
     @classdef.method("to_s")
     def method_to_s(self, space):
-        return self
+        if space.getnonsingletonclass(self) is space.w_string:
+            return self
+        # A String subclass gives a plain String copy (keeping the encoding).
+        w_copy = space.newstr_fromstr(space.str_w(self))
+        w_enc = space.find_instance_var(self, "@__topaz_encoding")
+        if w_enc is not None and w_enc is not space.w_nil:
+            space.set_instance_var(w_copy, "@__topaz_encoding", w_enc)
+        return w_copy
 
     @classdef.method("ord")
     def method_ord(self, space):
