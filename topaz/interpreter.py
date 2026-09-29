@@ -878,7 +878,10 @@ class Interpreter(object):
 
     def CONTINUE_LOOP(self, space, bytecode, frame, pc, target_pc):
         frame.pop()
-        return frame.unrollstack_and_jump(space, ContinueLoop(target_pc))
+        new_pc = frame.unrollstack_and_jump(space, ContinueLoop(target_pc))
+        # `next` goes back to the loop's head: a loop whose iterations end
+        # in `next` must count as hot too.
+        return self.jump(space, bytecode, frame, pc, new_pc)
 
     def BREAK_LOOP(self, space, bytecode, frame, pc):
         w_obj = frame.pop()
