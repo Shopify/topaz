@@ -27,6 +27,21 @@ class Topaz(object):
             for name, code in ERRNO_LIST
         ]))
 
+    @moduledef.function("method_cache_stats")
+    def method_method_cache_stats(self, space):
+        """[hits, misses, invalidations, {module name => invalidations}]
+        of the interpreter's method caches."""
+        from topaz.objects.moduleobject import method_cache_state
+        w_bumps = space.newhash()
+        for name, count in method_cache_state.bumps_by_module.iteritems():
+            space.send(w_bumps, "[]=", [space.newstr_fromstr(name), space.newint(count)])
+        return space.newarray([
+            space.newint(method_cache_state.hits),
+            space.newint(method_cache_state.misses),
+            space.newint(method_cache_state.state),
+            w_bumps,
+        ])
+
     @moduledef.function("label_symbol?", symbol="symbol")
     def method_label_symbolp(self, space, symbol):
         """Whether a Hash inspects the key :symbol as `symbol: `."""

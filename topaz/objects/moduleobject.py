@@ -122,6 +122,10 @@ class MethodCacheState(object):
 
     def __init__(self):
         self.state = 0
+        # For Topaz.method_cache_stats.
+        self.hits = 0
+        self.misses = 0
+        self.bumps_by_module = {}
 
 
 method_cache_state = MethodCacheState()
@@ -227,6 +231,8 @@ class W_ModuleObject(W_RootObject):
         if self.descendants:
             # Other classes' lookups may pass through this module.
             method_cache_state.state += 1
+            name = self.name or "(anonymous)"
+            method_cache_state.bumps_by_module[name] = method_cache_state.bumps_by_module.get(name, 0) + 1
         else:
             # Only this module's own lookups do (a singleton class that
             # extend or def obj.m just changed, say).
@@ -271,8 +277,11 @@ class W_ModuleObject(W_RootObject):
             self.method_cache = {}
             self.method_cache_state = state
         try:
-            return self.method_cache[name]
+            method = self.method_cache[name]
+            method_cache_state.hits += 1
+            return method
         except KeyError:
+            method_cache_state.misses += 1
             method = self.find_method_uncached(space, name)
             self.method_cache[name] = method
             return method

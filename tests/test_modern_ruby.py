@@ -2759,3 +2759,14 @@ class TestMethodCacheInvalidation(BaseTopazTest):
         return r
         """)
         assert self.unwrap(space, w_res) == ["base", "mod", "sub", "mod", "mod2", "pre", "single", "pre", "g"]
+
+
+class TestMethodCacheStats(BaseTopazTest):
+    def test_stats(self, space):
+        w_res = space.execute("""
+        class MCSA; def f; end; end
+        10.times { MCSA.new.f }
+        hits, misses, state, bumps = Topaz.method_cache_stats
+        return [hits > 5, misses >= 0, state >= 0, bumps.is_a?(Hash)]
+        """)
+        assert self.unwrap(space, w_res) == [True, True, True, True]
