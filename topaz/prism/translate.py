@@ -195,7 +195,8 @@ class Translator(nodes.Visitor):
         return handlers
 
     def standard_error(self, lineno):
-        return ast.LookupConstant(ast.Scope(lineno), "StandardError", lineno)
+        # ::StandardError, whatever the lexical scope holds.
+        return ast.LookupConstant(None, "StandardError", lineno)
 
     def array_or_node(self, arguments):
         """The value of `return`, `break` and `next`."""

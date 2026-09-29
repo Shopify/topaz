@@ -2435,3 +2435,31 @@ class TestStrictInteger(BaseTopazTest):
             12, 12, -31, 5, 15, 15, 1000, "err", "err", "err", "err", "err", "err",
             255, 177, None]
 
+
+class TestRescueModifierAndRetry(BaseTopazTest):
+    def test_rescue_modifier_in_a_module_function(self, space):
+        w_res = space.execute("""
+        module RM
+          module Inner
+            def self.const_missing(name) = raise(NameError, "missing #{name}")
+            def self.g(v) = (Integer(v) rescue v)
+          end
+        end
+        return RM::Inner.g("q")
+        """)
+        assert self.unwrap(space, w_res) == "q"
+
+    def test_retry_restores_errinfo(self, space):
+        w_res = space.execute("""
+        n = 0
+        r = nil
+        begin
+          n += 1
+          raise "a" if n < 3
+          r = $!
+        rescue
+          retry
+        end
+        return [r, n]
+        """)
+        assert self.unwrap(space, w_res) == [None, 3]

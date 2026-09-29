@@ -315,6 +315,11 @@ class Retry(Node):
             nblocks += 1
         for _ in range(nblocks):
             ctx.emit(consts.POP_BLOCK)
+        if ctx.errinfo_stack:
+            # Retrying leaves the rescue clause: restore $!.
+            Variable(ctx.errinfo_stack[-1], -1).compile(ctx)
+            ctx.emit(consts.STORE_GLOBAL, ctx.create_symbol_const("$!"))
+            ctx.emit(consts.DISCARD_TOP)
         ctx.emit_jump(consts.JUMP, target)
         # Never reached, but keeps the stack depth consistent for code that
         # expects an expression here.

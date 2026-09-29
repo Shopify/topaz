@@ -2292,7 +2292,7 @@ HERE
             ast.Statement(ast.TryExcept(
                 ast.Block([ast.Statement(ast.Send(ast.Self(1), "foo", [], None, 1))]),
                 [
-                    ast.ExceptHandler([ast.LookupConstant(ast.Scope(1), "StandardError", 1)], None, ast.Block([
+                    ast.ExceptHandler([ast.LookupConstant(None, "StandardError", 1)], None, ast.Block([
                         ast.Statement(ast.Send(ast.Self(1), "bar", [], None, 1))
                     ]))
                 ],
@@ -2303,7 +2303,7 @@ HERE
             ast.Statement(ast.Assignment(ast.Variable("a", 1), ast.TryExcept(
                 ast.ConstantInt(2),
                 [
-                    ast.ExceptHandler([ast.LookupConstant(ast.Scope(1), "StandardError", 1)], None, ast.ConstantInt(3))
+                    ast.ExceptHandler([ast.LookupConstant(None, "StandardError", 1)], None, ast.ConstantInt(3))
                 ],
                 ast.Nil(),
             )))
@@ -2312,7 +2312,7 @@ HERE
             ast.Statement(ast.AugmentedAssignment("+", ast.Variable("a", 1), ast.TryExcept(
                 ast.ConstantInt(2),
                 [
-                    ast.ExceptHandler([ast.LookupConstant(ast.Scope(1), "StandardError", 1)], None, ast.ConstantInt(3))
+                    ast.ExceptHandler([ast.LookupConstant(None, "StandardError", 1)], None, ast.ConstantInt(3))
                 ],
                 ast.Nil(),
             )))
