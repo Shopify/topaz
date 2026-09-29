@@ -14,6 +14,7 @@ from topaz.error import RubyError, error_for_oserror, error_for_errno
 from topaz.module import ModuleDef, check_frozen
 from topaz.modules.process import Process
 from topaz.objects.bindingobject import W_BindingObject
+from topaz.objects.classobject import W_ClassObject
 from topaz.objects.exceptionobject import W_ExceptionObject
 from topaz.objects.functionobject import W_FunctionObject
 from topaz.objects.hashobject import W_HashObject
@@ -420,14 +421,36 @@ class Kernel(object):
         return w_dup
 
     @moduledef.method("clone")
-    def method_clone(self, space):
+    def method_clone(self, space, w_opts=None):
+        # freeze: nil copies the frozen state, true freezes, false does not.
+        w_freeze = space.w_nil
+        if w_opts is not None:
+            if not isinstance(w_opts, W_HashObject):
+                raise space.error(space.w_ArgumentError,
+                    "wrong number of arguments (given 1, expected 0)")
+            w_freeze = space.send(w_opts, "fetch", [space.newsymbol("freeze"), space.w_nil])
+            if (w_freeze is not space.w_nil and w_freeze is not space.w_true and
+                    w_freeze is not space.w_false):
+                raise space.error(space.w_ArgumentError,
+                    "unexpected value for freeze: %s" % space.obj_to_s(space.getclass(w_freeze)))
         if is_immediate(space, self):
+            if w_freeze is space.w_false:
+                raise space.error(space.w_ArgumentError,
+                    "can't unfreeze %s" % space.obj_to_s(space.getclass(self)))
             return self
         w_dup = space.send(space.getnonsingletonclass(self), "allocate")
         w_dup.copy_instance_vars(space, self)
-        w_dup.copy_singletonclass(space, space.getsingletonclass(self))
+        # Only an object that has a singleton class gives its clone one.
+        w_cls = space.getclass(self)
+        if isinstance(w_cls, W_ClassObject) and w_cls.is_singleton:
+            w_dup.copy_singletonclass(space, w_cls)
         space.send(w_dup, "initialize_clone", [self])
-        space.infect(w_dup, self, freeze=True)
+        if w_freeze is space.w_nil:
+            space.infect(w_dup, self, freeze=True)
+        else:
+            space.infect(w_dup, self)
+            if w_freeze is space.w_true:
+                w_dup.set_flag(space, "frozen?")
         return w_dup
 
     @moduledef.method("sleep")

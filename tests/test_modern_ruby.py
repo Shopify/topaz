@@ -2716,3 +2716,18 @@ class TestInstanceExecSingletonLazily(BaseTopazTest):
         return [c - b, d - c, r.first, o.only_me, IEFoo.new.respond_to?(:only_me), IEFoo.cm]
         """)
         assert self.unwrap(space, w_res) == [0, 1, "barbar", "me", False, "cm"]
+
+
+class TestCloneWithoutSingleton(BaseTopazTest):
+    def test_clone(self, space):
+        w_res = space.execute("""
+        class CLFoo; attr_accessor :a; end
+        f = CLFoo.new
+        f.a = 1
+        g = CLFoo.new
+        def g.hi = :hi
+        fr = CLFoo.new.freeze
+        return [f.clone.a, f.clone.singleton_methods, g.clone.hi, fr.clone.frozen?,
+                fr.clone(freeze: false).frozen?, f.clone(freeze: true).frozen?, 1.clone]
+        """)
+        assert self.unwrap(space, w_res) == [1, [], "hi", True, False, True, 1]
