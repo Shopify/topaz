@@ -113,7 +113,7 @@ class W_RegexpObject(W_Object):
     def _create_regexp_match_getter(n):
         def getter(space):
             w_match = W_RegexpObject._get_regexp_match(space)
-            if w_match is None:
+            if w_match is None or w_match is space.w_nil:
                 return space.w_nil
             else:
                 return space.send(w_match, "[]", [space.newint(n)])
@@ -122,7 +122,7 @@ class W_RegexpObject(W_Object):
     @staticmethod
     def _get_last_match(space):
         w_match = W_RegexpObject._get_regexp_match(space)
-        if w_match is None:
+        if w_match is None or w_match is space.w_nil:
             return space.w_nil
         else:
             w_size = space.send(w_match, "size")
@@ -132,7 +132,7 @@ class W_RegexpObject(W_Object):
     @staticmethod
     def _get_pre_match(space):
         w_match = W_RegexpObject._get_regexp_match(space)
-        if w_match is None:
+        if w_match is None or w_match is space.w_nil:
             return space.w_nil
         else:
             return space.send(w_match, "pre_match")
@@ -140,7 +140,7 @@ class W_RegexpObject(W_Object):
     @staticmethod
     def _get_post_match(space):
         w_match = W_RegexpObject._get_regexp_match(space)
-        if w_match is None:
+        if w_match is None or w_match is space.w_nil:
             return space.w_nil
         else:
             return space.send(w_match, "post_match")

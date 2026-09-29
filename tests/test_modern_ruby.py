@@ -2318,3 +2318,32 @@ class TestBigLiteralArrays(BaseTopazTest):
         return [a.size, f.size, a[1], f.last, b.size]
         """ % items)
         assert self.unwrap(space, w_res) == [70001, 70000, 1, 69999 % 300, 75]
+
+
+class TestLastMatchNilAndErrinfo(BaseTopazTest):
+    def test_numbered_globals_after_a_failed_match(self, space):
+        w_res = space.execute("""
+        "x" =~ /(y)/
+        r = [$1, $&, $+, $`, $']
+        "q".sub(/(z)/, "")
+        r << $1
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [None] * 6
+
+    def test_next_and_break_out_of_a_rescue_clause_restore_errinfo(self, space):
+        w_res = space.execute("""
+        r = []
+        [1, 2].each do |x|
+          begin
+            raise "boom" if x == 1
+          rescue
+            next
+          end
+        end
+        r << $!
+        [1].each { begin; raise "b2"; rescue; break; end }
+        r << $!
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [None, None]

@@ -158,9 +158,19 @@ class Next(BaseStatement):
             block = ctx.find_frame_block(ctx.F_BLOCK_LOOP)
             ctx.emit_jump(consts.CONTINUE_LOOP, block)
         elif isinstance(ctx.symtable, BlockSymbolTable):
+            restore_errinfo(ctx)
             ctx.emit(consts.RETURN)
         else:
             raise CompilerError("void value expression")
+
+
+def restore_errinfo(ctx):
+    """Leaving a rescue clause (by return, or next or break out of a block)
+    restores $! to what it was before the begin."""
+    if ctx.errinfo_stack:
+        Variable(ctx.errinfo_stack[0], -1).compile(ctx)
+        ctx.emit(consts.STORE_GLOBAL, ctx.create_symbol_const("$!"))
+        ctx.emit(consts.DISCARD_TOP)
 
 
 class Break(BaseStatement):
@@ -172,6 +182,7 @@ class Break(BaseStatement):
         if ctx.in_frame_block(ctx.F_BLOCK_LOOP):
             ctx.emit(consts.BREAK_LOOP)
         elif isinstance(ctx.symtable, BlockSymbolTable):
+            restore_errinfo(ctx)
             ctx.emit(consts.RAISE_BREAK)
         else:
             raise CompilerError("void value expression")
@@ -587,11 +598,7 @@ class Return(BaseStatement):
 
     def compile(self, ctx):
         self.expr.compile(ctx)
-        if ctx.errinfo_stack:
-            # Returning out of a rescue clause restores $! too.
-            Variable(ctx.errinfo_stack[0], -1).compile(ctx)
-            ctx.emit(consts.STORE_GLOBAL, ctx.create_symbol_const("$!"))
-            ctx.emit(consts.DISCARD_TOP)
+        restore_errinfo(ctx)
         if isinstance(ctx.symtable, BlockSymbolTable):
             ctx.emit(consts.RAISE_RETURN)
         else:
