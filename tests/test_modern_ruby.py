@@ -2463,3 +2463,13 @@ class TestRescueModifierAndRetry(BaseTopazTest):
         return [r, n]
         """)
         assert self.unwrap(space, w_res) == [None, 3]
+
+
+class TestShuffleRandom(BaseTopazTest):
+    def test_shuffle_takes_a_random(self, space):
+        w_res = space.execute("""
+        a = (1..10).to_a
+        b = a.dup.shuffle!(random: Random.new(3))
+        return [a.shuffle(random: Random.new(3)) == b, b.sort == a]
+        """)
+        assert self.unwrap(space, w_res) == [True, True]

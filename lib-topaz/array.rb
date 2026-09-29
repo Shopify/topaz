@@ -365,18 +365,18 @@ class Array
     c
   end
 
-  def shuffle!
+  def shuffle!(random: Random)
     raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
     (self.length - 1).downto(1) do |idx|
-      other = rand(idx + 1)
+      other = random.rand(idx + 1)
       self[other], self[idx] = self[idx], self[other]
     end
     self
   end
 
-  def shuffle
+  def shuffle(random: Random)
     arr = Array.new(self)
-    arr.shuffle!
+    arr.shuffle!(random: random)
     arr
   end
 
