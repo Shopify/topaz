@@ -286,6 +286,7 @@ class W_ModuleObject(W_RootObject):
             self.method_cache[name] = method
             return method
 
+    @jit.unroll_safe
     def find_method_uncached(self, space, name):
         for module in self.prepended_modules:
             method = module.find_local_method(space, name)

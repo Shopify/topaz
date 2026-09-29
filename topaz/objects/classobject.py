@@ -1,5 +1,6 @@
 import copy
 
+from rpython.rlib import jit
 from rpython.rlib.objectmodel import specialize
 
 from topaz.module import ClassDef
@@ -101,6 +102,7 @@ class W_ClassObject(W_ModuleObject):
 
         return consts.keys()
 
+    @jit.unroll_safe
     def find_method_uncached(self, space, name):
         method = W_ModuleObject.find_method_uncached(self, space, name)
         if method is None and self.superclass is not None:
