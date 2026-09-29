@@ -54,9 +54,11 @@ class W_MethodObject(W_Object):
     @classdef.method("[]")
     @classdef.method("call")
     def method_call(self, space, args_w, block):
-        self = jit.promote(self)
+        # Promote the function, not the Method: a Method made in the trace
+        # (obj.method(:m).call) is virtual, and promoting a virtual makes
+        # the trace invalid.
         return space.invoke_function(
-            self.w_function,
+            jit.promote(self.w_function),
             self.w_receiver,
             args_w,
             block

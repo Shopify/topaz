@@ -34,6 +34,15 @@ def get_unique_id(pc, bytecode, block_bytecode, w_trace_proc):
     return rvmprof.get_unique_id(bytecode)
 
 
+def promote_unless_virtual(obj):
+    """Promote obj, unless the trace allocated it: promoting a virtual
+    (instance_exec makes a new StaticScope per call) makes the optimizer
+    reject the whole trace, so it could never be compiled."""
+    if jit.isvirtual(obj):
+        return obj
+    return jit.promote(obj)
+
+
 def _get_vmprof_code(self, space, frame, bytecode):
     return bytecode
 
@@ -278,7 +287,7 @@ class Interpreter(object):
         w_name = bytecode.consts_w[idx]
         name = space.symbol_w(w_name)
         frame.push(space.find_lexical_const(
-            jit.promote(frame.lexical_scope), name))
+            promote_unless_virtual(frame.lexical_scope), name))
 
     @jit.unroll_safe
     def DEFINED_LOCAL_CONSTANT(self, space, bytecode, frame, pc, idx):
@@ -287,7 +296,7 @@ class Interpreter(object):
         w_name = bytecode.consts_w[idx]
         name = space.symbol_w(w_name)
         w_res = space._find_lexical_const(
-            jit.promote(frame.lexical_scope), name, autoload=False)
+            promote_unless_virtual(frame.lexical_scope), name, autoload=False)
         if w_res is None:
             frame.push(space.w_nil)
         else:
