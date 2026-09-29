@@ -147,10 +147,6 @@ class CompilerContext(object):
         blocks = self.first_block.post_order()
         code, lineno_table = self.get_code_lineno_table(blocks)
         depth = self.count_stackdepth(blocks)
-        for default in defaults:
-            depth = max(depth, default.max_stackdepth)
-        for kw_default in kw_defaults:
-            depth = max(depth, kw_default.max_stackdepth)
         return W_CodeObject(
             self.code_name,
             self.filepath,
@@ -268,8 +264,8 @@ class CompilerContext(object):
         self.current_block.instrs.append(instr)
         self.last_lineno = self.current_lineno
 
-    def emit_jump(self, opcode, target):
-        instr = Instruction(opcode, 0, -1, self.current_lineno)
+    def emit_jump(self, opcode, target, arg1=-1):
+        instr = Instruction(opcode, 0, arg1, self.current_lineno)
         instr.jump = target
         self.current_block.instrs.append(instr)
 

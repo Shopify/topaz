@@ -440,11 +440,8 @@ class AbstractCallable(Node):
                 code_ctx.symtable.get_cell_num(arg.name)
                 if first_default_arg is None:
                     first_default_arg = arg.name
-                arg_ctx = CompilerContext(ctx.space, ctxname, code_ctx.symtable, ctx.filepath)
-                arg.defl.compile(arg_ctx)
-                arg_ctx.emit(consts.RETURN)
-                bc = arg_ctx.create_bytecode()
-                arg_defaults.append(bc)
+                # The value is computed in the prologue below.
+                arg_defaults.append(None)
         if splat_arg is not None:
             code_ctx.symtable.get_cell_num(splat_arg)
         for arg in post_args:
@@ -458,11 +455,7 @@ class AbstractCallable(Node):
             assert isinstance(arg, Argument)
             if arg.defl is not None:
                 code_ctx.symtable.get_cell_num(arg.name)
-                arg_ctx = CompilerContext(ctx.space, ctxname, code_ctx.symtable, ctx.filepath)
-                arg.defl.compile(arg_ctx)
-                arg_ctx.emit(consts.RETURN)
-                bc = arg_ctx.create_bytecode()
-                kw_defaults.append(bc)
+                kw_defaults.append(None)
         # The names in the same order: those with defaults, then the rest.
         for arg in kwargs:
             assert isinstance(arg, Argument)
@@ -479,6 +472,34 @@ class AbstractCallable(Node):
         if block_arg is not None:
             code_ctx.symtable.get_cell_num(block_arg)
         self.post_process_ctx(ctx, code_ctx)
+        # The default values, computed in this code (not in code objects of
+        # their own, which ran in a second portal call on the same frame and
+        # left the JIT's virtualizable token set): each is skipped when its
+        # argument was passed. Frame.handle_args counts the passed ones.
+        opt_index = 0
+        for arg in args:
+            assert isinstance(arg, Argument)
+            if arg.defl is not None:
+                skip = code_ctx.new_block()
+                code_ctx.emit_jump(consts.JUMP_IF_OPTARG_GIVEN, skip, opt_index)
+                arg.defl.compile(code_ctx)
+                code_ctx.emit(consts.STORE_DEREF, code_ctx.symtable.get_cell_num(arg.name))
+                code_ctx.emit(consts.DISCARD_TOP)
+                code_ctx.use_next_block(skip)
+                opt_index += 1
+        kw_index = 0
+        for arg in kwargs:
+            assert isinstance(arg, Argument)
+            if arg.defl is not None:
+                if kw_index >= 62:
+                    raise CompilerError("too many keyword arguments with defaults")
+                skip = code_ctx.new_block()
+                code_ctx.emit_jump(consts.JUMP_IF_KWARG_GIVEN, skip, kw_index)
+                arg.defl.compile(code_ctx)
+                code_ctx.emit(consts.STORE_DEREF, code_ctx.symtable.get_cell_num(arg.name))
+                code_ctx.emit(consts.DISCARD_TOP)
+                code_ctx.use_next_block(skip)
+                kw_index += 1
         if isinstance(code_ctx.symtable, BlockSymbolTable):
             # `redo` in a block runs its body again.
             redo_block = code_ctx.new_block()

@@ -84,6 +84,10 @@ BYTECODES = [
     ("JUMP", 1, 0),
     ("JUMP_IF_TRUE", 1, -1),
     ("JUMP_IF_FALSE", 1, -1),
+    # Default-value prologue: jump when the optional positional (or
+    # keyword) argument with this index was passed.
+    ("JUMP_IF_OPTARG_GIVEN", 2, 0),
+    ("JUMP_IF_KWARG_GIVEN", 2, 0),
 
     ("DISCARD_TOP", 0, -1),
     ("DUP_TOP", 0, +1),

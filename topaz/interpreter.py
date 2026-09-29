@@ -809,6 +809,16 @@ class Interpreter(object):
         else:
             return pc
 
+    def JUMP_IF_OPTARG_GIVEN(self, space, bytecode, frame, pc, target_pc, idx):
+        if idx < frame.optargs_given:
+            return target_pc
+        return pc
+
+    def JUMP_IF_KWARG_GIVEN(self, space, bytecode, frame, pc, target_pc, idx):
+        if frame.kwargs_given & (1 << idx):
+            return target_pc
+        return pc
+
     def JUMP_IF_FALSE(self, space, bytecode, frame, pc, target_pc):
         if space.is_true(frame.pop()):
             return pc

@@ -18,7 +18,7 @@ class Frame(BaseFrame):
     _virtualizable_ = [
         "bytecode", "localsstack_w[*]", "stackpos", "w_self", "block",
         "cells[*]", "lastblock", "lexical_scope", "last_instr",
-        "parent_interp", "top_parent_interp",
+        "parent_interp", "top_parent_interp", "optargs_given", "kwargs_given",
     ]
 
     @jit.unroll_safe
@@ -31,6 +31,11 @@ class Frame(BaseFrame):
             len(bytecode.cellvars) + bytecode.max_stackdepth)
         self.stackpos = len(bytecode.cellvars)
         self.last_instr = 0
+        # How many optional positional arguments were passed, and a bit
+        # per keyword argument with a default that was: the code's
+        # prologue computes the defaults of the others.
+        self.optargs_given = 0
+        self.kwargs_given = 0
         self.cells = ([LocalCell() for _ in bytecode.cellvars] +
                       [None] * len(bytecode.freevars))
         self.regexp_match_cell = regexp_match_cell
@@ -90,7 +95,6 @@ class Frame(BaseFrame):
 
     @jit.unroll_safe
     def handle_args(self, space, bytecode, args_w, block):
-        from topaz.interpreter import Interpreter
 
         keywords_hash = None
         if args_w:
@@ -173,12 +177,8 @@ class Frame(BaseFrame):
         #                         pre            post
 
         given_defaults = pre - len_pre_args
-        # fill up remaining default arguments with their default values
-        for i in xrange(given_defaults, len(bytecode.defaults)):
-            bc = bytecode.defaults[i]
-            self.bytecode = bc
-            w_value = Interpreter().run(space, self, bc)
-            self._set_arg(space, bytecode.arg_pos[len_pre_args + i], w_value)
+        # The code's prologue computes the rest.
+        self.optargs_given = given_defaults if given_defaults > 0 else 0
 
         if bytecode.splat_arg_pos != -1:
             if pre >= post:
@@ -199,27 +199,28 @@ class Frame(BaseFrame):
                     pass
             # kword arguments with defaults come first, so if we get an
             # index error here, we're missing a required keyword argument
-            if w_value is None:
-                try:
-                    bc = bytecode.kw_defaults[i]
-                except IndexError:
-                    missing = []
-                    for j in range(i, len(bytecode.kwarg_names)):
-                        present = False
-                        if keywords_hash is not None:
-                            try:
-                                keywords_hash.getitem(space.newsymbol(bytecode.kwarg_names[j]))
-                                present = True
-                            except KeyError:
-                                pass
-                        if not present:
-                            missing.append(":" + bytecode.kwarg_names[j])
-                    raise space.error(
-                        space.w_ArgumentError,
-                        "%s: %s" % ("missing keyword" if len(missing) == 1 else "missing keywords",
-                                    ", ".join(missing)))
-                self.bytecode = bc
-                w_value = Interpreter().run(space, self, bc)
+            if w_value is not None:
+                if i < len(bytecode.kw_defaults):
+                    self.kwargs_given |= 1 << i
+            elif i < len(bytecode.kw_defaults):
+                # The code's prologue computes the default.
+                continue
+            else:
+                missing = []
+                for j in range(i, len(bytecode.kwarg_names)):
+                    present = False
+                    if keywords_hash is not None:
+                        try:
+                            keywords_hash.getitem(space.newsymbol(bytecode.kwarg_names[j]))
+                            present = True
+                        except KeyError:
+                            pass
+                    if not present:
+                        missing.append(":" + bytecode.kwarg_names[j])
+                raise space.error(
+                    space.w_ArgumentError,
+                    "%s: %s" % ("missing keyword" if len(missing) == 1 else "missing keywords",
+                                ", ".join(missing)))
             self._set_arg(space, bytecode.cellvars.index(name), w_value)
 
         self.bytecode = bytecode

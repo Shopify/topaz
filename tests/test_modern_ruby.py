@@ -2825,3 +2825,24 @@ class TestValidUtf8(BaseTopazTest):
         }
         """)
         assert self.unwrap(space, w_res) == [True, True, False, False, False, False, False, True]
+
+
+class TestDefaultsInPrologue(BaseTopazTest):
+    def test_default_values(self, space):
+        w_res = space.execute("""
+        def dpf(a, b = a + 1, c = b * 2, *rest, d, k: a, m: k + 1, req:)
+          [a, b, c, rest, d, k, m, req]
+        end
+        r = [dpf(1, 9, req: 0), dpf(1, 2, 3, 4, 5, 9, k: 7, req: 0), dpf(1, 9, m: 5, req: 0)]
+        pr = proc { |x, y = (x * 10), z: (y)| [x, y, z] }
+        r << pr.call(1) << pr.call(1, z: 3)
+        class DPP; def h(a, b = 2) = [a, b]; end
+        class DPQ < DPP; def h(a, b = 3) = super; end
+        r << DPQ.new.h(1)
+        def dpk(k: 1, j: k) = [k, j]
+        r << dpk << dpk(j: 2)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 2, 4, [], 9, 1, 2, 0], [1, 2, 3, [4, 5], 9, 7, 8, 0], [1, 2, 4, [], 9, 1, 5, 0],
+            [1, 10, 10], [1, 10, 3], [1, 3], [1, 1], [1, 2]]
