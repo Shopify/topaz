@@ -153,7 +153,7 @@ class StringIO
   alias tell pos
 
   def pos=(pos)
-    raise Errno::EINVAL, "Invalid argument" if pos < 0
+    raise Errno::EINVAL if pos < 0
     @pos = pos
   end
 
@@ -162,10 +162,10 @@ class StringIO
     when IO::SEEK_SET, :SET then base = 0
     when IO::SEEK_CUR, :CUR then base = @pos
     when IO::SEEK_END, :END then base = @string.bytesize
-    else raise Errno::EINVAL, "Invalid argument - invalid whence"
+    else raise Errno::EINVAL, "invalid whence"
     end
     new_pos = base + offset
-    raise Errno::EINVAL, "Invalid argument" if new_pos < 0
+    raise Errno::EINVAL if new_pos < 0
     @pos = new_pos
     0
   end
@@ -462,7 +462,7 @@ class StringIO
       end
     end
     if @writable && @string.frozen?
-      raise Errno::EACCES, "Permission denied"
+      raise Errno::EACCES
     end
   end
 

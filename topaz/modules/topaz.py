@@ -1,10 +1,11 @@
 from __future__ import absolute_import
+import os
 import sys
 
 from rpython.rlib.rarithmetic import intmask
 from rpython.rlib.rtermios import tcsetattr, tcgetattr, all_constants
 
-from topaz.error import error_for_oserror
+from topaz.error import error_for_oserror, ERRNO_LIST
 from topaz.module import ModuleDef
 from topaz.objects.classobject import W_ClassObject
 from topaz.objects.symbolobject import is_label_symbol
@@ -20,6 +21,11 @@ class Topaz(object):
         space.set_const(w_mod, "TermIOConstants", w_termioconsts)
         for name, value in all_constants.iteritems():
             space.set_const(w_termioconsts, name, space.newint(value))
+        space.set_const(w_mod, "ERRNO_LIST", space.newarray([
+            space.newarray([space.newsymbol(name), space.newint(code),
+                            space.newstr_fromstr(os.strerror(code))])
+            for name, code in ERRNO_LIST
+        ]))
 
     @moduledef.function("label_symbol?", symbol="symbol")
     def method_label_symbolp(self, space, symbol):

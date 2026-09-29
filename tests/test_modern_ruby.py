@@ -2400,3 +2400,22 @@ class TestBlockArgsDoNotMutate(BaseTopazTest):
         return [a, b, c, [[1, 2, 3]].select { |x, y| true }]
         """)
         assert self.unwrap(space, w_res) == [[1, 2, 3], [4, 5, 6], [7], [[1, 2, 3]]]
+
+
+class TestErrnoClasses(BaseTopazTest):
+    def test_errno_classes(self, space):
+        w_res = space.execute("""
+        r = [Errno::ENOENT.new.message, Errno::ENOENT.new("x").message,
+             Errno::ENOENT.new.errno, Errno::EMFILE::Errno > 0,
+             Errno::EAGAIN.equal?(Errno::EWOULDBLOCK), Errno::ENOENT.name,
+             Errno::ENOENT.superclass == SystemCallError]
+        begin
+          File.read("/nonexistent-file")
+        rescue SystemCallError => e
+          r << e.class.name << e.errno << e.message
+        end
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            "No such file or directory", "No such file or directory - x", 2, True,
+            True, "Errno::ENOENT", True, "Errno::ENOENT", 2, "No such file or directory"]
