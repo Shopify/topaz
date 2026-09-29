@@ -2,6 +2,26 @@ module Topaz
   # Relative paths of loaded files are relative to this directory.
   STARTUP_DIR = Dir.pwd
 
+  FLOAT_DIGITS = /\A[+-]?(?:\d+(?:_\d+)*)?(?:\.(?:\d+(?:_\d+)*)?)?(?:[eE][+-]?\d+(?:_\d+)*)?\z/
+  HEX_FLOAT = /\A([+-]?)0[xX](\h+(?:_\h+)*)?(?:\.(\h*))?(?:[pP]([+-]?\d+))?\z/
+
+  # Kernel#Float's strict parse of a String.
+  def self.strict_float(str)
+    raise ::ArgumentError, "string for Float contains null byte" if str.include?("\0")
+    s = str.strip
+    if (m = HEX_FLOAT.match(s)) && (m[2] || m[3])
+      int_digits = (m[2] || "").delete("_")
+      frac_digits = m[3] || ""
+      mantissa = (int_digits + frac_digits).to_i(16).to_f
+      value = mantissa * (2.0 ** ((m[4] || "0").to_i - 4 * frac_digits.length))
+      return m[1] == "-" ? -value : value
+    end
+    if FLOAT_DIGITS.match?(s) && s =~ /\d/ && !s.match?(/\A[+-]?\.?[eE]/)
+      return Kernel.__topaz_Float(s.delete("_"))
+    end
+    raise ::ArgumentError, "invalid value for Float(): #{str.inspect}"
+  end
+
   # Kernel#Integer's strict parse of a String: surrounding whitespace, a
   # sign, a base prefix and single underscores between digits; nil when
   # the string is not an integer.

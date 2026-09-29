@@ -450,7 +450,9 @@ class Kernel(object):
     def method_initialize_copy(self, space, w_other):
         return self
 
-    @moduledef.function("Float")
+    # Kernel#Float in lib-topaz/kernel.rb checks strings and takes
+    # exception:; this converts.
+    @moduledef.function("__topaz_Float")
     def method_Float(self, space, w_arg):
         if w_arg is space.w_nil:
             raise space.error(space.w_TypeError, "can't convert nil into Float")

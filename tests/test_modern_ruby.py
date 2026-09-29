@@ -2556,3 +2556,17 @@ class TestDateCoercedComparison(BaseTopazTest):
         return [d <=> Wrap.new(3600), d <=> Object.new, Date.new(2020, 1, 2) <=> Wrap.new(Date.new(2020, 1, 1))]
         """)
         assert self.unwrap(space, w_res) == [1, None, 1]
+
+
+class TestStrictFloat(BaseTopazTest):
+    def test_kernel_float_parses_strictly(self, space):
+        w_res = space.execute("""
+        r = ["1.5", " 1.5\\n", "1e3", "0x1A", "0x1.8p1", "1_000.5", ".5", "1.", "inf", "", "1__0", "1.5x", "1e"].map do |s|
+          begin; Float(s); rescue ArgumentError; :err; end
+        end
+        r << Float("x", exception: false) << Float(nil, exception: false) << Float(3)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            1.5, 1.5, 1000.0, 26.0, 3.0, 1000.5, 0.5, 1.0, "err", "err", "err", "err", "err",
+            None, None, 3.0]

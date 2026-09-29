@@ -76,6 +76,21 @@ module Kernel
   module_function :Integer
   private :Integer
 
+  def Float(arg, exception: true)
+    unless exception
+      begin
+        return Float(arg)
+      rescue ::ArgumentError, ::TypeError, ::RangeError
+        return nil
+      end
+    end
+    return Topaz.strict_float(arg) if arg.kind_of?(String)
+    __topaz_Float(arg)
+  end
+
+  module_function :Float
+  private :Float
+
   def loop(&block)
     return enum_for(:loop) unless block
     begin
