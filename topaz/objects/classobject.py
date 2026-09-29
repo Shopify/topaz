@@ -135,7 +135,7 @@ class W_ClassObject(W_ModuleObject):
         return ary
 
     def inherited(self, space, w_mod):
-        self.descendants.append(w_mod)
+        self.add_descendant(w_mod)
         if not space.bootstrap and space.respond_to(self, "inherited"):
             space.send(self, "inherited", [w_mod])
 
@@ -225,7 +225,7 @@ class W_ClassObject(W_ModuleObject):
     @classdef.method("subclasses")
     def method_subclasses(self, space):
         subclasses_w = []
-        for w_mod in self.descendants:
+        for w_mod in self.descendants_w():
             if (isinstance(w_mod, W_ClassObject) and w_mod.superclass is self and
                     not w_mod.is_singleton and w_mod not in subclasses_w):
                 subclasses_w.append(w_mod)

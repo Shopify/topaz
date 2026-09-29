@@ -1,4 +1,5 @@
 import copy
+import weakref
 
 from rpython.rlib import jit
 from rpython.rlib.objectmodel import specialize
@@ -152,7 +153,11 @@ class W_ModuleObject(W_RootObject):
         self.included_modules = []
         # Modules prepended here, in lookup order (the latest first).
         self.prepended_modules = []
+        # Weak references to the classes and modules that include, extend
+        # or inherit from this one: singleton and anonymous classes made per
+        # object must not live as long as this module.
         self.descendants = []
+        self.descendants_prune_at = 16
 
     def __deepcopy__(self, memo):
         obj = super(W_ModuleObject, self).__deepcopy__(memo)
@@ -166,8 +171,29 @@ class W_ModuleObject(W_RootObject):
         obj.flags = copy.deepcopy(self.flags, memo)
         obj.included_modules = copy.deepcopy(self.included_modules, memo)
         obj.prepended_modules = copy.deepcopy(self.prepended_modules, memo)
-        obj.descendants = copy.deepcopy(self.descendants, memo)
+        obj.descendants = [weakref.ref(copy.deepcopy(w_mod, memo))
+                           for w_mod in self.descendants_w()]
+        obj.descendants_prune_at = self.descendants_prune_at
         return obj
+
+    def add_descendant(self, w_mod):
+        assert w_mod is not None
+        self.descendants.append(weakref.ref(w_mod))
+        if len(self.descendants) >= self.descendants_prune_at:
+            live = len(self.descendants_w())
+            self.descendants_prune_at = max(16, 2 * live)
+
+    def descendants_w(self):
+        """The live descendants (and forget the collected ones)."""
+        result = []
+        refs = []
+        for ref in self.descendants:
+            w_mod = ref()
+            if w_mod is not None:
+                result.append(w_mod)
+                refs.append(ref)
+        self.descendants = refs
+        return result
 
     def getclass(self, space):
         if self.klass is not None:
@@ -379,7 +405,7 @@ class W_ModuleObject(W_RootObject):
             if w_res is not None or module is self:
                 module.class_variables.set(space, name, w_obj)
                 if module is self:
-                    for descendant in self.descendants:
+                    for descendant in self.descendants_w():
                         descendant.remove_class_var(space, name)
 
     @jit.unroll_safe
@@ -398,7 +424,7 @@ class W_ModuleObject(W_RootObject):
     @jit.unroll_safe
     def remove_class_var(self, space, name):
         self.class_variables.delete(name)
-        for descendant in self.descendants:
+        for descendant in self.descendants_w():
             descendant.remove_class_var(space, name)
 
     def set_instance_var(self, space, name, w_value):
@@ -474,16 +500,16 @@ class W_ModuleObject(W_RootObject):
         if w_mod not in self.prepended_modules:
             self.prepended_modules = [w_mod] + self.prepended_modules
             self.mutated()
-            w_mod.descendants.append(self)
+            w_mod.add_descendant(self)
 
     def included(self, space, w_mod):
-        self.descendants.append(w_mod)
+        self.add_descendant(w_mod)
         if space.respond_to(self, "included"):
             space.send(self, "included", [w_mod])
 
     def extend_object(self, space, w_mod):
         if self not in w_mod.ancestors():
-            self.descendants.append(w_mod)
+            self.add_descendant(w_mod)
             w_mod.included_modules = w_mod._modules_to_include(self) + w_mod.included_modules
             w_mod.mutated()
 

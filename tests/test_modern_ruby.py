@@ -2683,3 +2683,18 @@ class TestStringReplaceBypassesOverrides(BaseTopazTest):
         return [y.class.name, y, y.html_safe?]
         """)
         assert self.unwrap(space, w_res) == ["Safe", "<a>", True]
+
+
+class TestWeakDescendants(BaseTopazTest):
+    def test_collected_subclasses_are_forgotten(self, space):
+        w_res = space.execute("""
+        class WK; end
+        2000.times { Class.new(WK) }
+        keep = Class.new(WK)
+        GC.start
+        class WP; @@v = 1; end
+        class WQ < WP; end
+        WQ.class_variable_set(:@@v, 2)
+        return [WK.subclasses.size < 2001, WK.subclasses.include?(keep), WP.class_variable_get(:@@v)]
+        """)
+        assert self.unwrap(space, w_res) == [True, True, 2]
