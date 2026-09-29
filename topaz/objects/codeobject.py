@@ -23,7 +23,7 @@ class W_CodeObject(W_BaseObject):
     _immutable_fields_ = [
         "code", "consts_w[*]", "max_stackdepth", "cellvars[*]", "freevars[*]",
         "arg_pos[*]", "defaults[*]", "block_arg_pos", "splat_arg_pos",
-        "kwarg_names[*]", "kwrest_pos", "kw_defaults[*]", "default_arg_begin",
+        "kwarg_names[*]", "kwrest_pos", "num_kw_defaults", "default_arg_begin", "num_defaults",
         "filepath", "lineno", "default_entry_pcs[*]",
     ]
 
@@ -40,13 +40,15 @@ class W_CodeObject(W_BaseObject):
         self.code = code
         self.max_stackdepth = max_stackdepth
         self.consts_w = consts
-        self.defaults = defaults
+        # How many optional positional and keyword arguments have defaults
+        # (computed in the code's prologue).
+        self.num_defaults = len(defaults)
         # A fixed-size copy: the field is immutable, the list given grew.
         kwarg_names = [""] * len(kwargs)
         for i in range(len(kwargs)):
             kwarg_names[i] = kwargs[i]
         self.kwarg_names = kwarg_names
-        self.kw_defaults = kw_defaults
+        self.num_kw_defaults = len(kw_defaults)
         self.cellvars = cellvars
         self.freevars = freevars
         self.lineno_table = lineno_table
@@ -105,7 +107,7 @@ class W_CodeObject(W_BaseObject):
         obj.interp_instrs = 0
         obj.interp_entries = 0
         obj.consts_w = copy.deepcopy(self.consts_w, memo)
-        obj.defaults = copy.deepcopy(self.defaults, memo)
+        obj.num_defaults = self.num_defaults
         obj.cellvars = self.cellvars
         obj.freevars = self.freevars
         obj.lineno_table = self.lineno_table
@@ -113,7 +115,7 @@ class W_CodeObject(W_BaseObject):
         obj.block_arg_pos = self.block_arg_pos
         obj.splat_arg_pos = self.splat_arg_pos
         obj.default_arg_begin = self.default_arg_begin
-        obj.kw_defaults = copy.deepcopy(self.kw_defaults, memo)
+        obj.num_kw_defaults = self.num_kw_defaults
         obj.kwrest_pos = self.kwrest_pos
         obj.kwarg_names = self.kwarg_names
         obj.ruby2_keywords = self.ruby2_keywords
@@ -132,7 +134,7 @@ class W_CodeObject(W_BaseObject):
                     break
         for i in range(len(self.arg_pos)):
             name = self.cellvars[self.arg_pos[i]]
-            if first_default != -1 and first_default <= i < first_default + len(self.defaults):
+            if first_default != -1 and first_default <= i < first_default + self.num_defaults:
                 kind = "opt"
             else:
                 kind = "req" if is_lambda else "opt"
@@ -140,7 +142,7 @@ class W_CodeObject(W_BaseObject):
         if self.splat_arg_pos != -1:
             params_w.append(self._parameter(space, "rest", self.cellvars[self.splat_arg_pos]))
         for i in range(len(self.kwarg_names)):
-            kind = "key" if i < len(self.kw_defaults) else "keyreq"
+            kind = "key" if i < self.num_kw_defaults else "keyreq"
             params_w.append(self._parameter(space, kind, self.kwarg_names[i]))
         if self.kwrest_pos != -1:
             params_w.append(self._parameter(space, "keyrest", self.cellvars[self.kwrest_pos]))
@@ -156,8 +158,8 @@ class W_CodeObject(W_BaseObject):
         return space.newarray(items_w)
 
     def arity(self, negative_defaults=False):
-        args_count = len(self.arg_pos) - len(self.defaults)
-        if self.splat_arg_pos != -1 or (negative_defaults and len(self.defaults) > 0):
+        args_count = len(self.arg_pos) - self.num_defaults
+        if self.splat_arg_pos != -1 or (negative_defaults and self.num_defaults > 0):
             args_count = -(args_count + 1)
         return args_count
 

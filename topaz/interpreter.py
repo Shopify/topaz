@@ -43,7 +43,7 @@ def promote_unless_virtual(obj):
     return jit.promote(obj)
 
 
-def _get_vmprof_code(self, space, frame, bytecode):
+def _get_vmprof_code(self, space, frame, bytecode, pc):
     return bytecode
 
 
@@ -68,10 +68,7 @@ class Interpreter(object):
     # which requires the interpreter to declare its code-executing function.
     # This also makes Ruby frames visible to vmprof.
     @rvmprof.vmprof_execute_code("topaz", _get_vmprof_code)
-    def interpret(self, space, frame, bytecode):
-        # Past the defaults of the optional arguments that were passed.
-        pc = frame.entry_pc
-        frame.entry_pc = 0
+    def interpret(self, space, frame, bytecode, pc):
         if not jit.we_are_jitted() and space.interp_profile.enabled:
             if bytecode.interp_entries == 0 and bytecode.interp_instrs == 0:
                 space.interp_profile.codes_w.append(bytecode)
@@ -99,7 +96,9 @@ class Interpreter(object):
         finished after a break left an inlined call, and a later break
         from the same method raised "break from proc-closure"."""
         try:
-            return self.interpret(space, frame, bytecode)
+            # Past the defaults of the optional arguments that were passed:
+            # the pc is an argument of the portal, so a green.
+            return self.interpret(space, frame, bytecode, frame.entry_pc)
         finally:
             self.finished = True
 

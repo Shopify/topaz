@@ -84,7 +84,7 @@ class Frame(BaseFrame):
                 # A copy: the padding and trimming below must not change
                 # the array.
                 args_w = space.listview(w_arg)[:]
-        minargc = len(bytecode.arg_pos) - len(bytecode.defaults)
+        minargc = len(bytecode.arg_pos) - bytecode.num_defaults
         if len(args_w) < minargc:
             args_w.extend([space.w_nil] * (minargc - len(args_w)))
         if bytecode.splat_arg_pos == -1:
@@ -116,11 +116,11 @@ class Frame(BaseFrame):
                     # positional hash.
                     w_last.is_keywords = False
 
-        if (len(bytecode.kw_defaults) < len(bytecode.kwarg_names) and
+        if (bytecode.num_kw_defaults < len(bytecode.kwarg_names) and
                 not keywords_hash):
             # The keywords without defaults come last.
             missing = []
-            for j in range(len(bytecode.kw_defaults), len(bytecode.kwarg_names)):
+            for j in range(bytecode.num_kw_defaults, len(bytecode.kwarg_names)):
                 missing.append(":" + bytecode.kwarg_names[j])
             raise space.error(
                 space.w_ArgumentError,
@@ -130,13 +130,13 @@ class Frame(BaseFrame):
         pre = 0
         post = len(args_w)
 
-        if (post < (len(bytecode.arg_pos) - len(bytecode.defaults)) or
+        if (post < (len(bytecode.arg_pos) - bytecode.num_defaults) or
                 (bytecode.splat_arg_pos == -1 and
                     post > len(bytecode.arg_pos))):
-            required = len(bytecode.arg_pos) - len(bytecode.defaults)
+            required = len(bytecode.arg_pos) - bytecode.num_defaults
             if bytecode.splat_arg_pos != -1:
                 expected = "%d+" % required
-            elif bytecode.defaults:
+            elif bytecode.num_defaults > 0:
                 expected = "%d..%d" % (required, len(bytecode.arg_pos))
             else:
                 expected = "%d" % required
@@ -151,7 +151,7 @@ class Frame(BaseFrame):
             len_pre_args = bytecode.splat_arg_pos
         else:
             len_pre_args = len(bytecode.arg_pos)
-        len_post_arg = (len(bytecode.arg_pos) - len(bytecode.defaults) -
+        len_post_arg = (len(bytecode.arg_pos) - bytecode.num_defaults -
                         len_pre_args)
 
         # [required args, optional args, splat arg, required args, keywords args, keyword rest, block]
@@ -170,7 +170,7 @@ class Frame(BaseFrame):
 
         # fill arguments from start as far as we can (until we hit post or the
         # end of the default arguments + normal arguments
-        for i in xrange(min(post, len_pre_args + len(bytecode.defaults))):
+        for i in xrange(min(post, len_pre_args + bytecode.num_defaults)):
             self._set_arg(space, bytecode.arg_pos[i], args_w[i])
             pre += 1
         # [required args, optional args, splat arg, required args, keywords args, keyword rest, block]
@@ -179,7 +179,7 @@ class Frame(BaseFrame):
 
         given_defaults = pre - len_pre_args
         # The code's prologue computes the rest.
-        if len(bytecode.defaults) > 0:
+        if bytecode.num_defaults > 0:
             if given_defaults < 0:
                 given_defaults = 0
             self.entry_pc = bytecode.default_entry_pcs[given_defaults]
@@ -204,9 +204,9 @@ class Frame(BaseFrame):
             # kword arguments with defaults come first, so if we get an
             # index error here, we're missing a required keyword argument
             if w_value is not None:
-                if i < len(bytecode.kw_defaults):
+                if i < bytecode.num_kw_defaults:
                     self.kwargs_given |= 1 << i
-            elif i < len(bytecode.kw_defaults):
+            elif i < bytecode.num_kw_defaults:
                 # The code's prologue computes the default.
                 continue
             else:
