@@ -2473,3 +2473,16 @@ class TestShuffleRandom(BaseTopazTest):
         return [a.shuffle(random: Random.new(3)) == b, b.sort == a]
         """)
         assert self.unwrap(space, w_res) == [True, True]
+
+
+class TestModernSet(BaseTopazTest):
+    def test_newer_set_methods(self, space):
+        w_res = space.execute("""
+        require "set"
+        s = Set[[1]]
+        t = Set[[1]].compare_by_identity
+        return [s.include?([1]), t.include?([1]), t.compare_by_identity?, Set[1] <=> Set[2],
+                Set[1] <=> Set[1, 2], Set[1] < Set[1, 2], Set[1, 2].intersect?([2, 3]),
+                Set[1].disjoint?(Set[2]), Set[1, 2].join("-"), Set[3] === 3]
+        """)
+        assert self.unwrap(space, w_res) == [True, False, True, None, -1, True, True, True, "1-2", True]

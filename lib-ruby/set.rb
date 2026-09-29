@@ -624,3 +624,53 @@ module Enumerable
     klass.new(self, *args, &block)
   end
 end
+
+# Methods newer Rubies' Set has.
+class Set
+  alias <= subset?
+  alias < proper_subset?
+  alias >= superset?
+  alias > proper_superset?
+  alias === include?
+  alias filter! select!
+
+  def <=>(set)
+    return nil unless set.is_a?(Set)
+    return 0 if self == set
+    return -1 if proper_subset?(set)
+    return 1 if proper_superset?(set)
+    nil
+  end
+
+  def compare_by_identity
+    @hash.compare_by_identity
+    self
+  end
+
+  def compare_by_identity?
+    @hash.compare_by_identity?
+  end
+
+  def intersect?(set)
+    set = Set.new(set) unless set.is_a?(Set)
+    size < set.size ? any? { |o| set.include?(o) } : set.any? { |o| include?(o) }
+  end
+
+  def disjoint?(set)
+    !intersect?(set)
+  end
+
+  def join(separator = nil)
+    to_a.join(separator)
+  end
+
+  def reset
+    @hash.rehash
+    self
+  end
+
+  def to_set(klass = Set, *args, &block)
+    return self if instance_of?(Set) && klass == Set && block.nil? && args.empty?
+    klass.new(self, *args, &block)
+  end
+end
