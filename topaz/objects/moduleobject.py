@@ -267,11 +267,16 @@ class W_ModuleObject(W_RootObject):
 
     @jit.unroll_safe
     def find_method(self, space, name):
-        if jit.we_are_jitted():
+        if jit.we_are_jitted() and jit.isconstant(self) and jit.isconstant(name):
             # Traces fold the lookup through the modules' version tags.
             return self.find_method_uncached(space, name)
-        # The interpreter remembers lookups (misses too) until any module
-        # changes.
+        # Otherwise (the interpreter, the blackhole interpreter, or a trace
+        # that does not know the class) the cached lookup.
+        return self._find_method_cached(space, name)
+
+    @jit.dont_look_inside
+    def _find_method_cached(self, space, name):
+        # Lookups (misses too) are remembered until any module changes.
         state = method_cache_state.state
         if self.method_cache_state != state:
             self.method_cache = {}
