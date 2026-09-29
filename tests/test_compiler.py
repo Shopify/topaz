@@ -1115,11 +1115,9 @@ class TestCompiler(object):
         """)
 
         self.assert_compiled(bc.consts_w[1], """
-        JUMP_IF_OPTARG_GIVEN 12 0
         LOAD_CONST 0
         STORE_DEREF 1
         DISCARD_TOP
-        JUMP_IF_OPTARG_GIVEN 24 1
         LOAD_DEREF 1
         STORE_DEREF 2
         DISCARD_TOP
@@ -1129,6 +1127,8 @@ class TestCompiler(object):
         BUILD_ARRAY 3
         RETURN
         """)
+
+        assert bc.consts_w[1].default_entry_pcs == [0, 7, 14]
 
     def test_exceptions(self, space):
         self.assert_compiles(space, """

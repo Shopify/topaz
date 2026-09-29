@@ -476,17 +476,23 @@ class AbstractCallable(Node):
         # their own, which ran in a second portal call on the same frame and
         # left the JIT's virtualizable token set): each is skipped when its
         # argument was passed. Frame.handle_args counts the passed ones.
-        opt_index = 0
-        for arg in args:
-            assert isinstance(arg, Argument)
-            if arg.defl is not None:
-                skip = code_ctx.new_block()
-                code_ctx.emit_jump(consts.JUMP_IF_OPTARG_GIVEN, skip, opt_index)
-                arg.defl.compile(code_ctx)
-                code_ctx.emit(consts.STORE_DEREF, code_ctx.symtable.get_cell_num(arg.name))
-                code_ctx.emit(consts.DISCARD_TOP)
-                code_ctx.use_next_block(skip)
-                opt_index += 1
+        # The optional positional arguments' defaults are a chain the call
+        # enters at the first one not passed: its start depends only on how
+        # many were passed, which the caller's trace knows, so it is a green
+        # pc rather than a guard.
+        if first_default_arg is not None:
+            for arg in args:
+                assert isinstance(arg, Argument)
+                if arg.defl is not None:
+                    entry = code_ctx.new_block()
+                    code_ctx.use_next_block(entry)
+                    code_ctx.default_entry_blocks.append(entry)
+                    arg.defl.compile(code_ctx)
+                    code_ctx.emit(consts.STORE_DEREF, code_ctx.symtable.get_cell_num(arg.name))
+                    code_ctx.emit(consts.DISCARD_TOP)
+            after = code_ctx.new_block()
+            code_ctx.use_next_block(after)
+            code_ctx.default_entry_blocks.append(after)
         kw_index = 0
         for arg in kwargs:
             assert isinstance(arg, Argument)

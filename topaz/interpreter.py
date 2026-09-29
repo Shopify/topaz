@@ -69,7 +69,9 @@ class Interpreter(object):
     # This also makes Ruby frames visible to vmprof.
     @rvmprof.vmprof_execute_code("topaz", _get_vmprof_code)
     def interpret(self, space, frame, bytecode):
-        pc = 0
+        # Past the defaults of the optional arguments that were passed.
+        pc = frame.entry_pc
+        frame.entry_pc = 0
         if not jit.we_are_jitted() and space.interp_profile.enabled:
             if bytecode.interp_entries == 0 and bytecode.interp_instrs == 0:
                 space.interp_profile.codes_w.append(bytecode)
@@ -808,11 +810,6 @@ class Interpreter(object):
             return self.jump(space, bytecode, frame, pc, target_pc)
         else:
             return pc
-
-    def JUMP_IF_OPTARG_GIVEN(self, space, bytecode, frame, pc, target_pc, idx):
-        if idx < frame.optargs_given:
-            return target_pc
-        return pc
 
     def JUMP_IF_KWARG_GIVEN(self, space, bytecode, frame, pc, target_pc, idx):
         if frame.kwargs_given & (1 << idx):

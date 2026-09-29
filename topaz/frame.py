@@ -18,7 +18,7 @@ class Frame(BaseFrame):
     _virtualizable_ = [
         "bytecode", "localsstack_w[*]", "stackpos", "w_self", "block",
         "cells[*]", "lastblock", "lexical_scope", "last_instr",
-        "parent_interp", "top_parent_interp", "optargs_given", "kwargs_given",
+        "parent_interp", "top_parent_interp", "kwargs_given",
     ]
 
     @jit.unroll_safe
@@ -31,10 +31,11 @@ class Frame(BaseFrame):
             len(bytecode.cellvars) + bytecode.max_stackdepth)
         self.stackpos = len(bytecode.cellvars)
         self.last_instr = 0
-        # How many optional positional arguments were passed, and a bit
-        # per keyword argument with a default that was: the code's
-        # prologue computes the defaults of the others.
-        self.optargs_given = 0
+        # Where the code starts: past the defaults of the optional
+        # positional arguments that were passed. And a bit per keyword
+        # argument with a default that was: the code's prologue computes
+        # the others' defaults.
+        self.entry_pc = 0
         self.kwargs_given = 0
         self.cells = ([LocalCell() for _ in bytecode.cellvars] +
                       [None] * len(bytecode.freevars))
@@ -178,7 +179,10 @@ class Frame(BaseFrame):
 
         given_defaults = pre - len_pre_args
         # The code's prologue computes the rest.
-        self.optargs_given = given_defaults if given_defaults > 0 else 0
+        if len(bytecode.defaults) > 0:
+            if given_defaults < 0:
+                given_defaults = 0
+            self.entry_pc = bytecode.default_entry_pcs[given_defaults]
 
         if bytecode.splat_arg_pos != -1:
             if pre >= post:

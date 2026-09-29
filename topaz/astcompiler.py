@@ -110,6 +110,9 @@ class CompilerContext(object):
         # Hidden locals holding the value of $! from before each rescue
         # clause being compiled, outermost first (see TryExcept).
         self.errinfo_stack = []
+        # The prologue blocks computing each optional argument's default,
+        # then the block after them (see AbstractCallable.compile_bytecode).
+        self.default_entry_blocks = []
 
     def create_bytecode(self, lineno=-1, args=None, defaults=None,
                         first_default_arg=None, splat_arg=None, kwargs=None,
@@ -147,6 +150,8 @@ class CompilerContext(object):
         blocks = self.first_block.post_order()
         code, lineno_table = self.get_code_lineno_table(blocks)
         depth = self.count_stackdepth(blocks)
+        # Where to start when k optional positional arguments were passed.
+        default_entry_pcs = [self.block_offsets[b] for b in self.default_entry_blocks]
         return W_CodeObject(
             self.code_name,
             self.filepath,
@@ -165,6 +170,7 @@ class CompilerContext(object):
             cellvars,
             freevars,
             lineno_table,
+            default_entry_pcs,
         )
 
     def get_code_lineno_table(self, blocks):
@@ -178,6 +184,7 @@ class CompilerContext(object):
             code_size += len(code)
         for block in blocks:
             block.patch_locs(offsets)
+        self.block_offsets = offsets
 
         code = []
         linenos = []

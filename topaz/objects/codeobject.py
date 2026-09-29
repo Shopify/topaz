@@ -24,7 +24,7 @@ class W_CodeObject(W_BaseObject):
         "code", "consts_w[*]", "max_stackdepth", "cellvars[*]", "freevars[*]",
         "arg_pos[*]", "defaults[*]", "block_arg_pos", "splat_arg_pos",
         "kwarg_names[*]", "kwrest_pos", "kw_defaults[*]", "default_arg_begin",
-        "filepath", "lineno",
+        "filepath", "lineno", "default_entry_pcs[*]",
     ]
 
     classdef = ClassDef("Code", W_BaseObject.classdef)
@@ -32,7 +32,7 @@ class W_CodeObject(W_BaseObject):
     def __init__(self, name, filepath, line, code, max_stackdepth, consts, args,
                  splat_arg, kwargs, kwrest_arg, block_arg,
                  defaults, first_default_arg, kw_defaults,
-                 cellvars, freevars, lineno_table):
+                 cellvars, freevars, lineno_table, default_entry_pcs=None):
 
         self.name = name
         self.filepath = filepath
@@ -50,6 +50,13 @@ class W_CodeObject(W_BaseObject):
         self.cellvars = cellvars
         self.freevars = freevars
         self.lineno_table = lineno_table
+        # A fixed-size copy (the field is immutable).
+        if default_entry_pcs is None:
+            default_entry_pcs = []
+        entry_pcs = [0] * len(default_entry_pcs)
+        for i in range(len(default_entry_pcs)):
+            entry_pcs[i] = default_entry_pcs[i]
+        self.default_entry_pcs = entry_pcs
 
         n_args = len(args)
         arg_pos = [-1] * n_args
@@ -94,6 +101,7 @@ class W_CodeObject(W_BaseObject):
         obj.lineno = self.lineno
         obj.code = self.code
         obj.max_stackdepth = self.max_stackdepth
+        obj.default_entry_pcs = self.default_entry_pcs
         obj.interp_instrs = 0
         obj.interp_entries = 0
         obj.consts_w = copy.deepcopy(self.consts_w, memo)
