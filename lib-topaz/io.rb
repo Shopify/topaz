@@ -216,7 +216,12 @@ class IO
     end
 
     res.instance_variable_set("@pid", pid)
-    block ? yield(res) : res
+    return res unless block
+    begin
+      yield res
+    ensure
+      res.close unless res.closed?
+    end
   end
 
   def self.binread(filename, length=nil, offset=0)
@@ -287,14 +292,6 @@ class IO
 
   def internal_encoding
     Encoding.default_internal
-  end
-
-  def autoclose=(value)
-    @__topaz_autoclose = value
-  end
-
-  def autoclose?
-    @__topaz_autoclose != false
   end
 
   def close_on_exec=(value)

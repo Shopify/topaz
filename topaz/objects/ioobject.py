@@ -25,10 +25,13 @@ class W_IOObject(W_Object):
     def __init__(self, space):
         W_Object.__init__(self, space)
         self.fd = -1
+        # Whether closing or collecting this IO closes its descriptor (false
+        # when another IO owns it, as with Tempfile's File.new(fd)).
+        self.autoclose = True
 
     def __del__(self):
         # Do not close standard file streams
-        if self.fd > 3:
+        if self.fd > 3 and self.autoclose:
             # The descriptor may be closed already (another IO for the same
             # descriptor closed it): a destructor must not raise.
             try:
@@ -39,6 +42,7 @@ class W_IOObject(W_Object):
     def __deepcopy__(self, memo):
         obj = super(W_IOObject, self).__deepcopy__(memo)
         obj.fd = self.fd
+        obj.autoclose = self.autoclose
         return obj
 
     def ensure_not_closed(self, space):
@@ -272,9 +276,21 @@ class W_IOObject(W_Object):
         # Closing a closed stream does nothing.
         if self.fd < 0:
             return space.w_nil
-        os.close(self.fd)
+        if self.autoclose:
+            os.close(self.fd)
         self.fd = -1
         return space.w_nil
+
+    @classdef.method("autoclose=")
+    def method_set_autoclose(self, space, w_value):
+        self.ensure_not_closed(space)
+        self.autoclose = space.is_true(w_value)
+        return w_value
+
+    @classdef.method("autoclose?")
+    def method_autoclose(self, space):
+        self.ensure_not_closed(space)
+        return space.newbool(self.autoclose)
 
     @classdef.method("closed?")
     def method_closedp(self, space):

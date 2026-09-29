@@ -2526,3 +2526,19 @@ class TestFileRenameChown(BaseTopazTest):
         return r
         """ % (a, a, a, a, b, b, a, b))
         assert self.unwrap(space, w_res) == [1, 1, 0, 0, False, True]
+
+
+class TestIOAutoclose(BaseTopazTest):
+    def test_autoclose_false_keeps_the_descriptor(self, space):
+        w_res = space.execute("""
+        r, w = IO.pipe
+        w2 = IO.new(w.fileno)
+        a = w2.autoclose?
+        w2.autoclose = false
+        b = w2.autoclose?
+        w2.close
+        w.write("x")
+        w.close
+        return [a, b, w2.closed?, r.read]
+        """)
+        assert self.unwrap(space, w_res) == [True, False, True, "x"]
