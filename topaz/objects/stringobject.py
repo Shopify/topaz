@@ -602,6 +602,18 @@ class W_StringObject(W_Object):
         self.str_storage = w_other.strategy.copy(w_other.str_storage)
         return self
 
+    # In RPython rather than through insert or []=, which subclasses such as
+    # ActiveSupport::SafeBuffer override.
+    @classdef.method("replace")
+    @check_frozen()
+    def method_replace(self, space, w_other):
+        w_other = space.convert_type(w_other, space.w_string, "to_str")
+        assert isinstance(w_other, W_StringObject)
+        if w_other is not self:
+            self.strategy = w_other.strategy
+            self.str_storage = w_other.strategy.copy(w_other.str_storage)
+        return self
+
     @classdef.method("to_str")
     @classdef.method("to_s")
     def method_to_s(self, space):

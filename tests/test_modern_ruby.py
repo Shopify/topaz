@@ -2652,3 +2652,34 @@ class TestStringRangeAssignment(BaseTopazTest):
         return [t, u, v]
         """)
         assert self.unwrap(space, w_res) == ["abc\n", "hXY_lo", "hZello"]
+
+
+class TestStringReplaceBypassesOverrides(BaseTopazTest):
+    def test_replace_does_not_call_subclass_methods(self, space):
+        w_res = space.execute("""
+        class Esc < String
+          def insert(i, s) = super(i, s.gsub("<", "&lt;"))
+          def <<(s) = super(s.gsub("<", "&lt;"))
+        end
+        e = Esc.allocate
+        String.instance_method(:replace).bind_call(e, "<x>")
+        c = +"s"
+        c.replace(c)
+        f = Esc.new("<p>-x")
+        f.delete_prefix!("<p>")
+        return [e, c, f, (begin; "fr".freeze.replace("x"); rescue FrozenError; :frozen; end)]
+        """)
+        assert self.unwrap(space, w_res) == ["<x>", "s", "-x", "frozen"]
+
+    def test_marshal_string_subclass_with_replace(self, space):
+        w_res = space.execute("""
+        class Safe < String
+          def replace(v) = super(v.gsub("<", "&lt;"))
+          def html_safe? = @safe
+        end
+        x = Safe.new("<a>")
+        x.instance_variable_set(:@safe, true)
+        y = Marshal.load(Marshal.dump(x))
+        return [y.class.name, y, y.html_safe?]
+        """)
+        assert self.unwrap(space, w_res) == ["Safe", "<a>", True]

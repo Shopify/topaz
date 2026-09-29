@@ -257,13 +257,6 @@ class String
     self.dup[0] || self.dup
   end
 
-  def replace(other)
-    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    other = Topaz.convert_type(other, String, :to_str)
-    Topaz.infect(self, other)
-    clear
-    insert(0, other)
-  end
 
   def self.try_convert(arg)
     Topaz.try_convert_type(arg, String, :to_str)
@@ -288,7 +281,7 @@ class String
 
   def delete_prefix!(prefix)
     return nil unless start_with?(prefix)
-    replace(self[prefix.size..])
+    __topaz_replace(self[prefix.size..])
   end
 
   def delete_suffix(suffix)
@@ -298,7 +291,7 @@ class String
 
   def delete_suffix!(suffix)
     return nil if suffix.empty? || !end_with?(suffix)
-    replace(self[0, size - suffix.size])
+    __topaz_replace(self[0, size - suffix.size])
   end
 
   # Ruby 2.4
@@ -320,7 +313,7 @@ class String
 
   def squeeze!(*sets)
     squeezed = squeeze(*sets)
-    squeezed == self ? nil : replace(squeezed)
+    squeezed == self ? nil : __topaz_replace(squeezed)
   end
 
   def lines(separator = $/)

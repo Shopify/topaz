@@ -543,11 +543,17 @@ module Marshal
         inner_type = byte
         obj = load_object(inner_type, extends, ivars)
         converted = klass.allocate
+        # The base class's replace: a subclass's own (SafeBuffer's escapes
+        # its argument) must not see the data.
         case obj
-        when String then converted.replace(obj)
-        when Array then converted.replace(obj)
-        when Hash then converted.replace(obj)
+        when String then ::String.instance_method(:replace).bind_call(converted, obj)
+        when Array then ::Array.instance_method(:replace).bind_call(converted, obj)
+        when Hash then ::Hash.instance_method(:replace).bind_call(converted, obj)
         else return obj
+        end
+        # The ivars were read onto the base object.
+        obj.instance_variables.each do |name|
+          converted.instance_variable_set(name, obj.instance_variable_get(name))
         end
         @objects[@objects.index { |o| o.equal?(obj) } || @objects.size] = converted
         converted
