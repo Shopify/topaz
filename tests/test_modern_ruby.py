@@ -2592,3 +2592,20 @@ class TestResolveFeaturePath(BaseTopazTest):
         return [kind, path.end_with?("/set.rb"), $LOAD_PATH.resolve_feature_path("no_such_feature_x")]
         """)
         assert self.unwrap(space, w_res) == ["rb", True, None]
+
+
+class TestFiddle(BaseTopazTest):
+    def test_call_getpid_and_getrusage(self, space):
+        w_res = space.execute("""
+        require "fiddle"
+        require "rbconfig/sizeof"
+        libc = Fiddle.dlopen(nil)
+        getpid = Fiddle::Function.new(libc["getpid"], [], Fiddle::TYPE_INT)
+        getrusage = Fiddle::Function.new(libc["getrusage"], [Fiddle::TYPE_INT, Fiddle::TYPE_VOIDP], Fiddle::TYPE_INT)
+        buffer = "\\0".b * 1024
+        offset = (RbConfig::SIZEOF["time_t"] + Fiddle::SIZEOF_LONG) * 2
+        r = getrusage.call(0, buffer)
+        maxrss = buffer[offset, Fiddle::SIZEOF_LONG].unpack1("q")
+        return [getpid.call == Process.pid, r, maxrss > 0, buffer.encoding.name]
+        """)
+        assert self.unwrap(space, w_res) == [True, 0, True, "ASCII-8BIT"]
