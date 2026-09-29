@@ -155,35 +155,42 @@ class W_RootObject(W_BaseObject):
 
 
 class W_Object(W_RootObject):
-    _attrs_ = ["map", "object_storage", "unboxed_storage"]
+    _attrs_ = ["map", "klass", "object_storage", "unboxed_storage"]
 
     def __init__(self, space, klass=None):
         if klass is None:
             klass = space.getclassfor(self.__class__)
         self.map = space.fromcache(mapdict.MapTransitionCache).get_class_node(klass)
+        # The class, also on the map: dispatch promotes this, so a call
+        # site sees one value per class rather than one per map (objects
+        # of a class whose instance variables are set in varying orders
+        # have many maps).
+        self.klass = klass
         self.object_storage = None
         self.unboxed_storage = None
 
     def __deepcopy__(self, memo):
         obj = super(W_Object, self).__deepcopy__(memo)
         obj.map = copy.deepcopy(self.map, memo)
+        obj.klass = copy.deepcopy(self.klass, memo)
         obj.object_storage = copy.deepcopy(self.object_storage, memo)
         obj.unboxed_storage = copy.deepcopy(self.unboxed_storage, memo)
         return obj
 
     def getclass(self, space):
-        return jit.promote(self.map).find(mapdict.ClassNode).getclass()
+        return jit.promote(self.klass)
 
     def getsingletonclass(self, space):
-        w_cls = jit.promote(self.map).find(mapdict.ClassNode).getclass()
+        w_cls = jit.promote(self.klass)
         if w_cls.is_singleton:
             return w_cls
         w_cls = space.newclass(w_cls.name, w_cls, is_singleton=True, attached=self)
         self.map = self.map.change_class(space, w_cls)
+        self.klass = w_cls
         return w_cls
 
     def copy_singletonclass(self, space, w_other):
-        w_cls = jit.promote(self.map).find(mapdict.ClassNode).getclass()
+        w_cls = jit.promote(self.klass)
         assert not w_cls.is_singleton
         w_copy = space.newclass(w_cls.name, w_cls, is_singleton=True, attached=self)
         w_copy.methods_w.update(w_other.methods_w)
@@ -192,6 +199,7 @@ class W_Object(W_RootObject):
         w_copy.mutated()
 
         self.map = self.map.change_class(space, w_copy)
+        self.klass = w_copy
         return w_cls
 
     def find_instance_var(self, space, name):
