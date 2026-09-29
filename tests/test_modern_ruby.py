@@ -2373,3 +2373,16 @@ class TestMethodOwner(BaseTopazTest):
                 U.new.method(:to_s).owner.name, U.instance_method(:inspect).owner.name]
         """)
         assert self.unwrap(space, w_res) == ["CM", True, "Kernel", "Kernel"]
+
+
+class TestBindModuleMethods(BaseTopazTest):
+    def test_module_methods_bind_to_any_object(self, space):
+        w_res = space.execute("""
+        m = Module.new { def f; 1; end }
+        class C; end
+        C.define_method(:g, m.instance_method(:f))
+        r = [m.instance_method(:f).bind(Object.new).call, C.new.g]
+        begin; String.instance_method(:upcase).bind(1); rescue TypeError => e; r << e.message; end
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [1, 1, "bind argument must be an instance of String"]

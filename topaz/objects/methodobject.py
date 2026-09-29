@@ -2,6 +2,7 @@ from rpython.rlib import jit
 
 from topaz.module import ClassDef
 from topaz.objects.objectobject import W_Object
+from topaz.objects.classobject import W_ClassObject
 
 
 def create_owner(classdef):
@@ -104,9 +105,12 @@ class W_UnboundMethodObject(W_Object):
 
     @classdef.method("bind")
     def method_bind(self, space, w_receiver):
-        if not self.w_owner.is_ancestor_of(space.getclass(w_receiver)):
+        # A method a module defines binds to any object.
+        w_owner = self.w_owner
+        if (isinstance(w_owner, W_ClassObject) and
+                not w_owner.is_ancestor_of(space.getclass(w_receiver))):
             raise space.error(space.w_TypeError,
-                "bind argument must be an instance of %s" % self.w_owner.name
+                "bind argument must be an instance of %s" % space.obj_to_s(w_owner)
             )
         else:
             return W_MethodObject(space, self.w_owner, self.w_function, w_receiver)
