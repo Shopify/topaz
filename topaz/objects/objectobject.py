@@ -126,16 +126,20 @@ class W_BaseObject(W_Root):
             raise space.error(space.w_LocalJumpError, "no block given")
 
         if space.is_kind_of(self, space.w_symbol) or space.is_kind_of(self, space.w_numeric):
-            self_klass = None
+            scope = StaticScope(None, block.lexical_scope)
         else:
-            self_klass = space.getsingletonclass(self)
+            w_cls = space.getclass(self)
+            if w_cls.is_singleton:
+                scope = StaticScope(w_cls, block.lexical_scope)
+            else:
+                # Making a singleton class for every instance_exec costs a
+                # class per object (ActiveRecord relations) and makes call
+                # sites megamorphic; make it only if the block defines a
+                # method.
+                scope = StaticScope(w_cls, block.lexical_scope, w_singleton_of=self)
 
         return space.invoke_block(
-            block.copy(
-                space,
-                w_self=self,
-                lexical_scope=StaticScope(self_klass, block.lexical_scope)
-            ),
+            block.copy(space, w_self=self, lexical_scope=scope),
             args_w
         )
 

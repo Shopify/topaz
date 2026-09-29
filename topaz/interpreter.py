@@ -203,8 +203,12 @@ class Interpreter(object):
         frame.push(w_self)
 
     def LOAD_SCOPE(self, space, bytecode, frame, pc):
-        if frame.lexical_scope is not None:
-            frame.push(frame.lexical_scope.w_mod)
+        scope = frame.lexical_scope
+        if scope is not None:
+            if scope.w_singleton_of is not None:
+                frame.push(space.getsingletonclass(scope.w_singleton_of))
+            else:
+                frame.push(scope.w_mod)
         else:
             frame.push(space.w_object)
 

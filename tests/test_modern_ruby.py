@@ -2698,3 +2698,21 @@ class TestWeakDescendants(BaseTopazTest):
         return [WK.subclasses.size < 2001, WK.subclasses.include?(keep), WP.class_variable_get(:@@v)]
         """)
         assert self.unwrap(space, w_res) == [True, True, 2]
+
+
+class TestInstanceExecSingletonLazily(BaseTopazTest):
+    def test_instance_exec_makes_singleton_class_only_for_def(self, space):
+        w_res = space.execute("""
+        def classes = ObjectSpace.each_object(Class) { }
+        class IEFoo; def bar; :bar; end; end
+        os = Array.new(20) { IEFoo.new }
+        b = classes
+        r = os.map { |o| o.instance_exec(2) { |n| bar.to_s * n } }
+        c = classes
+        o = IEFoo.new
+        o.instance_exec { def only_me = :me }
+        d = classes
+        IEFoo.instance_exec { def cm = :cm }
+        return [c - b, d - c, r.first, o.only_me, IEFoo.new.respond_to?(:only_me), IEFoo.cm]
+        """)
+        assert self.unwrap(space, w_res) == [0, 1, "barbar", "me", False, "cm"]
