@@ -2625,3 +2625,18 @@ class TestRandomMatchesCRuby(BaseTopazTest):
         assert self.unwrap(space, w_res) == [
             0.22199317108973948, 0.2754808424719215, [4, 9, 6, 3, 3],
             [6, 5, 2, 3, 10, 7, 8, 1, 4, 9], 9, [10, 1, 5], 5, [126, 225, 167, 2, 92]]
+
+
+
+class TestStringRangeAssignment(BaseTopazTest):
+    def test_range_assignment(self, space):
+        w_res = space.execute("""
+        t = +"abc\\n   "
+        t[4..-1] = ""
+        u = +"hello"
+        u[1..2] = "XY_"
+        v = +"hello"
+        v[1...1] = "Z"
+        return [t, u, v]
+        """)
+        assert self.unwrap(space, w_res) == ["abc\n", "hXY_lo", "hZello"]

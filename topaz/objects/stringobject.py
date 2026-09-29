@@ -723,7 +723,7 @@ class W_StringObject(W_Object):
                         pass
         else:
             start_idx, end_idx, as_range, nil = space.subscript_access(self.length(), w_idx, w_count=w_count)
-            if not w_count:
+            if not w_count and not as_range:
                 end_idx = start_idx + 1
 
         if start_idx < 0 or end_idx < 0:
