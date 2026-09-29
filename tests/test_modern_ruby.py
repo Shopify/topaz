@@ -2583,3 +2583,12 @@ class TestStringEncodingKept(BaseTopazTest):
         return [b.encoding.name, y.encoding.name, z.encoding.name, ("ab" * 2).encoding.name]
         """)
         assert self.unwrap(space, w_res) == ["ASCII-8BIT", "ASCII-8BIT", "UTF-8", "UTF-8"]
+
+
+class TestResolveFeaturePath(BaseTopazTest):
+    def test_resolve_feature_path(self, space):
+        w_res = space.execute("""
+        kind, path = $LOAD_PATH.resolve_feature_path("set")
+        return [kind, path.end_with?("/set.rb"), $LOAD_PATH.resolve_feature_path("no_such_feature_x")]
+        """)
+        assert self.unwrap(space, w_res) == ["rb", True, None]

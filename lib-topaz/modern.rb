@@ -930,3 +930,21 @@ module Topaz
     end
   end
 end
+
+# $LOAD_PATH.resolve_feature_path: where `require feature` would find a Ruby
+# file, as [:rb, path], or nil.
+def $LOAD_PATH.resolve_feature_path(feature)
+  feature = feature.to_path if feature.respond_to?(:to_path)
+  feature = Topaz.convert_type(feature, String, :to_str)
+  return nil if feature.end_with?(".so")
+  name = feature.end_with?(".rb") ? feature : "#{feature}.rb"
+  if feature.start_with?("/", "./", "../", "~")
+    path = File.expand_path(name)
+    return File.file?(path) ? [:rb, path] : nil
+  end
+  each do |dir|
+    path = File.join(dir.respond_to?(:to_path) ? dir.to_path : dir.to_s, name)
+    return [:rb, File.expand_path(path)] if File.file?(path)
+  end
+  nil
+end
