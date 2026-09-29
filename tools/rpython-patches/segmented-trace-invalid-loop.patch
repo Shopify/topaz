@@ -1,0 +1,15 @@
+diff --git a/rpython/jit/metainterp/pyjitpl.py b/rpython/jit/metainterp/pyjitpl.py
+index 7a5d119..4e9ed24 100644
+--- a/rpython/jit/metainterp/pyjitpl.py
++++ b/rpython/jit/metainterp/pyjitpl.py
+@@ -1661,6 +1661,10 @@ class MIFrame(object):
+                 metainterp, greenkey, metainterp.history.trace,
+                 fake_runtime_boxes, enable_opts, cut_at,
+                 patch_jumpop_at_end=False)
++            if target_token is None:
++                # the optimizer found the segment invalid (InvalidLoop):
++                # nothing was compiled, just blackhole
++                raise SwitchToBlackhole(Counters.ABORT_SEGMENTED_TRACE)
+             jd_sd.warmstate.attach_procedure_to_interp(
+                 greenkey, target_token.targeting_jitcell_token)
+ 

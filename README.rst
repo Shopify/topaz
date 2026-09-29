@@ -20,6 +20,9 @@ You need:
 
       $ git clone --depth 1 https://github.com/pypy/pypy
 
+  Apply the patches in ``tools/rpython-patches`` to it (``git apply``): they
+  fix RPython JIT crashes that Topaz runs into.
+
 * A Python 2.7 to run RPython with. PyPy 2.7 is recommended, as translating
   with it is about twice as fast as with CPython 2.7.
 * A C compiler, ``make``, and the libffi headers (e.g. ``libffi-dev`` on
