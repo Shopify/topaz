@@ -2419,3 +2419,19 @@ class TestErrnoClasses(BaseTopazTest):
         assert self.unwrap(space, w_res) == [
             "No such file or directory", "No such file or directory - x", 2, True,
             True, "Errno::ENOENT", True, "Errno::ENOENT", 2, "No such file or directory"]
+
+
+class TestStrictInteger(BaseTopazTest):
+    def test_kernel_integer_parses_strictly(self, space):
+        w_res = space.execute("""
+        r = []
+        ["12", " 12 ", "-0x1F", "0b101", "0o17", "017", "1_000", "08", "x", "1__0", "", "0x", "12a"].each do |s|
+          r << (begin; Integer(s); rescue ArgumentError; :err; end)
+        end
+        r << Integer("ff", 16) << Integer("0b1", 16) << Integer("z", exception: false)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            12, 12, -31, 5, 15, 15, 1000, "err", "err", "err", "err", "err", "err",
+            255, 177, None]
+

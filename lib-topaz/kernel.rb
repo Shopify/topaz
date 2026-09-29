@@ -50,13 +50,18 @@ module Kernel
   module_function :String
   private :String
 
-  def Integer(arg, base = nil)
-    if arg.kind_of?(String)
-      if arg.empty?
-        raise ArgumentError.new("invalid value for Integer(): \"\"")
-      else
-        return arg.to_i(base || 0)
+  def Integer(arg, base = nil, exception: true)
+    unless exception
+      begin
+        return Integer(arg, base)
+      rescue ::ArgumentError, ::TypeError, ::FloatDomainError
+        return nil
       end
+    end
+    if arg.kind_of?(String)
+      value = Topaz.strict_integer(arg, base.nil? ? 0 : base)
+      raise ArgumentError.new("invalid value for Integer(): #{arg.inspect}") if value.nil?
+      return value
     end
 
     raise ArgumentError.new("base specified for non string value") if base
