@@ -1,0 +1,16 @@
+diff --git a/rpython/jit/metainterp/counter.py b/rpython/jit/metainterp/counter.py
+index 5d722d6..6e9a36c 100644
+--- a/rpython/jit/metainterp/counter.py
++++ b/rpython/jit/metainterp/counter.py
+@@ -79,7 +79,10 @@ class JitCounter:
+     cleans up the celltable at 'hash'.  It removes those JitCells
+     for which 'cell.should_remove_jitcell()' returns True.
+     """
+-    DEFAULT_SIZE = 2048
++    # (topaz) 2048 was too few for a program as broad as a Rails app: the
++    # counters of warm loops and failing guards kept being evicted, and
++    # guards that failed thousands of times never got a bridge.
++    DEFAULT_SIZE = 65536
+ 
+     def __init__(self, size=DEFAULT_SIZE, translator=None):
+         "NOT_RPYTHON"
