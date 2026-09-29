@@ -2731,3 +2731,31 @@ class TestCloneWithoutSingleton(BaseTopazTest):
                 fr.clone(freeze: false).frozen?, f.clone(freeze: true).frozen?, 1.clone]
         """)
         assert self.unwrap(space, w_res) == [1, [], "hi", True, False, True, 1]
+
+
+class TestMethodCacheInvalidation(BaseTopazTest):
+    def test_lookups_follow_changes(self, space):
+        w_res = space.execute("""
+        class MCBase; def f = :base; end
+        class MCSub < MCBase; end
+        o = MCSub.new
+        r = [o.f]
+        module MCMod; def f = :mod; end
+        MCSub.include(MCMod)
+        r << o.f
+        class MCSub; def f = :sub; end
+        r << o.f
+        MCSub.send(:remove_method, :f)
+        r << o.f
+        module MCMod; def f = :mod2; end
+        r << o.f
+        module MCPre; def f = :pre; end
+        MCSub.prepend(MCPre)
+        r << o.f
+        def o.f = :single
+        r << o.f << MCSub.new.f
+        class MCBase; def g = :g; end
+        r << o.g
+        return r
+        """)
+        assert self.unwrap(space, w_res) == ["base", "mod", "sub", "mod", "mod2", "pre", "single", "pre", "g"]

@@ -101,10 +101,10 @@ class W_ClassObject(W_ModuleObject):
 
         return consts.keys()
 
-    def find_method(self, space, name):
-        method = W_ModuleObject.find_method(self, space, name)
+    def find_method_uncached(self, space, name):
+        method = W_ModuleObject.find_method_uncached(self, space, name)
         if method is None and self.superclass is not None:
-            method = self.superclass.find_method(space, name)
+            method = self.superclass.find_method_uncached(space, name)
         return method
 
     def find_method_super(self, space, name):

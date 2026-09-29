@@ -116,6 +116,17 @@ class DefineMethodMethod(W_FunctionObject):
         return space.send(self.w_unbound_method, "parameters")
 
 
+class MethodCacheState(object):
+    """Counts changes to any module's methods or ancestors: the
+    interpreter's per-class method caches are good while it is unchanged."""
+
+    def __init__(self):
+        self.state = 0
+
+
+method_cache_state = MethodCacheState()
+
+
 class W_Autoload(W_RootObject):
     def __init__(self, space, path):
         self.space = space
@@ -145,6 +156,8 @@ class W_ModuleObject(W_RootObject):
         self.name = name
         self.klass = klass
         self.version = VersionTag()
+        self.method_cache = {}
+        self.method_cache_state = -1
         self.methods_w = {}
         self.constants_w = {}
         self.class_variables = CellDict()
@@ -164,6 +177,8 @@ class W_ModuleObject(W_RootObject):
         obj.name = self.name
         obj.klass = copy.deepcopy(self.klass, memo)
         obj.version = copy.deepcopy(self.version, memo)
+        obj.method_cache = {}
+        obj.method_cache_state = -1
         obj.methods_w = copy.deepcopy(self.methods_w, memo)
         obj.constants_w = copy.deepcopy(self.constants_w, memo)
         obj.class_variables = copy.deepcopy(self.class_variables, memo)
@@ -209,6 +224,7 @@ class W_ModuleObject(W_RootObject):
 
     def mutated(self):
         self.version = VersionTag()
+        method_cache_state.state += 1
 
     def shadow_hidden_subclasses(self, name):
         """Called whenever the method `name` is (re)defined or removed here.
@@ -239,6 +255,23 @@ class W_ModuleObject(W_RootObject):
 
     @jit.unroll_safe
     def find_method(self, space, name):
+        if jit.we_are_jitted():
+            # Traces fold the lookup through the modules' version tags.
+            return self.find_method_uncached(space, name)
+        # The interpreter remembers lookups (misses too) until any module
+        # changes.
+        state = method_cache_state.state
+        if self.method_cache_state != state:
+            self.method_cache = {}
+            self.method_cache_state = state
+        try:
+            return self.method_cache[name]
+        except KeyError:
+            method = self.find_method_uncached(space, name)
+            self.method_cache[name] = method
+            return method
+
+    def find_method_uncached(self, space, name):
         for module in self.prepended_modules:
             method = module.find_local_method(space, name)
             if method is not None:
@@ -246,7 +279,7 @@ class W_ModuleObject(W_RootObject):
         method = self._find_method_pure(space, name, self.version)
         if method is None:
             for module in self.included_modules:
-                method = module.find_method(space, name)
+                method = module.find_method_uncached(space, name)
                 if method is not None:
                     return method
         return method
