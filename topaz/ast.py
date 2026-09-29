@@ -1285,7 +1285,39 @@ class Array(Node):
     def __init__(self, items):
         self.items = items
 
+    # A literal array of at least this many constants is built by copying a
+    # constant array: that keeps big tables (the mail gem's parsers) within
+    # the 16-bit argument of BUILD_ARRAY and out of the code.
+    CONSTANT_ARRAY_MIN = 64
+
+    def _constant_values(self, ctx):
+        values_w = []
+        for item in self.items:
+            space = ctx.space
+            if isinstance(item, Nil):
+                values_w.append(space.w_nil)
+            elif isinstance(item, ConstantInt):
+                values_w.append(space.newint(item.intvalue))
+            elif isinstance(item, ConstantBigInt):
+                values_w.append(space.newbigint_fromrbigint(item.bigint))
+            elif isinstance(item, ConstantFloat):
+                values_w.append(space.newfloat(item.floatvalue))
+            elif isinstance(item, ConstantSymbol):
+                values_w.append(space.newsymbol(item.symbol))
+            elif isinstance(item, ConstantBool):
+                values_w.append(space.newbool(item.boolval))
+            else:
+                return None
+        return values_w
+
     def compile(self, ctx):
+        if len(self.items) >= self.CONSTANT_ARRAY_MIN:
+            values_w = self._constant_values(ctx)
+            if values_w is not None:
+                w_template = ctx.space.newarray(values_w)
+                ctx.emit(consts.LOAD_CONST, ctx.create_const(w_template))
+                ctx.emit(consts.SEND, ctx.create_symbol_const("dup"), 0)
+                return
         n_items = 0
         n_components = 0
         for item in self.items:

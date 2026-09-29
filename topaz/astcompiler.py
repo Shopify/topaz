@@ -328,8 +328,9 @@ class Block(object):
 
 class Instruction(object):
     def __init__(self, opcode, arg0, arg1, lineno):
-        assert arg0 < 1 << 16
-        assert arg1 < 1 << 16
+        # Arguments are 16 bits wide.
+        if arg0 >= 1 << 16 or arg1 >= 1 << 16:
+            raise CompilerError("code too large to compile (an argument above 65535: %d %d %d)" % (opcode, arg0, arg1))
         self.opcode = opcode
         self.arg0 = arg0
         self.arg1 = arg1
@@ -355,7 +356,10 @@ class Instruction(object):
 
     def patch_loc(self, offsets):
         if self.has_jump():
-            self.arg0 = offsets[self.jump]
+            target = offsets[self.jump]
+            if target >= 1 << 16:
+                raise CompilerError("code too large to compile (a jump beyond 65535 bytes)")
+            self.arg0 = target
 
 
 class SetLinenoConextManager(object):

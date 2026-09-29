@@ -2305,3 +2305,16 @@ class TestDefinedScopedConstant(BaseTopazTest):
         return [defined?(M::Struct), defined?(K::Struct), defined?(Object::String), N::R]
         """)
         assert self.unwrap(space, w_res) == [None, None, "constant", "constant"]
+
+
+class TestBigLiteralArrays(BaseTopazTest):
+    def test_big_constant_arrays(self, space):
+        items = ", ".join(str(i % 300) for i in range(70000))
+        w_res = space.execute("""
+        def f = [%s]
+        a = f
+        a << :x
+        b = [1, nil, :s, 1.5, true] + (1..70).to_a
+        return [a.size, f.size, a[1], f.last, b.size]
+        """ % items)
+        assert self.unwrap(space, w_res) == [70001, 70000, 1, 69999 % 300, 75]
