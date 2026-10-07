@@ -299,7 +299,12 @@ def _entry_point(space, argv):
     status = 0
     w_exit_error = None
     explicit_status = False
-    jit.set_param(None, "trace_limit", 16000)
+    # Rails methods inline deeply; at RPython's default of 6000 (and still
+    # at 16000) many hot loops abort as too long and stay interpreted.
+    # 30000 roughly halves those aborts on lobsters and makes it ~35%
+    # faster; beyond ~50000 tracing time and trace memory grow faster than
+    # the gains. (--jit trace_limit=N overrides.)
+    jit.set_param(None, "trace_limit", 30000)
     # Don't decay the JIT's counters: RPython decays them after every
     # compilation, and in a program as broad as a Rails app the warm code
     # then never gets hot. (--jit decay=N sets it back.)
