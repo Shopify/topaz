@@ -1,6 +1,6 @@
 from rpython.rlib import jit
 
-from topaz.closure import LocalCell
+from topaz.closure import LOCAL_CELL
 from topaz.objects.hashobject import W_HashObject
 from topaz.objects.functionobject import W_FunctionObject
 from topaz.objects.moduleobject import W_ModuleObject
@@ -37,7 +37,7 @@ class Frame(BaseFrame):
         # the others' defaults.
         self.entry_pc = 0
         self.kwargs_given = 0
-        self.cells = ([LocalCell() for _ in bytecode.cellvars] +
+        self.cells = ([LOCAL_CELL for _ in bytecode.cellvars] +
                       [None] * len(bytecode.freevars))
         self.regexp_match_cell = regexp_match_cell
         self.w_self = w_self

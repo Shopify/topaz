@@ -16,6 +16,21 @@ BaseRubySorter = make_timsort_class()
 BaseRubySortBy = make_timsort_class()
 
 
+def get_each_location(bytecode):
+    return "Array#each %s:%d:in %s" % (
+        bytecode.filepath, bytecode.lineno, bytecode.name)
+
+
+# Its own loop for the JIT: with each written in Ruby, every trace through
+# an iterating method inlined the whole iteration (a while loop, a yield and
+# a block frame per element), which made the traces of Rails code too long
+# to compile. A loop here is traced from here, with the block inlined once.
+each_driver = jit.JitDriver(
+    greens=["bytecode"], reds="auto", name="Array#each",
+    get_printable_location=get_each_location,
+)
+
+
 class RubySorter(BaseRubySorter):
     def __init__(self, space, list, listlength=None, sortblock=None):
         BaseRubySorter.__init__(self, list, listlength=listlength)
@@ -374,6 +389,19 @@ class W_ArrayObject(W_Object):
     @check_frozen()
     def method_sort_i(self, space, block):
         RubySorter(space, self.items_w, sortblock=block).sort()
+        return self
+
+    @classdef.method("each")
+    def method_each(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("each")])
+        bytecode = block.bytecode
+        i = 0
+        # The length is re-read each time: the block may change the array.
+        while i < len(self.items_w):
+            each_driver.jit_merge_point(bytecode=bytecode)
+            space.invoke_block(block, [self.items_w[i]])
+            i += 1
         return self
 
     @classdef.method("sort_by!")

@@ -55,16 +55,6 @@ class Array
     end
   end
 
-  def each(&block)
-    return self.enum_for(:each) unless block
-    i = 0
-    while i < self.length
-      yield self[i]
-      i += 1
-    end
-    return self
-  end
-
   def product(*args, &block)
     args = args.unshift(self)
     if block

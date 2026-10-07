@@ -7,6 +7,10 @@ class BaseCell(W_Root):
 
 
 class LocalCell(BaseCell):
+    """A local variable that lives in the frame's localsstack_w. It has no
+    state of its own, so every frame shares the one instance below until a
+    block captures the variable (upgrade_to_closure)."""
+
     def get(self, space, frame, pos):
         return frame.localsstack_w[pos]
 
@@ -20,6 +24,9 @@ class LocalCell(BaseCell):
         else:
             frame.cells[pos] = result = ClosureCell(w_obj)
         return result
+
+
+LOCAL_CELL = LocalCell()
 
 
 class ClosureCell(BaseCell):

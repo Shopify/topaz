@@ -1,6 +1,7 @@
 import copy
 from collections import OrderedDict
 
+from rpython.rlib import jit
 from rpython.rlib.objectmodel import r_ordereddict
 from rpython.rlib.rerased import new_static_erasing_pair
 
@@ -93,6 +94,30 @@ class IdentityDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
 
     def unwrap(self, w_key):
         return w_key
+
+
+def get_each_location(bytecode):
+    return "Hash#each %s:%d:in %s" % (
+        bytecode.filepath, bytecode.lineno, bytecode.name)
+
+
+def get_merge_location(bytecode):
+    return "Hash#merge! %s:%d:in %s" % (
+        bytecode.filepath, bytecode.lineno, bytecode.name)
+
+
+# Their own loops for the JIT, as Array#each has (see arrayobject.py): in
+# Ruby, each was an iterator loop ended by a StopIteration, and merge! was
+# an each with a block, and both were inlined whole into every trace that
+# iterated a hash, which made the traces of Rails code too long to compile.
+each_driver = jit.JitDriver(
+    greens=["bytecode"], reds="auto", name="Hash#each",
+    get_printable_location=get_each_location,
+)
+merge_driver = jit.JitDriver(
+    greens=["bytecode"], reds="auto", name="Hash#merge!",
+    get_printable_location=get_merge_location,
+)
 
 
 class W_HashObject(W_Object):
@@ -300,6 +325,66 @@ class W_HashObject(W_Object):
         self.w_default = w_hash.w_default
         self.default_proc = w_hash.default_proc
         return self
+
+    @classdef.method("each_pair")
+    @classdef.method("each")
+    def method_each(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("each")])
+        bytecode = block.bytecode
+        strategy = self.strategy
+        iterator = strategy.iteritems(self.dict_storage)
+        while True:
+            each_driver.jit_merge_point(bytecode=bytecode)
+            try:
+                w_key, w_value = strategy.iternext(iterator)
+            except StopIteration:
+                break
+            space.invoke_block(block, [space.newarray([w_key, w_value])])
+        return self
+
+    @classdef.method("update")
+    @classdef.method("merge!")
+    @check_frozen()
+    def method_merge_i(self, space, w_other, block):
+        w_other = space.convert_type(w_other, space.w_hash, "to_hash")
+        assert isinstance(w_other, W_HashObject)
+        if block is None:
+            self._merge_from(space, w_other)
+        else:
+            self._merge_from_with_block(space, w_other, block)
+        return self
+
+    def _merge_from(self, space, w_other):
+        strategy = w_other.strategy
+        iterator = strategy.iteritems(w_other.dict_storage)
+        while True:
+            try:
+                w_key, w_value = strategy.iternext(iterator)
+            except StopIteration:
+                break
+            self.method_subscript_assign(space, w_key, w_value)
+
+    def _merge_from_with_block(self, space, w_other, block):
+        bytecode = block.bytecode
+        strategy = w_other.strategy
+        iterator = strategy.iteritems(w_other.dict_storage)
+        while True:
+            merge_driver.jit_merge_point(bytecode=bytecode)
+            try:
+                w_key, w_value = strategy.iternext(iterator)
+            except StopIteration:
+                break
+            if self.strategy.contains(self.dict_storage, w_key):
+                w_value = space.invoke_block(
+                    block, [w_key, self.getitem(w_key), w_value])
+            self.method_subscript_assign(space, w_key, w_value)
+
+    @classdef.method("merge")
+    def method_merge(self, space, w_other, block):
+        w_copy = space.send(self, "dup")
+        assert isinstance(w_copy, W_HashObject)
+        return w_copy.method_merge_i(space, w_other, block)
 
     @classdef.method("keys")
     def method_keys(self, space):

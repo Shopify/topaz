@@ -1,18 +1,4 @@
 class Hash
-  def each(&block)
-    return self.enum_for(:each) if !block
-    iter = Topaz::HashIterator.new(self)
-    while true
-      begin
-        key, value = iter.next()
-      rescue StopIteration
-        return self
-      end
-      yield [key, value]
-    end
-  end
-  alias each_pair each
-
   def self.[](*args)
     if args.size == 1
       arg = args[0]
@@ -81,30 +67,6 @@ class Hash
       end
     end
     true
-  end
-
-  def merge!(other, &block)
-    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    other = Topaz.convert_type(other, Hash, :to_hash)
-    if block
-      other.each do |key, val|
-        if has_key? key
-          self[key] = block.call key, self[key], val
-        else
-          self[key] = val
-        end
-      end
-    else
-      other.each do |key, val|
-        self[key] = val
-      end
-    end
-    self
-  end
-  alias update merge!
-
-  def merge(other, &block)
-    dup.merge! other, &block
   end
 
   def assoc(key)
