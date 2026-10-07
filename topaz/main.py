@@ -309,6 +309,15 @@ def _entry_point(space, argv):
     # compilation, and in a program as broad as a Rails app the warm code
     # then never gets hot. (--jit decay=N sets it back.)
     jit.set_param(None, "decay", 0)
+    # Compile a bridge after a guard fails 50 times, not RPython's 200. With
+    # traces this long a guard failure is expensive (it rebuilds every
+    # inlined frame from resume data and runs the blackhole interpreter),
+    # and a Rails request trips thousands of guards. On lobsters at 40
+    # iterations: 200 -> 1490ms/iter, 100 -> 1240, 75 -> 1170, 50 -> 1060
+    # to 1230, 25 -> 1350, 10 -> 1460 (and 3GB RSS at 3): below 50 the
+    # extra tracing costs more than the bridges save. (--jit
+    # trace_eagerness=N overrides.)
+    jit.set_param(None, "trace_eagerness", 50)
     if jit_params:
         # Work around TraceLimitTooHigh by setting any trace_limit explicitly
         parts = jit_params.split(",")
