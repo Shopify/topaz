@@ -9,6 +9,44 @@ def load(source, scopes=None):
 
 
 class TestPrismLoader(object):
+    def test_integer_words(self):
+        def varuint(value):
+            result = []
+            while value >= 128:
+                result.append(chr((value & 127) | 128))
+                value >>= 7
+            result.append(chr(value))
+            return ''.join(result)
+
+        values = [0L, 1L, 0xffffffffL, 0x100000000L,
+                  0x0123456789abcdefL, (1L << 4096) + 1]
+        for bit in [31, 32, 62, 63, 64, 93, 126, 127, 128]:
+            values.extend([(1L << bit) - 1, 1L << bit, (1L << bit) + 1])
+        for value in values:
+            words = []
+            remaining = value
+            while remaining:
+                words.append(remaining & 0xffffffff)
+                remaining >>= 32
+            # Also exercise explicit zero words and leading zero padding.
+            for padded in [words, words + [0]]:
+                for negative in [False, True]:
+                    data = (chr(int(negative)) + varuint(len(padded)) +
+                            ''.join(varuint(word) for word in padded))
+                    loader = nodes.Loader('', data + '!')
+                    result = loader.load_integer()
+                    assert result.tolong() == (-value if negative else value)
+                    assert loader.pos == len(data)
+                    assert loader.load_byte() == ord('!')
+
+    def test_large_integer_literal(self):
+        value = (1L << 4096) + (1L << 63) + 0xffffffff
+        loader, program = load(str(value))
+        [integer] = program.statements.body
+        assert isinstance(integer, nodes.IntegerNode)
+        assert integer.value.tolong() == value
+        assert loader.errors == []
+
     def test_program(self):
         loader, program = load("x = 1\nputs x + 2**70, 1.5, :sym, 'str'\n")
         assert isinstance(program, nodes.ProgramNode)

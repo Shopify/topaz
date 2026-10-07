@@ -78,17 +78,28 @@ class W_BignumObject(W_IntegerObject):
     def method_to_f(self, space):
         return space.newfloat(self.bigint.tofloat())
 
-    @classdef.method("+", other="bigint")
-    def method_plus(self, space, other):
-        return space.newbigint_fromrbigint(self.bigint.add(other))
+    def new_binop(classdef, name, opname):
+        op = getattr(rbigint, opname)
+        int_op = getattr(rbigint, 'int_' + opname)
 
-    @classdef.method("-", other="bigint")
-    def method_sub(self, space, other):
-        return space.newbigint_fromrbigint(self.bigint.sub(other))
+        @classdef.method(name)
+        def method(self, space, w_other):
+            # Preserve to_int coercion, but keep machine operands unboxed.
+            w_other = space.convert_type(w_other, space.w_integer, "to_int")
+            if space.is_kind_of(w_other, space.w_fixnum):
+                result = int_op(self.bigint, space.int_w(w_other))
+            else:
+                result = op(self.bigint, space.bigint_w(w_other))
+            return space.newbigint_fromrbigint(result)
+        method.__name__ = 'method_' + opname
+        return method
 
-    @classdef.method("*", other="bigint")
-    def method_times(self, space, other):
-        return space.newbigint_fromrbigint(self.bigint.mul(other))
+    method_plus = new_binop(classdef, "+", "add")
+    method_sub = new_binop(classdef, "-", "sub")
+    method_times = new_binop(classdef, "*", "mul")
+    method_and = new_binop(classdef, "&", "and_")
+    method_or = new_binop(classdef, "|", "or_")
+    method_xor = new_binop(classdef, "^", "xor")
 
     def floordiv(self, space, other):
         try:
@@ -103,7 +114,11 @@ class W_BignumObject(W_IntegerObject):
     @classdef.method("/")
     def method_divide(self, space, w_other):
         if space.is_kind_of(w_other, space.w_fixnum):
-            return self.floordiv(space, rbigint.fromint(space.int_w(w_other)))
+            try:
+                result = self.bigint.int_floordiv(space.int_w(w_other))
+            except ZeroDivisionError:
+                raise space.error(space.w_ZeroDivisionError, "divided by 0")
+            return space.newbigint_fromrbigint(result)
         elif space.is_kind_of(w_other, space.w_bignum):
             return self.floordiv(space, space.bigint_w(w_other))
         elif space.is_kind_of(w_other, space.w_float):
@@ -146,24 +161,24 @@ class W_BignumObject(W_IntegerObject):
             bigint = bigint.invert()
         return space.newint(bigint.bit_length())
 
-    @classdef.method("&", other="bigint")
-    def method_and(self, space, other):
-        return space.newbigint_fromrbigint(self.bigint.and_(other))
+    @classdef.method("==")
+    def method_eq(self, space, w_other):
+        w_other = space.convert_type(w_other, space.w_integer, "to_int")
+        if space.is_kind_of(w_other, space.w_fixnum):
+            return space.newbool(self.bigint.int_eq(space.int_w(w_other)))
+        return space.newbool(self.bigint.eq(space.bigint_w(w_other)))
 
-    @classdef.method("|", other="bigint")
-    def method_or(self, space, other):
-        return space.newbigint_fromrbigint(self.bigint.or_(other))
-
-    @classdef.method("^", other="bigint")
-    def method_xor(self, space, other):
-        return space.newbigint_fromrbigint(self.bigint.xor(other))
-
-    @classdef.method("==", other="bigint")
-    def method_eq(self, space, other):
-        return space.newbool(self.bigint.eq(other))
-
-    @classdef.method("<=>", other="bigint")
-    def method_comparator(self, space, other):
+    @classdef.method("<=>")
+    def method_comparator(self, space, w_other):
+        w_other = space.convert_type(w_other, space.w_integer, "to_int")
+        if space.is_kind_of(w_other, space.w_fixnum):
+            other_int = space.int_w(w_other)
+            if self.bigint.int_gt(other_int):
+                return space.newint(1)
+            elif self.bigint.int_eq(other_int):
+                return space.newint(0)
+            return space.newint(-1)
+        other = space.bigint_w(w_other)
         if self.bigint.gt(other):
             return space.newint(1)
         elif self.bigint.eq(other):
@@ -227,10 +242,13 @@ class W_BignumObject(W_IntegerObject):
             return space.send(self.method_to_f(space), "divmod", [w_other])
         elif(space.is_kind_of(w_other, space.w_bignum) or
              space.is_kind_of(w_other, space.w_fixnum)):
-            other = space.bigint_w(w_other)
-            if not other.tobool():
+            try:
+                if space.is_kind_of(w_other, space.w_fixnum):
+                    div, mod = self.bigint.int_divmod(space.int_w(w_other))
+                else:
+                    div, mod = self.bigint.divmod(space.bigint_w(w_other))
+            except ZeroDivisionError:
                 raise space.error(space.w_ZeroDivisionError, "divided by 0")
-            div, mod = self.bigint.divmod(other)
             return space.newarray([space.newbigint_fromrbigint(div),
                                    space.newbigint_fromrbigint(mod)])
         else:
@@ -245,14 +263,11 @@ class W_BignumObject(W_IntegerObject):
     @classdef.method("modulo")
     def method_mod(self, space, w_other):
         if space.getclass(w_other) is space.w_fixnum:
-            return space.newint(
-                space.int_w(
-                    self.method_mod_bigint_impl(
-                        space,
-                        space.bigint_w(w_other)
-                    )
-                )
-            )
+            try:
+                result = self.bigint.int_mod_int_result(space.int_w(w_other))
+            except ZeroDivisionError:
+                raise space.error(space.w_ZeroDivisionError, "divided by 0")
+            return space.newint(result)
         elif space.getclass(w_other) is space.w_float:
             return space.send(self.method_to_f(space), "%", [w_other])
         elif space.getclass(w_other) is space.w_bignum:

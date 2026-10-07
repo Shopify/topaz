@@ -89,8 +89,8 @@ See vendor/prism/serialization.md for the format.  Locations are byte
 offsets into the source; Loader.line_of() turns them into line numbers.
 """
 
-from rpython.rlib.rarithmetic import intmask
-from rpython.rlib.rbigint import rbigint
+from rpython.rlib.rarithmetic import intmask, r_uint
+from rpython.rlib.rbigint import rbigint, SHIFT
 from rpython.rlib.rstruct.runpack import runpack
 
 
@@ -264,10 +264,21 @@ class Loader(object):
     def load_integer(self):
         negative = self.load_byte() != 0
         length = self.load_varuint()
-        value = rbigint.fromint(0)
-        for i in range(length):
-            word = rbigint.fromint(self.load_varuint())
-            value = value.or_(word.lshift(32 * i))
+        if length == 1:
+            value = rbigint.fromrarith_int(r_uint(self.load_varuint()))
+        else:
+            # Prism stores unsigned 32-bit words, least significant first.
+            # Pack them once instead of repeatedly shifting and ORing bigints.
+            words = [0] * (length if SHIFT > 32 else 2 * length)
+            for i in range(length):
+                word = self.load_varuint()
+                if SHIFT > 32:
+                    words[i] = word
+                else:
+                    # from_list_n_bits requires chunks no wider than SHIFT.
+                    words[2 * i] = word & 0xffff
+                    words[2 * i + 1] = (word >> 16) & 0xffff
+            value = rbigint.from_list_n_bits(words, 32 if SHIFT > 32 else 16)
         if negative:
             value = value.neg()
         return value

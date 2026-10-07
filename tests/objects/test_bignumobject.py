@@ -1,9 +1,77 @@
+import operator
+import sys
+
 from rpython.rlib.rbigint import rbigint
 
 from ..base import BaseTopazTest
 
 
 class TestBignumObject(BaseTopazTest):
+    def test_mixed_integer_operations(self, space):
+        from topaz.objects.bignumobject import W_BignumObject
+        from topaz.objects.intobject import W_FixnumObject
+
+        # Include small values stored as bignums (e.g. produced by coerce),
+        # cancellation back into a fixnum, and the minimum machine integer.
+        big_values = [0L, 7L, long(sys.maxint) + 1, -(long(sys.maxint) + 2),
+                      2L ** 130 + 5, -(2L ** 130 + 5)]
+        small_values = [-sys.maxint - 1, -7, -1, 0, 1, 7, sys.maxint]
+        for name, op in [("+", operator.add), ("-", operator.sub),
+                         ("*", operator.mul), ("&", operator.and_),
+                         ("|", operator.or_), ("^", operator.xor)]:
+            for big in big_values:
+                w_big = W_BignumObject(space, rbigint.fromlong(big))
+                for small in small_values:
+                    w_small = space.newint(small)
+                    for left, right, w_left, w_right in [
+                            (big, small, w_big, w_small),
+                            (small, big, w_small, w_big)]:
+                        expected = op(long(left), long(right))
+                        w_result = space.send(w_left, name, [w_right])
+                        assert space.bigint_w(w_result).tolong() == expected
+                        assert isinstance(w_result, W_FixnumObject) == (
+                            -sys.maxint - 1 <= expected <= sys.maxint)
+
+    def test_mixed_division_and_comparison(self, space):
+        from topaz.objects.bignumobject import W_BignumObject
+
+        for big in [0L, 7L, 2L ** 130 + 5, -(2L ** 130 + 5)]:
+            w_big = W_BignumObject(space, rbigint.fromlong(big))
+            for small in [-sys.maxint - 1, -7, -1, 0, 1, 7, sys.maxint]:
+                w_small = space.newint(small)
+                assert space.is_true(space.send(w_big, "==", [w_small])) == (big == small)
+                assert space.int_w(space.send(w_big, "<=>", [w_small])) == cmp(big, small)
+                if small == 0:
+                    for name in ["/", "%", "divmod"]:
+                        with self.raises(space, "ZeroDivisionError", "divided by 0"):
+                            space.send(w_big, name, [w_small])
+                    continue
+                w_div = space.send(w_big, "/", [w_small])
+                w_mod = space.send(w_big, "%", [w_small])
+                assert space.bigint_w(w_div).tolong() == big // small
+                assert space.int_w(w_mod) == big % small
+                results = space.listview(space.send(w_big, "divmod", [w_small]))
+                assert [space.bigint_w(w).tolong() for w in results] == list(divmod(big, small))
+
+    def test_mixed_to_int_coercion(self, space):
+        w_res = space.execute("""
+        class SmallOperand
+          def to_int; 7; end
+        end
+        class BigOperand
+          def to_int; 2 ** 100; end
+        end
+        big = 2 ** 100
+        small = SmallOperand.new
+        other = BigOperand.new
+        return [big + small == big + 7, big - small == big - 7,
+                big * small == big * 7, big & small == 0,
+                big | small == big + 7, big ^ small == big + 7,
+                big == other, (big <=> small) == 1,
+                big + other == big * 2]
+        """)
+        assert self.unwrap(space, w_res) == [True] * 9
+
     def test_class_is_integer(self, space):
         w_res = space.execute("""
         big = 2 ** 70

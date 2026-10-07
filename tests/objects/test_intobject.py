@@ -1,4 +1,5 @@
 import math
+import operator
 import sys
 
 from rpython.rlib.rarithmetic import LONG_BIT
@@ -8,6 +9,33 @@ from ..base import BaseTopazTest
 
 
 class TestFixnumObject(BaseTopazTest):
+    def test_overflow_boundaries(self, space):
+        from topaz.objects.intobject import W_FixnumObject
+
+        values = [-sys.maxint - 1, -sys.maxint, -1, 0, 1, sys.maxint]
+        for name, op in [("+", operator.add), ("-", operator.sub),
+                         ("*", operator.mul)]:
+            for left in values:
+                for right in values:
+                    expected = op(long(left), long(right))
+                    w_result = space.send(space.newint(left), name,
+                                          [space.newint(right)])
+                    assert space.bigint_w(w_result).tolong() == expected
+                    assert isinstance(w_result, W_FixnumObject) == (
+                        -sys.maxint - 1 <= expected <= sys.maxint)
+
+    def test_left_shift_boundaries(self, space):
+        from topaz.objects.intobject import W_FixnumObject
+
+        for value in [-sys.maxint - 1, -1, 0, 1, sys.maxint]:
+            for shift in [0, 1, LONG_BIT - 1, LONG_BIT, LONG_BIT + 1]:
+                expected = long(value) << shift
+                w_result = space.send(space.newint(value), "<<",
+                                      [space.newint(shift)])
+                assert space.bigint_w(w_result).tolong() == expected
+                assert isinstance(w_result, W_FixnumObject) == (
+                    -sys.maxint - 1 <= expected <= sys.maxint)
+
     def test_class_is_integer(self, space):
         w_res = space.execute("""
         return [1.class, 1.instance_of?(Integer), 1.class.name,

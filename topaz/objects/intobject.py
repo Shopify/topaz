@@ -133,6 +133,8 @@ class W_FixnumObject(W_RootObject):
         return self
 
     def new_binop(classdef, name, func):
+        bigint_op = getattr(rbigint, func.__name__ + '_int_int_bigint_result')
+        bigint_int_op = getattr(rbigint, 'int_' + func.__name__)
         @classdef.method(name)
         def method(self, space, w_other):
             if space.is_kind_of(w_other, space.w_fixnum):
@@ -140,14 +142,15 @@ class W_FixnumObject(W_RootObject):
                 try:
                     value = ovfcheck(func(self.intvalue, other))
                 except OverflowError:
-                    return space.send(
-                        space.newbigint_fromint(self.intvalue), name,
-                        [w_other]
-                    )
+                    return space.newbigint_fromrbigint(
+                        bigint_op(self.intvalue, other))
                 else:
                     return space.newint(value)
             elif space.is_kind_of(w_other, space.w_bignum):
-                return space.send(space.newbigint_fromint(self.intvalue), name, [w_other])
+                result = bigint_int_op(space.bigint_w(w_other), self.intvalue)
+                if name == '-':
+                    result = result.neg()
+                return space.newbigint_fromrbigint(result)
             elif space.is_kind_of(w_other, space.w_float):
                 return space.newfloat(func(self.intvalue, space.float_w(w_other)))
             else:
@@ -157,7 +160,6 @@ class W_FixnumObject(W_RootObject):
     method_add = new_binop(classdef, "+", operator.add)
     method_sub = new_binop(classdef, "-", operator.sub)
     method_mul = new_binop(classdef, "*", operator.mul)
-    method_pow = new_binop(classdef, "**", operator.pow)
 
     @classdef.method("floor")
     def method_floor(self, space):
@@ -320,18 +322,14 @@ class W_FixnumObject(W_RootObject):
         if other < 0:
             return space.newint(self.intvalue >> -other)
         elif other >= LONG_BIT:
-            return space.send(
-                space.newbigint_fromint(self.intvalue), "<<",
-                [space.newint(other)]
-            )
+            return space.newbigint_fromrbigint(
+                rbigint.lshift_int_int_bigint_result(self.intvalue, other))
         else:
             try:
                 value = ovfcheck(self.intvalue << other)
             except OverflowError:
-                return space.send(
-                    space.newbigint_fromint(self.intvalue), "<<",
-                    [space.newint(other)]
-                )
+                return space.newbigint_fromrbigint(
+                    rbigint.lshift_int_int_bigint_result(self.intvalue, other))
             else:
                 return space.newint(value)
 
@@ -343,6 +341,7 @@ class W_FixnumObject(W_RootObject):
             return space.newint(self.intvalue >> other)
 
     def new_bitwise_op(classdef, name, func):
+        bigint_int_op = getattr(rbigint, 'int_' + func.__name__)
         @classdef.method(name)
         def method(self, space, w_other):
             w_other = space.convert_type(w_other, space.w_integer, "to_int")
@@ -350,7 +349,8 @@ class W_FixnumObject(W_RootObject):
                 other = space.int_w(w_other)
                 return space.newint(func(self.intvalue, other))
             elif space.is_kind_of(w_other, space.w_bignum):
-                return space.send(space.newbigint_fromint(self.intvalue), name, [w_other])
+                return space.newbigint_fromrbigint(
+                    bigint_int_op(space.bigint_w(w_other), self.intvalue))
             else:
                 return W_NumericObject.retry_binop_coercing(space, self, w_other, name)
         method.__name__ = "method_%s" % func.__name__
