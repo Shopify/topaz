@@ -3,7 +3,7 @@ from topaz.objects.objectobject import W_Object
 from topaz.modules.ffi.pointer import W_PointerObject
 from topaz.coerce import Coerce
 
-from rpython.rlib import clibffi
+from rpython.rlib import clibffi, rdynload
 
 
 class W_DynamicLibraryObject(W_Object):
@@ -11,10 +11,13 @@ class W_DynamicLibraryObject(W_Object):
 
     @classdef.setup_class
     def setup_class(cls, space, w_cls):
-        space.set_const(w_cls, "RTLD_LAZY", space.newint(1))
-        space.set_const(w_cls, "RTLD_NOW", space.newint(2))
-        space.set_const(w_cls, "RTLD_GLOBAL", space.newint(257))
-        space.set_const(w_cls, "RTLD_LOCAL", space.newint(0))
+        # The platform's values: on macOS they differ from Linux's, whose
+        # RTLD_GLOBAL bit there is RTLD_FIRST, which limits dlsym to the
+        # main executable.
+        space.set_const(w_cls, "RTLD_LAZY", space.newint(rdynload.RTLD_LAZY))
+        space.set_const(w_cls, "RTLD_NOW", space.newint(rdynload.RTLD_NOW))
+        space.set_const(w_cls, "RTLD_GLOBAL", space.newint(rdynload.RTLD_GLOBAL))
+        space.set_const(w_cls, "RTLD_LOCAL", space.newint(rdynload.RTLD_LOCAL or 0))
         space.set_const(w_cls, 'Symbol', space.getclassfor(W_DL_SymbolObject))
 
         w_method_new = w_cls.getclass(space).find_method(space, 'new')

@@ -11,23 +11,14 @@
 #
 # Struct offsets are libxml2's on 64-bit Linux. Nodes are never freed.
 require "ffi"
+require "topaz/native_library"
 require "stringio"
 
 module Nokogiri
   module LibXML
     extend FFI::Library
 
-    candidates = [ENV["TOPAZ_LIBXML2"], "libxml2.so.16", "libxml2.so.2", "libxml2.so", "xml2"].compact
-    loaded = false
-    candidates.each do |name|
-      begin
-        ffi_lib name
-        loaded = true
-        break
-      rescue LoadError
-      end
-    end
-    raise LoadError, "cannot load libxml2 (set TOPAZ_LIBXML2 to its path)" unless loaded
+    Topaz::NativeLibrary.load(self, "libxml2", env: "TOPAZ_LIBXML2", names: ["libxml2.so.16", "libxml2.so.2", "libxml2.so", "xml2"])
 
     functions = [
       [:htmlReadMemory, [:pointer, :int, :string, :string, :int], :pointer],

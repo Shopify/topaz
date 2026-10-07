@@ -3,6 +3,7 @@
 #
 # Struct offsets and sizes are libyaml 0.2.5's on x86-64 Linux.
 require "ffi"
+require "topaz/native_library"
 # As psych.so does, for the parser's errors.
 require "psych/syntax_error"
 
@@ -10,17 +11,7 @@ module Psych
   module LibYAML
     extend FFI::Library
 
-    candidates = [ENV["TOPAZ_LIBYAML"], "libyaml-0.so.2", "libyaml.so", "yaml"].compact
-    loaded = false
-    candidates.each do |name|
-      begin
-        ffi_lib name
-        loaded = true
-        break
-      rescue LoadError
-      end
-    end
-    raise LoadError, "cannot load libyaml (set TOPAZ_LIBYAML to its path)" unless loaded
+    Topaz::NativeLibrary.load(self, "libyaml", env: "TOPAZ_LIBYAML", names: ["libyaml-0.so.2", "libyaml.so", "yaml"])
 
     attach_function :yaml_get_version, [:pointer, :pointer, :pointer], :void
 

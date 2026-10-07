@@ -1,7 +1,7 @@
 from tests.modules.ffi.base import BaseFFITest
 from topaz.modules.ffi.dynamic_library import W_DL_SymbolObject
 
-from rpython.rlib import clibffi
+from rpython.rlib import clibffi, rdynload
 from rpython.rtyper.lltypesystem import rffi
 
 import sys
@@ -14,10 +14,11 @@ else:
 
 class TestDynamicLibrary(BaseFFITest):
     def test_consts(self, space):
-        consts = {'LAZY': 1, 'NOW': 2, 'GLOBAL': 257, 'LOCAL': 0}
+        consts = {'LAZY': rdynload.RTLD_LAZY, 'NOW': rdynload.RTLD_NOW,
+                  'GLOBAL': rdynload.RTLD_GLOBAL, 'LOCAL': rdynload.RTLD_LOCAL or 0}
         for name in consts:
             w_res = space.execute('FFI::DynamicLibrary::RTLD_%s' % name)
-            space.int_w(w_res) == consts[name]
+            assert space.int_w(w_res) == consts[name]
 
 
 class TestDynamicLibrary__new(BaseFFITest):

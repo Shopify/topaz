@@ -3,22 +3,17 @@
 # Hashes and HMACs are computed one-shot over data buffered in Ruby, so no
 # native state has to be freed or copied; ciphers keep an EVP context.
 require "ffi"
+require "topaz/native_library"
 
 module Topaz
   module LibCrypto
     extend FFI::Library
 
-    candidates = [ENV["TOPAZ_LIBCRYPTO"], "libcrypto.so.3", "libcrypto.so", "crypto"].compact
-    loaded = false
-    candidates.each do |name|
-      begin
-        ffi_lib name
-        loaded = true
-        break
-      rescue LoadError
-      end
-    end
-    raise LoadError, "cannot load libcrypto (set TOPAZ_LIBCRYPTO to its path)" unless loaded
+    # macOS ships only a stub libcrypto that aborts the process when it is
+    # loaded, so there it must be Homebrew OpenSSL (or TOPAZ_LIBCRYPTO).
+    Topaz::NativeLibrary.load(self, "libcrypto", env: "TOPAZ_LIBCRYPTO",
+                              names: ["libcrypto.so.3", "libcrypto.so", "crypto"],
+                              system: !FFI::Platform::IS_MAC)
 
     # OpenSSL 3 renamed the accessors (the old names became macros).
     def self.attach_either(name, names, args, ret)

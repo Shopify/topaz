@@ -7,22 +7,13 @@
 # SQL functions and aggregates, trace, authorizer and collations.
 # busy_handler keeps its block but waits with sqlite3_busy_timeout.
 require "ffi"
+require "topaz/native_library"
 
 module SQLite3
   module LibSQLite
     extend FFI::Library
 
-    candidates = [ENV["TOPAZ_LIBSQLITE3"], "libsqlite3.so.0", "libsqlite3.so", "sqlite3"].compact
-    loaded = false
-    candidates.each do |name|
-      begin
-        ffi_lib name
-        loaded = true
-        break
-      rescue LoadError
-      end
-    end
-    raise LoadError, "cannot load libsqlite3 (set TOPAZ_LIBSQLITE3 to its path)" unless loaded
+    Topaz::NativeLibrary.load(self, "libsqlite3", env: "TOPAZ_LIBSQLITE3", names: ["libsqlite3.so.0", "libsqlite3.so", "sqlite3"])
 
     attach_function :sqlite3_libversion, [], :string
     attach_function :sqlite3_libversion_number, [], :int

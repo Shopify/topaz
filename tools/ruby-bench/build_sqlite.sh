@@ -17,12 +17,16 @@ if [ -z "$src" ]; then
   src=$(find "$tmp" -name sqlite3.c | head -1)
 fi
 mkdir -p "$out"
+case "$(uname)" in
+  Darwin) lib=libsqlite3.dylib; soname="" ;;
+  *) lib=libsqlite3.so.0; soname="-Wl,-soname,libsqlite3.so.0" ;;
+esac
 # The gem's options (ext/sqlite3/extconf.rb), plus column metadata, which
 # the binding's column_database_name needs.
-cc -O2 -fPIC -shared -o "$out/libsqlite3.so.0" -Wl,-soname,libsqlite3.so.0 \
+cc -O2 -fPIC -shared -o "$out/$lib" $soname \
   -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 -DSQLITE_USE_URI=1 \
   -DSQLITE_ENABLE_DBPAGE_VTAB=1 -DSQLITE_ENABLE_DBSTAT_VTAB=1 \
   -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_MATH_FUNCTIONS -DSQLITE_THREADSAFE=1 \
   -DSQLITE_ENABLE_COLUMN_METADATA \
   "$src" -lm -lpthread
-echo "$out/libsqlite3.so.0"
+echo "$out/$lib"

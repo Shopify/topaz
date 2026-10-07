@@ -236,6 +236,11 @@ module Gem
     end
   end
 
+  # Forgets the specs found so far, for when the load path changes.
+  def self.refresh
+    @loaded_specs = nil
+  end
+
   def self.loaded_specs
     @loaded_specs ||= begin
       specs = {}

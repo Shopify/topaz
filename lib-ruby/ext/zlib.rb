@@ -4,23 +4,14 @@
 #
 # z_stream's layout is zlib's on 64-bit Linux.
 require "ffi"
+require "topaz/native_library"
 require "stringio"
 
 module Zlib
   module LibZ
     extend FFI::Library
 
-    candidates = [ENV["TOPAZ_LIBZ"], "libz.so.1", "libz.so", "z"].compact
-    loaded = false
-    candidates.each do |name|
-      begin
-        ffi_lib name
-        loaded = true
-        break
-      rescue LoadError
-      end
-    end
-    raise LoadError, "cannot load libz (set TOPAZ_LIBZ to its path)" unless loaded
+    Topaz::NativeLibrary.load(self, "libz", env: "TOPAZ_LIBZ", names: ["libz.so.1", "libz.so", "z"])
 
     attach_function :zlibVersion, [], :string
     attach_function :crc32, [:ulong, :pointer, :uint], :ulong

@@ -1,9 +1,11 @@
 # The C half of markly (markly/markly.so) on libcmark-gfm and
 # libcmark-gfm-extensions through FFI: Markly::Parser, Markly::Node and
 # Markly.extensions. markly's Ruby files (flags, node, renderer) run
-# unchanged on top. Found by name, or through TOPAZ_LIBCMARK_GFM and
-# TOPAZ_LIBCMARK_GFM_EXTENSIONS. Nodes are never freed.
+# unchanged on top. Found by name, through TOPAZ_LIBCMARK_GFM and
+# TOPAZ_LIBCMARK_GFM_EXTENSIONS, or built from the gem's sources
+# (Topaz::NativeLibrary). Nodes are never freed.
 require "ffi"
+require "topaz/native_library"
 
 module Markly
   class Error < StandardError; end
@@ -11,19 +13,23 @@ module Markly
   module LibCmark
     extend FFI::Library
 
-    def self.load_first(candidates, what)
-      candidates.compact.each do |name|
-        begin
-          ffi_lib name
-          return
-        rescue LoadError
-        end
-      end
-      raise LoadError, "cannot load #{what}"
+    # Where there is no libcmark-gfm with its extensions (macOS ships the
+    # parser alone), both are built from the gem's own copy of cmark-gfm.
+    BUILD = lambda do
+      Topaz::NativeLibrary.build("markly", "cmark-gfm", sources: %w[ext/markly/*.c], exclude: %w[ext/markly/markly.c],
+                                 include: %w[ext/markly], flags: %w[-std=c99 -Wno-unknown-pragmas])
     end
 
-    load_first([ENV["TOPAZ_LIBCMARK_GFM"], "libcmark-gfm.so", "cmark-gfm"],
-               "libcmark-gfm (set TOPAZ_LIBCMARK_GFM to its path)")
+    EXTENSIONS = Topaz::NativeLibrary.find("libcmark-gfm-extensions", env: "TOPAZ_LIBCMARK_GFM_EXTENSIONS",
+                                           names: ["libcmark-gfm-extensions.so", "cmark-gfm-extensions"], build: BUILD)
+    # The extensions register with the cmark-gfm they were built against,
+    # so when they are topaz's build of the gem's sources, so is the parser.
+    PARSER = if EXTENSIONS.start_with?(Topaz::NativeLibrary.cache_dir)
+      EXTENSIONS
+    else
+      Topaz::NativeLibrary.find("libcmark-gfm", env: "TOPAZ_LIBCMARK_GFM", names: ["libcmark-gfm.so", "cmark-gfm"], build: BUILD)
+    end
+    ffi_lib PARSER
 
     [
       [:cmark_get_default_mem_allocator, [], :pointer],
@@ -75,15 +81,7 @@ module Markly
 
     module Extensions
       extend FFI::Library
-      loaded = [ENV["TOPAZ_LIBCMARK_GFM_EXTENSIONS"], "libcmark-gfm-extensions.so", "cmark-gfm-extensions"].compact.any? do |name|
-        begin
-          ffi_lib name
-          true
-        rescue LoadError
-          false
-        end
-      end
-      raise LoadError, "cannot load libcmark-gfm-extensions (set TOPAZ_LIBCMARK_GFM_EXTENSIONS to its path)" unless loaded
+      ffi_lib LibCmark::EXTENSIONS
       attach_function :cmark_gfm_core_extensions_ensure_registered, [], :void
       attach_function :cmark_gfm_extensions_get_table_alignments, [:pointer], :pointer
       attach_function :cmark_gfm_extensions_get_table_columns, [:pointer], :uint16

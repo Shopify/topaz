@@ -446,7 +446,6 @@ class TestExec(BaseTopazTest):
         out = self.fork_and_wait(space, capfd, "exec ['/bin/sh', 'argv0'], '-c', 'echo $0'")
         assert out == "argv0\n"
 
-    @pytest.mark.xfail
     def test_exec_with_path_search(self, space, capfd):
         out = self.fork_and_wait(space, capfd, "exec 'echo', '$0'")
         assert out == "$0\n"

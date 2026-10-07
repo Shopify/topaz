@@ -1,24 +1,24 @@
 # The C half of bcrypt (bcrypt_ext.so): BCrypt::Engine.__bc_salt and
 # __bc_crypt, on libxcrypt's crypt_gensalt_ra and crypt_ra (the same
-# Openwall interface the gem bundles) through FFI. Found by name, or
-# through TOPAZ_LIBCRYPT.
+# Openwall interface the gem bundles) through FFI. Found by name, through
+# TOPAZ_LIBCRYPT, or built from the gem's sources (Topaz::NativeLibrary).
 require "ffi"
+require "topaz/native_library"
 
 module BCrypt
   module LibCrypt
     extend FFI::Library
 
-    candidates = [ENV["TOPAZ_LIBCRYPT"], "libcrypt.so.2", "libcrypt.so.1", "libcrypt.so", "crypt"].compact
-    loaded = false
-    candidates.each do |name|
-      begin
-        ffi_lib name
-        loaded = true
-        break
-      rescue LoadError
-      end
+    # Where there is no libxcrypt (macOS), built from the gem's own copy of
+    # Openwall's crypt_blowfish, which is what bcrypt_ext.so wraps.
+    build = lambda do
+      Topaz::NativeLibrary.build("bcrypt", "crypt_blowfish",
+                                 sources: %w[ext/mri/crypt_blowfish.c ext/mri/crypt_gensalt.c ext/mri/wrapper.c],
+                                 flags: %w[-D__SKIP_GNU], stub_headers: %w[ruby/util.h])
     end
-    raise LoadError, "cannot load libcrypt (set TOPAZ_LIBCRYPT to its path)" unless loaded
+    Topaz::NativeLibrary.load(self, "libcrypt", env: "TOPAZ_LIBCRYPT",
+                              names: ["libcrypt.so.2", "libcrypt.so.1", "libcrypt.so", "crypt"],
+                              build: build)
 
     attach_function :crypt_gensalt_ra, [:string, :ulong, :pointer, :int], :pointer
     attach_function :crypt_ra, [:string, :string, :pointer, :pointer], :pointer

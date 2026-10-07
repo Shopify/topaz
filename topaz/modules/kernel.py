@@ -346,7 +346,7 @@ class Kernel(object):
                 )) for w_arg in args_w[1:]
             ]
             try:
-                os.execv(cmd, args)
+                os.execv(Kernel.find_executable(cmd), args)
             except OSError as e:
                 raise error_for_oserror(space, e)
         else:
@@ -362,6 +362,21 @@ class Kernel(object):
                 os.execv(shell, [argv0, "-c", cmd])
             except OSError as e:
                 raise error_for_oserror(space, e)
+
+    @staticmethod
+    def find_executable(cmd):
+        """The path of the command `exec "cmd", "arg"` runs: as execvp
+        does, a bare name is looked up in PATH."""
+        if os.sep in cmd:
+            return cmd
+        path = os.environ.get("PATH")
+        if not path:
+            return cmd
+        for directory in path.split(os.pathsep):
+            candidate = os.path.join(directory, cmd) if directory else cmd
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+        return cmd
 
     @moduledef.function("fork")
     def method_fork(self, space, block):
