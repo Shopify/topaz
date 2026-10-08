@@ -1,6 +1,7 @@
 import copy
 
 from rpython.rlib import jit
+from rpython.rlib.objectmodel import specialize
 from rpython.rlib.listsort import make_timsort_class
 from rpython.rlib.rarithmetic import intmask, r_uint
 from rpython.rlib.rbigint import rbigint
@@ -47,6 +48,8 @@ def _enum_driver(name):
 each_with_index_driver = _enum_driver("each_with_index")
 each_with_object_driver = _enum_driver("each_with_object")
 include_driver = jit.JitDriver(greens=[], reds="auto", name="Array#include?")
+eq_driver = jit.JitDriver(greens=[], reds="auto", name="Array#==")
+eql_driver = jit.JitDriver(greens=[], reds="auto", name="Array#eql?")
 
 
 def get_enum_scan_location(want, limit, bytecode):
@@ -97,6 +100,13 @@ def hash_step(space, res, w_item):
     else:
         h = space.int_w(w_hash)
     return intmask(r_uint(HASH_MULT) * r_uint(res)) ^ h
+
+
+@specialize.arg(3)
+def item_equal(space, w_a, w_b, name):
+    if w_a is w_b:
+        return True
+    return space.is_true(space.send(w_a, name, [w_b]))
 
 
 class RubySorter(BaseRubySorter):
@@ -561,6 +571,60 @@ class W_ArrayObject(W_Object):
             space.invoke_block(block, [self.items_w[i], w_memo])
             i += 1
         return w_memo
+
+    @classdef.method("==")
+    def method_eq(self, space, w_other):
+        if self is w_other:
+            return space.w_true
+        if not isinstance(w_other, W_ArrayObject):
+            if space.respond_to(w_other, "to_ary"):
+                return space.send(w_other, "==", [self])
+            return space.w_false
+        return space.newbool(self._items_equal(space, w_other, "==", "array_equals"))
+
+    @classdef.method("eql?")
+    def method_eqlp(self, space, w_other):
+        if self is w_other:
+            return space.w_true
+        if not isinstance(w_other, W_ArrayObject):
+            return space.w_false
+        return space.newbool(self._items_equal(space, w_other, "eql?", "array_eqlp"))
+
+    @specialize.arg(3)
+    def _items_equal(self, space, w_other, name, guard):
+        if len(self.items_w) != len(w_other.items_w):
+            return False
+        if jit.isvirtual(self) or jit.isvirtual(w_other):
+            # One side was built by this trace, so its length is a known
+            # constant and it cannot be part of a cycle: compare unrolled.
+            return self._items_equal_unrolled(space, w_other, name)
+        ec = space.getexecutioncontext()
+        with ec.recursion_guard(guard, self) as in_recursion:
+            if in_recursion:
+                return True
+            return self._items_equal_loop(space, w_other, name)
+
+    @jit.unroll_safe
+    @specialize.arg(3)
+    def _items_equal_unrolled(self, space, w_other, name):
+        for i in range(len(self.items_w)):
+            if not item_equal(space, self.items_w[i], w_other.items_w[i], name):
+                return False
+        return True
+
+    @specialize.arg(3)
+    def _items_equal_loop(self, space, w_other, name):
+        i = 0
+        # Lengths are re-read: a user-defined == may mutate either array.
+        while i < len(self.items_w) and i < len(w_other.items_w):
+            if name == "==":
+                eq_driver.jit_merge_point()
+            else:
+                eql_driver.jit_merge_point()
+            if not item_equal(space, self.items_w[i], w_other.items_w[i], name):
+                return False
+            i += 1
+        return len(self.items_w) == len(w_other.items_w)
 
     @classdef.method("include?")
     @classdef.method("member?")

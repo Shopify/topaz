@@ -414,6 +414,24 @@ class TestArrayObject(BaseTopazTest):
         assert w_res is space.w_false
         w_res = space.execute("return [0].eql? [0]")
         assert w_res is space.w_true
+        w_res = space.execute("""
+        a = [1]; a << a
+        b = [1]; b << b
+        class ToAry; def to_ary; [1, 2]; end; def ==(o); o == [1, 2]; end; end
+        class Sub < Array; end
+        return [
+          a == a.dup, a.eql?(a.dup), a.eql?([1, 2]),
+          [1, 2] == ToAry.new, [1, 2].eql?(ToAry.new), [1, 2] == Object.new,
+          [1, 2] == Sub[1, 2], Sub[1, 2].eql?([1, 2]), [1, 2] == [1.0, 2.0],
+          [[1, [2]]] == [[1, [2]]], [[1, [2]]] == [[1, [3]]],
+        ]
+        """)
+        assert self.unwrap(space, w_res) == [
+            True, True, False,
+            True, False, False,
+            True, True, True,
+            True, False,
+        ]
 
     def test_clear(self, space):
         w_res = space.execute("""

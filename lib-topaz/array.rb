@@ -132,30 +132,6 @@ class Array
     Array.new(self).sort_by!(&block)
   end
 
-  def ==(other)
-    if self.equal?(other)
-      return true
-    end
-    if !other.kind_of?(Array)
-      if other.respond_to?(:to_ary)
-        return other == self
-      else
-        return false
-      end
-    end
-    if self.size != other.size
-      return false
-    end
-    Thread.current.recursion_guard(:array_equals, self) do
-      self.each_with_index do |x, i|
-        if x != other[i]
-          return false
-        end
-      end
-    end
-    return true
-  end
-
   def <=>(other)
     return 0 if self.equal?(other)
     other = Array.try_convert(other)
@@ -170,26 +146,6 @@ class Array
       return 0
     end
     nil
-  end
-
-  def eql?(other)
-    if self.equal?(other)
-      return true
-    end
-    if !other.kind_of?(Array)
-      return false
-    end
-    if self.length != other.length
-      return false
-    end
-    Thread.current.recursion_guard(:array_eqlp, self) do
-      self.each_with_index do |x, i|
-        if !x.eql?(other[i])
-          return false
-        end
-      end
-    end
-    return true
   end
 
   def map!(&block)
