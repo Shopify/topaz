@@ -1,6 +1,6 @@
 from rpython.rlib import jit, rstackovf, rvmprof
 from rpython.rlib.debug import check_nonneg
-from rpython.rlib.objectmodel import we_are_translated, specialize, always_inline
+from rpython.rlib.objectmodel import we_are_translated
 
 from topaz import consts
 from topaz.error import RubyError
@@ -137,50 +137,49 @@ class Interpreter(object):
     def handle_bytecode(self, space, pc, frame, bytecode):
         instr = ord(bytecode.code[pc])
         pc += 1
-        if we_are_translated():
-            for i, name in consts.UNROLLING_BYTECODES:
-                if i == instr:
-                    pc = self.run_instr(
-                        space, name, consts.BYTECODE_NUM_ARGS[i],
-                        bytecode, frame, pc)
-                    break
-            else:
-                raise SystemError
-        else:
-            pc = self.run_instr(
-                space, consts.BYTECODE_NAMES[instr],
-                consts.BYTECODE_NUM_ARGS[instr], bytecode, frame, pc)
-        return pc
-
-    @specialize.arg(2, 3)
-    @always_inline
-    def run_instr(self, space, name, num_args, bytecode, frame, pc):
-        args = ()
+        num_args = consts.BYTECODE_NUM_ARGS[instr]
+        arg0 = 0
+        arg1 = 0
         # Do not change these from * 256 to << 8, lshift has defined overflow
         # semantics which cause it to not propagate the nonnegative-ness.
         if num_args >= 1:
-            v = ord(bytecode.code[pc]) | (ord(bytecode.code[pc + 1]) * 256)
-            check_nonneg(v)
-            args += (v,)
+            arg0 = ord(bytecode.code[pc]) | (ord(bytecode.code[pc + 1]) * 256)
+            check_nonneg(arg0)
             pc += 2
         if num_args >= 2:
-            v = ord(bytecode.code[pc]) | (ord(bytecode.code[pc + 1]) * 256)
-            check_nonneg(v)
-            args += (v,)
+            arg1 = ord(bytecode.code[pc]) | (ord(bytecode.code[pc + 1]) * 256)
+            check_nonneg(arg1)
             pc += 2
         if num_args >= 3:
             raise NotImplementedError
 
-        method = getattr(self, name)
         try:
-            res = method(space, bytecode, frame, pc, *args)
+            if we_are_translated():
+                for i, name in consts.UNROLLING_BYTECODES:
+                    if i == instr:
+                        method = getattr(self, name)
+                        n = consts.BYTECODE_NUM_ARGS[i]
+                        if n == 0:
+                            res = method(space, bytecode, frame, pc)
+                        elif n == 1:
+                            res = method(space, bytecode, frame, pc, arg0)
+                        else:
+                            res = method(space, bytecode, frame, pc, arg0, arg1)
+                        if res is not None:
+                            pc = res
+                        break
+                else:
+                    raise SystemError
+            else:
+                method = getattr(self, consts.BYTECODE_NAMES[instr])
+                args = [arg0, arg1][:num_args]
+                res = method(space, bytecode, frame, pc, *args)
+                if res is not None:
+                    pc = res
         except RaiseBreak as e:
             if e.parent_interp is not self:
                 raise
             frame.push(e.w_value)
-            res = None
-        if res is not None:
-            pc = res
         return pc
 
     def handle_ruby_error(self, space, pc, frame, bytecode, e):
