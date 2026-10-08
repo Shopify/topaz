@@ -630,6 +630,14 @@ class W_StringObject(W_Object):
             self.set_instance_var(space, "@__topaz_encoding", space.encoding_binary())
         return self
 
+    @classdef.method("b")
+    def method_b(self, space):
+        # A plain String copy of the bytes, tagged binary; in Ruby this
+        # was dup + force_encoding, two more frames per call.
+        w_res = W_StringObject(space, self.strategy.copy(self.str_storage), self.strategy)
+        w_res.set_instance_var(space, "@__topaz_encoding", space.encoding_binary())
+        return w_res
+
     @classdef.method("initialize_copy")
     def method_initialize_copy(self, space, w_other):
         assert isinstance(w_other, W_StringObject)

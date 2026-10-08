@@ -448,11 +448,6 @@ class String
     self
   end
 
-  def b
-    s = dup
-    s.force_encoding(Encoding::BINARY)
-  end
-
   # These keep the encoding tag, which lives in an instance variable the
   # RPython methods do not see.
   alias __topaz_times *

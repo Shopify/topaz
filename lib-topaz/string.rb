@@ -254,10 +254,6 @@ class String
   def self.try_convert(arg)
     Topaz.try_convert_type(arg, String, :to_str)
   end
-
-  def b
-    self
-  end
 end
 
 class String

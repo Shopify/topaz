@@ -162,6 +162,20 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute("return 'abc'.eql? 'abc'")
         assert w_res is space.w_true
 
+    def test_b(self, space):
+        w_res = space.execute("""
+        class MyStr < String; end
+        s = "ab\\xc3\\xa9"
+        s.instance_variable_set(:@x, 1)
+        b = s.b
+        b << "z"
+        return [b, b.encoding.to_s, s.encoding.to_s, s, b.class.name, MyStr.new("q").b.class.name,
+                b.instance_variable_get(:@x), b.frozen?, "x".freeze.b.frozen?]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "ab\xc3\xa9z", "ASCII-8BIT", "UTF-8", "ab\xc3\xa9", "String", "String",
+            None, False, False]
+
     def test_hash(self, space):
         w_res = space.execute("""
         return ['abc'.hash, ('a' << 'b' << 'c').hash]
