@@ -2,6 +2,7 @@ import copy
 
 from rpython.rlib import jit
 from rpython.rlib.listsort import make_timsort_class
+from rpython.rlib.rarithmetic import intmask, r_uint
 from rpython.rlib.rbigint import rbigint
 
 from topaz.coerce import Coerce
@@ -9,6 +10,7 @@ from topaz.module import ClassDef, check_frozen
 from topaz.modules.enumerable import Enumerable
 from topaz.objects.objectobject import W_Object
 from topaz.objects.intobject import W_FixnumObject
+from topaz.objects.bignumobject import W_BignumObject
 from topaz.utils.packing.pack import RPacker
 
 
@@ -29,6 +31,29 @@ each_driver = jit.JitDriver(
     greens=["bytecode"], reds="auto", name="Array#each",
     get_printable_location=get_each_location,
 )
+
+
+# Array#hash was Ruby code (Thread.current.recursion_guard around an each
+# with the running value in a closure cell): every element cost a block frame,
+# a cell write and boxed arithmetic, and Rails hashes arrays all the time
+# (`[self.class, name, value, type].hash` is an attribute's hash). Here the
+# loop is either unrolled into the caller's trace (a fresh array literal) or
+# a loop of its own.
+hash_driver = jit.JitDriver(greens=[], reds="auto", name="Array#hash")
+
+HASH_SEED = 0x345678
+HASH_MULT = 1000003
+
+
+def hash_step(space, res, w_item):
+    w_hash = space.send(w_item, "hash")
+    if isinstance(w_hash, W_FixnumObject):
+        h = w_hash.intvalue
+    elif isinstance(w_hash, W_BignumObject):
+        h = w_hash.intmask_w(space)
+    else:
+        h = space.int_w(w_hash)
+    return intmask(r_uint(HASH_MULT) * r_uint(res)) ^ h
 
 
 class RubySorter(BaseRubySorter):
@@ -390,6 +415,35 @@ class W_ArrayObject(W_Object):
     def method_sort_i(self, space, block):
         RubySorter(space, self.items_w, sortblock=block).sort()
         return self
+
+    @classdef.method("hash")
+    def method_hash(self, space):
+        if jit.isvirtual(self):
+            # Built by this very trace, so nothing else refers to it: it
+            # cannot contain itself, and its length is a known constant.
+            return space.newint(self._hash_unrolled(space))
+        res = HASH_SEED
+        ec = space.getexecutioncontext()
+        with ec.recursion_guard("array_hash", self) as in_recursion:
+            if not in_recursion:
+                res = self._hash_loop(space)
+        return space.newint(res)
+
+    @jit.unroll_safe
+    def _hash_unrolled(self, space):
+        res = HASH_SEED
+        for w_item in self.items_w:
+            res = hash_step(space, res, w_item)
+        return res
+
+    def _hash_loop(self, space):
+        res = HASH_SEED
+        i = 0
+        while i < len(self.items_w):
+            hash_driver.jit_merge_point()
+            res = hash_step(space, res, self.items_w[i])
+            i += 1
+        return res
 
     @classdef.method("each")
     def method_each(self, space, block):

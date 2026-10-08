@@ -230,17 +230,6 @@ class Array
     return true
   end
 
-  def hash
-    res = 0x345678
-    Thread.current.recursion_guard(:array_hash, self) do
-      self.each do |x|
-        # We want to keep this within a fixnum range.
-        res = Topaz.intmask((1000003 * res) ^ x.hash)
-      end
-    end
-    return res
-  end
-
   def map!(&block)
     return self.enum_for(:map!) unless block
     raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?

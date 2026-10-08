@@ -359,6 +359,25 @@ class TestArrayObject(BaseTopazTest):
         w_res = space.execute("return {[1, 2, 3] => 5}[[1, 2]]")
         assert w_res is space.w_nil
 
+    def test_hash(self, space):
+        w_res = space.execute("""
+        a = [1, "two", :three, nil, 4.5, [6]]
+        b = [1, "two", :three, nil, 4.5, [6]]
+        r = []
+        r << (a.hash == b.hash)
+        r << (a.hash == [1, "two"].hash)
+        r << ([].hash == [].hash)
+        r << ([2 ** 70].hash == [2 ** 70].hash)
+        x = []
+        x << x
+        r << (x.hash == x.hash)
+        r << (x.hash.is_a?(Integer))
+        class H; def hash; 2 ** 65; end; end
+        r << ([H.new].hash == [H.new].hash)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [True, False, True, True, True, True, True]
+
     def test_sort(self, space):
         w_res = space.execute("""
         a = [3, 2, 1]
