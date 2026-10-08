@@ -65,11 +65,20 @@ A translated Topaz can record Ruby call stacks with vmprof. Set
 
     $ TOPAZ_VMPROF=/tmp/topaz.prof bin/topaz program.rb
 
-This overwrites the output file and samples CPU time every millisecond,
+This overwrites the output file and samples CPU time every 10 milliseconds,
 including startup, required libraries, and ``at_exit`` handlers. Normal
 exit, Ruby ``exit``, and unhandled Ruby exceptions finish the profile before
 closing it. Forced termination (for example, SIGKILL or ``exit!``) can leave
 an incomplete profile.
+
+Set ``TOPAZ_VMPROF_INTERVAL`` to override the interval in seconds. For
+example, to sample every 100 ms::
+
+    $ TOPAZ_VMPROF=/tmp/topaz.prof TOPAZ_VMPROF_INTERVAL=0.1 bin/topaz program.rb
+
+The interval must be at least 0.000001 seconds and less than 1 second.
+Longer intervals reduce sampling overhead, especially for deep native stacks.
+The setting is only read when ``TOPAZ_VMPROF`` enables profiling.
 
 Install the Python ``vmprof`` package in a separate environment to inspect
 the recording::

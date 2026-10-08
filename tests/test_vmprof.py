@@ -10,13 +10,13 @@ class FakeSpace(object):
         pass
 
 
-def prepare(monkeypatch, tmpdir):
+def prepare(monkeypatch, tmpdir, expected_interval=0.01):
     path = str(tmpdir.join("topaz.prof"))
     events = []
     fds = []
 
     def enable(fd, interval, native):
-        assert interval == 0.001
+        assert interval == expected_interval
         assert native == 1
         fds.append(fd)
         events.append("enable")
@@ -26,6 +26,7 @@ def prepare(monkeypatch, tmpdir):
         events.append("disable")
         os.write(fds[0], "trailer")
 
+    monkeypatch.delenv("TOPAZ_VMPROF_INTERVAL", raising=False)
     monkeypatch.setenv("TOPAZ_VMPROF", path)
     monkeypatch.setattr(main, "we_are_translated", lambda: True)
     monkeypatch.setattr(main, "VMPROF_SUPPORTED", True)
@@ -163,3 +164,31 @@ def test_unavailable(monkeypatch, tmpdir, capfd, translated, supported):
     assert not events
     assert not os.path.exists(path)
     assert "requires a translated build" in capfd.readouterr()[1]
+
+
+@pytest.mark.parametrize("value", ["0.1", "0.005", "0.000001", "0.999999"])
+def test_custom_interval(monkeypatch, tmpdir, value):
+    path, events, fds = prepare(monkeypatch, tmpdir, float(value))
+    monkeypatch.setenv("TOPAZ_VMPROF_INTERVAL", value)
+    monkeypatch.setattr(main, "_entry_point", lambda space, argv: 0)
+    assert main._run_with_vmprof(FakeSpace(), ["topaz"]) == 0
+    assert events == ["enable", "disable"]
+
+
+@pytest.mark.parametrize("value", ["", "oops", "0", "-1", "1", "0.0000001",
+                                   "nan", "inf", "-inf", "1e999"])
+def test_invalid_interval_preserves_output(monkeypatch, tmpdir, capfd, value):
+    path, events, fds = prepare(monkeypatch, tmpdir)
+    with open(path, "w") as output:
+        output.write("existing profile")
+    monkeypatch.setenv("TOPAZ_VMPROF_INTERVAL", value)
+    assert main._run_with_vmprof(FakeSpace(), ["topaz"]) == 1
+    assert "TOPAZ_VMPROF_INTERVAL must be seconds" in capfd.readouterr()[1]
+    assert not events
+    with open(path) as output:
+        assert output.read() == "existing profile"
+
+
+def test_interval_rtyping():
+    from rpython.rtyper.test.test_llinterp import gengraph
+    gengraph(main._get_vmprof_interval, [])

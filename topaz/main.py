@@ -80,6 +80,16 @@ def create_entry_point(config):
     return entry_point
 
 
+def _get_vmprof_interval():
+    value = os.environ.get("TOPAZ_VMPROF_INTERVAL")
+    if value is None:
+        return 0.01
+    try:
+        return float(value)
+    except ValueError:
+        return 0.0
+
+
 def _run_with_vmprof(space, argv):
     profile_path = os.environ.get("TOPAZ_VMPROF")
     fd = -1
@@ -87,13 +97,18 @@ def _run_with_vmprof(space, argv):
         if not we_are_translated() or not VMPROF_SUPPORTED:
             os.write(2, "topaz: vmprof requires a translated build on a supported platform\n")
             return 1
+        interval = _get_vmprof_interval()
+        # Match vmprof's supported range, also rejecting NaN and infinity.
+        if not (1e-6 <= interval < 1.0):
+            os.write(2, "topaz: TOPAZ_VMPROF_INTERVAL must be seconds >= 0.000001 and < 1.0\n")
+            return 1
         try:
             fd = os.open(profile_path, os.O_RDWR | os.O_CREAT | os.O_TRUNC, 0666)
         except OSError as e:
             os.write(2, "topaz: cannot open vmprof output: %s\n" % os.strerror(e.errno))
             return 1
         try:
-            rvmprof.enable(fd, 0.001, native=int(NATIVE_SUPPORTED))
+            rvmprof.enable(fd, interval, native=int(NATIVE_SUPPORTED))
         except rvmprof.VMProfError as e:
             os.close(fd)
             os.write(2, "topaz: cannot enable vmprof: %s\n" % e.msg)
