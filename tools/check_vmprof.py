@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check a translated Topaz with the standard vmprof reader.
 
-Usage: python3 tools/check_vmprof.py bin/topaz [--native]
+Usage: python3 tools/check_vmprof.py bin/topaz [--native] [--jit]
 Requires the Python vmprof package. No JIT is required.
 """
 import os
@@ -11,6 +11,7 @@ import sys
 import tempfile
 
 import vmprof
+from vmprof.reader import JittedCode
 
 
 SOURCE = """
@@ -78,10 +79,14 @@ end
 """
 
 
-def check(binary, directory, ending, status, native=False):
+def check(binary, directory, ending, status, native=False, jit=False):
     script = directory / ("case%d.rb" % status)
     profile = directory / ("case%d.prof" % status)
-    script.write_text(SOURCE % ending)
+    source = SOURCE % ending
+    if jit:
+        # Keep each phase long enough to sample after its loops compile.
+        source = source.replace("100_000", "100_000_000")
+    script.write_text(source)
     env = dict(os.environ, TOPAZ_VMPROF=str(profile))
     result = subprocess.run([binary, str(script)], env=env,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -107,6 +112,14 @@ def check(binary, directory, ending, status, native=False):
             assert "fiber_work" not in stack, "suspended Fiber leaked into main stack"
         if "rescued_work" in stack:
             assert "raised_work" not in stack, "exception left a stale frame"
+    if jit:
+        compiled = [sample for sample in stats.profiles
+                    if any(isinstance(addr, JittedCode) and
+                           stats.get_addr_info(addr) is not None and
+                           stats.get_addr_info(addr)[1] == "burn"
+                           for addr in sample[0])]
+        assert compiled, "no samples inside JIT-compiled burn"
+        print("  %d samples inside JIT-compiled burn" % len(compiled))
     # Exercise the same tree construction used by vmprofshow.
     assert stats.get_tree() is not None
     if native:
@@ -133,7 +146,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="topaz-vmprof-check-") as path:
         directory = Path(path)
         for ending, status in (("", 0), ("exit 7", 7), ('raise "unhandled"', 1)):
-            check(binary, directory, ending, status, "--native" in sys.argv[2:])
+            check(binary, directory, ending, status,
+                  "--native" in sys.argv[2:], "--jit" in sys.argv[2:])
 
 
 if __name__ == "__main__":

@@ -104,7 +104,10 @@ with the viewer environment::
     $ /tmp/vmprof-viewer/bin/python tools/check_vmprof.py bin/topaz
 
 Add ``--native`` to also require native samples, resolved symbols, and mixed
-Ruby/native stacks in the smoke test.
+Ruby/native stacks in the smoke test. For a JIT build, add ``--jit`` to run
+longer loops and also require samples from JIT-compiled Ruby code::
+
+    $ /tmp/vmprof-viewer/bin/python tools/check_vmprof.py bin/topaz --native --jit
 
 .. _`PyPy`: https://github.com/pypy/pypy
 .. _`Prism`: https://github.com/ruby/prism
