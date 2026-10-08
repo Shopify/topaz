@@ -7,6 +7,16 @@ from ..base import BaseTopazTest
 
 
 class TestBignumObject(BaseTopazTest):
+    def test_gcd(self, space):
+        w_res = space.execute("""
+        return [(2**70).gcd(2**65), (-2**70).gcd(-2**71), (2**64).gcd(2**64),
+                (2**100 * 6).gcd(2**100 * 4), (2**70).gcd(6), 6.gcd(2**70)].map(&:to_s)
+        """)
+        assert self.unwrap(space, w_res) == [
+            str(2 ** 65), str(2 ** 70), str(2 ** 64), str(2 ** 101), "2", "2"]
+        with self.raises(space, "TypeError"):
+            space.execute("(2**70).gcd(1.5)")
+
     def test_mixed_integer_operations(self, space):
         from topaz.objects.bignumobject import W_BignumObject
         from topaz.objects.intobject import W_FixnumObject

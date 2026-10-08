@@ -259,6 +259,16 @@ class W_BignumObject(W_IntegerObject):
                 )
             )
 
+    @classdef.method("gcd")
+    def method_gcd(self, space, w_other):
+        if space.is_kind_of(w_other, space.w_fixnum):
+            other = rbigint.fromint(space.int_w(w_other))
+        elif space.is_kind_of(w_other, space.w_bignum):
+            other = space.bigint_w(w_other)
+        else:
+            raise space.error(space.w_TypeError, "not an integer")
+        return space.newbigint_fromrbigint(self.bigint.gcd(other))
+
     @classdef.method("%")
     @classdef.method("modulo")
     def method_mod(self, space, w_other):

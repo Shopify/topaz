@@ -131,13 +131,6 @@ class Integer
     -(-self).div(other)
   end
 
-  def gcd(other)
-    a = abs
-    b = other.abs
-    a, b = b, a % b while b != 0
-    a
-  end
-
   def lcm(other)
     return 0 if self == 0 || other == 0
     (self * other).abs / gcd(other)
