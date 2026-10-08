@@ -68,6 +68,7 @@ select_driver = _enum_driver("select")
 map_driver = _enum_driver("map")
 reject_driver = _enum_driver("reject")
 delete_if_driver = _enum_driver("delete_if")
+reverse_each_driver = _enum_driver("reverse_each")
 
 
 # Array#hash was Ruby code (Thread.current.recursion_guard around an each
@@ -702,6 +703,21 @@ class W_ArrayObject(W_Object):
             i += 1
         if kept < len(self.items_w):
             del self.items_w[kept:]
+        return self
+
+    @classdef.method("reverse_each")
+    def method_reverse_each(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("reverse_each")])
+        bytecode = block.bytecode
+        i = len(self.items_w) - 1
+        while i >= 0:
+            reverse_each_driver.jit_merge_point(bytecode=bytecode)
+            space.invoke_block(block, [self.items_w[i]])
+            # The block may have shortened the array.
+            if len(self.items_w) < i:
+                i = len(self.items_w)
+            i -= 1
         return self
 
     @classdef.method("sort_by!")

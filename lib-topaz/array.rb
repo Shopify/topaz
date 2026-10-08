@@ -255,16 +255,6 @@ class Array
     Array.new(self).reverse!
   end
 
-  def reverse_each(&block)
-    return self.enum_for(:reverse_each) unless block
-    i = self.length - 1
-    while i >= 0
-      yield self[i]
-      i -= 1
-    end
-    return self
-  end
-
   def index(obj = nil, &block)
     return self.enum_for(:index) if !obj && !block
     each_with_index do |e, i|

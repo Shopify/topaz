@@ -313,6 +313,17 @@ class TestArrayObject(BaseTopazTest):
         with self.raises(space, "FrozenError"):
             space.execute("[1].freeze.delete_if { true }")
 
+    def test_reverse_each(self, space):
+        w_res = space.execute("""
+        r = []
+        a = [1, 2, 3]
+        res = a.reverse_each { |x| r << x }
+        b = [1, 2, 3, 4]
+        b.reverse_each { |x| r << x; b.shift }
+        return [r, res.equal?(a), [].reverse_each.class.name]
+        """)
+        assert self.unwrap(space, w_res) == [[3, 2, 1, 4, 4, 4, 4], True, "Enumerator"]
+
     def test_shift(self, space):
         w_res = space.execute("return [].shift")
         assert w_res is space.w_nil
