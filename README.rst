@@ -95,20 +95,9 @@ addresses while the process is still alive and saves the symbols in the
 profile. On Linux, ELF symbol tables supply local C function names even
 without debug information; keep debug information for source lines as well.
 Addresses without symbols are shown as
-``<native symbol 0x...>``. Symbol resolution adds time at shutdown, outside
-the recorded interval. Per-line Ruby sampling is not enabled. RPython
-currently labels the interpreter in the file header as ``pypy``; the Ruby
-frames themselves use ``rb``. Recording requires a translated executable on
-a platform supported by RPython's vmprof; running ``pypy -m topaz`` is not
-supported for recording Ruby stacks.
-
-To build without the JIT, replace ``-Ojit`` with ``-O2`` in the build command::
-
-    $ pypy /path/to/pypy/rpython/bin/rpython -O2 targettopaz.py
-
-The translated profiling smoke test checks Ruby caller stacks, Fiber
-yield/resume and completion, exception unwinding, and exit handlers. Run it
-with the viewer environment::
+``<native symbol 0x...>``. The translated profiling smoke test checks Ruby
+caller stacks, Fiber yield/resume and completion, exception unwinding, and exit
+handlers. Run it with the viewer environment::
 
     $ /tmp/vmprof-viewer/bin/python tools/check_vmprof.py bin/topaz
 
