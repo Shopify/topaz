@@ -39,6 +39,8 @@ INSPECT_ESCAPES = {
 
 HEX_DIGITS = "0123456789ABCDEF"
 
+unpack_utf8_driver = jit.JitDriver(greens=[], reds="auto", name="String#unpack(U)")
+
 
 def _utf8_sequence_length(s, i):
     """The length of the valid UTF-8 sequence starting at s[i], or 0."""
@@ -737,6 +739,55 @@ class W_StringObject(W_Object):
     @classdef.method("empty?")
     def method_emptyp(self, space):
         return space.newbool(self.length() == 0)
+
+    @classdef.method("__topaz_unpack_utf8", count="int")
+    def method_unpack_utf8(self, space, count):
+        """unpack("U") / unpack("U*") from byte 0: the codepoints of up to
+        `count` UTF-8 characters (all of them when count < 0), with
+        MRI's errors for malformed input (lib-topaz/pack.rb's Ruby
+        decoder handles the other templates)."""
+        storage = self.str_storage
+        strategy = self.strategy
+        length = strategy.length(storage)
+        pos = 0
+        result_w = []
+        while pos < length and count != 0:
+            unpack_utf8_driver.jit_merge_point()
+            b = ord(strategy.getitem(storage, pos))
+            if b < 0x80:
+                result_w.append(space.newint(b))
+                pos += 1
+                count -= 1
+                continue
+            elif b & 0xe0 == 0xc0:
+                n = 1
+                cp = b & 0x1f
+                minimum = 0x80
+            elif b & 0xf0 == 0xe0:
+                n = 2
+                cp = b & 0x0f
+                minimum = 0x800
+            elif b & 0xf8 == 0xf0:
+                n = 3
+                cp = b & 0x07
+                minimum = 0x10000
+            else:
+                raise space.error(space.w_ArgumentError, "malformed UTF-8 character")
+            if pos + n >= length:
+                raise space.error(space.w_ArgumentError,
+                    "malformed UTF-8 character (expected %d bytes, given %d bytes)"
+                    % (n + 1, length - pos))
+            for k in range(1, n + 1):
+                c = ord(strategy.getitem(storage, pos + k))
+                if c & 0xc0 != 0x80:
+                    raise space.error(space.w_ArgumentError, "malformed UTF-8 character")
+                cp = (cp << 6) | (c & 0x3f)
+            if cp < minimum:
+                raise space.error(space.w_ArgumentError, "redundant UTF-8 sequence")
+            result_w.append(space.newint(cp))
+            pos += n + 1
+            count -= 1
+        return space.newarray(result_w)
 
     @classdef.method("__topaz_escape_html")
     def method_escape_html(self, space):

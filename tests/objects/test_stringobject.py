@@ -92,6 +92,26 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute("return 'ABC'.size")
         assert space.int_w(w_res) == 3
 
+    def test_unpack_utf8(self, space):
+        w_res = space.execute("""
+        def t; yield; rescue ArgumentError => e; e.message; end
+        return [
+          "\\xc3\\xa9".unpack("U"), "a\\xc3\\xa9\\xe2\\x82\\xac\\xf0\\x9d\\x84\\x9e".unpack("U*"),
+          "a\\xc3\\xa9".unpack("U"), "".unpack("U"), "".unpack1("U"), "\\xc3\\xa9".unpack1("U"),
+          "ab".unpack("U*", offset: 1), t { "\\xff".unpack("U") },
+          t { "\\xc3".unpack("U") }, t { "\\xc0\\x80".unpack("U") },
+          t { "\\xc3a".unpack("U") }, "\\xed\\xa0\\x80".unpack("U"),
+        ]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [233], [97, 233, 8364, 119070],
+            [97], [], None, 233,
+            [98], "malformed UTF-8 character",
+            "malformed UTF-8 character (expected 2 bytes, given 1 bytes)",
+            "redundant UTF-8 sequence",
+            "malformed UTF-8 character", [55296],
+        ]
+
     def test_emptyp(self, space):
         w_res = space.execute("return ''.empty?")
         assert w_res is space.w_true

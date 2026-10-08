@@ -667,14 +667,23 @@ class Array
 end
 
 class String
+  # "U" and "U*" (htmlentities decodes every character with unpack("U"))
+  # have an RPython decoder; the other templates go through Topaz::Pack.
   def unpack(template, offset: 0, &block)
-    result = Topaz::Pack.unpack(self, template, offset, false)
+    if offset == 0 && (template == "U" || template == "U*")
+      result = __topaz_unpack_utf8(template.bytesize == 1 ? 1 : -1)
+    else
+      result = Topaz::Pack.unpack(self, template, offset, false)
+    end
     return result unless block
     result.each(&block)
     nil
   end
 
   def unpack1(template, offset: 0)
+    if offset == 0 && (template == "U" || template == "U*")
+      return __topaz_unpack_utf8(1)[0]
+    end
     Topaz::Pack.unpack(self, template, offset, true)
   end
 end
