@@ -799,11 +799,16 @@ class ObjectSpace(object):
         error.w_value.set_instance_var(self, "@receiver", w_obj)
         return error
 
-    def send_super_from(self, w_owner, w_receiver, name, args_w, block=None):
+    def send_super_from(self, w_owner, w_receiver, name, args_w, block=None,
+                        occurrence=0):
         """`super` in a method defined in w_owner: the next method in the
         receiver's ancestors."""
         w_cls = self.getclass(w_receiver)
-        raw_method = w_cls.find_method_after(self, w_owner, name)
+        raw_method, next_occurrence = w_cls.find_method_after_with_occurrence(
+            self, w_owner, name, occurrence)
+        if raw_method is not None:
+            return raw_method.call_with_super(
+                self, w_receiver, args_w, block, next_occurrence)
         return self._send_raw(
             name, raw_method, w_receiver, w_cls, args_w, block)
 
@@ -835,6 +840,7 @@ class ObjectSpace(object):
             regexp_match_cell=block.regexp_match_cell,
         )
         frame.w_owner = block.w_owner
+        frame.super_occurrence = block.super_occurrence
         frame.super_name = block.super_name
         if block.is_lambda:
             frame.handle_args(self, bc, args_w, block_arg)

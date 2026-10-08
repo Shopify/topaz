@@ -5,6 +5,67 @@ from .base import BaseTopazTest
 
 
 class TestModuleMutations(BaseTopazTest):
+    @pytest.mark.parametrize("body", [
+        "[:m] + super",
+        "[:m] + super()",
+        "[:m] + super(*[])",
+        "[:m] + proc { super() }.call",
+    ])
+    @pytest.mark.parametrize("definition", [
+        "def f; %s; end", "define_method(:f) { %s }",
+        "def f; %s; end; define_method(:f, instance_method(:f))",
+    ])
+    @pytest.mark.parametrize("hierarchy", [
+        "class User < Base; include Middle; include Repeat; end; Middle.include(Repeat)",
+        "class Parent < Base; include Repeat; end; "
+        "class User < Parent; include Middle; prepend Repeat; end",
+    ])
+    def test_super_through_repeated_module(self, space, body, definition, hierarchy):
+        # Bound the recursion so a broken lookup fails without a stack overflow.
+        body = "$calls += 1; return [:cycle] if $calls > 5; " + body
+        if "define_method" in definition and body.endswith("super"):
+            body += "()"
+        w_res = space.execute("""
+        $calls = 0
+        module Repeat; %s; end
+        module Middle; def f; [:middle] + super; end; end
+        class Base; def f; [:base]; end; end
+        %s
+        return User.new.f
+        """ % (definition % body, hierarchy))
+        assert self.unwrap(space, w_res) == ["m", "middle", "m", "base"]
+
+    def test_saved_super_blocks_retain_separate_occurrences(self, space):
+        w_res = space.execute("""
+        module Repeat; def f; [:m, proc { super() }]; end; end
+        module Middle; def f; [:middle, super]; end; end
+        class Base; def f; [:base]; end; end
+        class User < Base; include Middle; include Repeat; end
+        Middle.include(Repeat)
+        first = User.new.f
+        middle = first[1].call
+        second = middle[1]
+        return [first[0], middle[0], second[0], second[1].call]
+        """)
+        assert self.unwrap(space, w_res) == ["m", "middle", "m", ["base"]]
+
+    def test_defined_super_at_last_repeated_module(self, space):
+        w_res = space.execute("""
+        $calls = 0
+        module Repeat
+          def f
+            $calls += 1
+            return [:cycle] if $calls > 5
+            [defined?(super)] + (defined?(super) ? super : [])
+          end
+        end
+        module Middle; def f; super; end; end
+        class User; include Middle; include Repeat; end
+        Middle.include(Repeat)
+        return User.new.f
+        """)
+        assert self.unwrap(space, w_res) == ["super", None]
+
     @pytest.mark.parametrize("use", ["include", "prepend"])
     @pytest.mark.parametrize("change", ["include", "prepend"])
     def test_late_ancestor_updates_existing_users(self, space, use, change):

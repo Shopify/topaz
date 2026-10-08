@@ -33,6 +33,9 @@ class W_FunctionObject(W_BaseObject):
     def is_undefined(self):
         return False
 
+    def call_with_super(self, space, w_receiver, args_w, block, occurrence):
+        return self.call(space, w_receiver, args_w, block)
+
     def arity(self, space):
         return space.newint(0)
 
@@ -61,6 +64,9 @@ class W_VisibilityFunction(W_FunctionObject):
 
     def call(self, space, w_receiver, args_w, block):
         return self.method.call(space, w_receiver, args_w, block)
+
+    def call_with_super(self, space, w_receiver, args_w, block, occurrence):
+        return self.method.call_with_super(space, w_receiver, args_w, block, occurrence)
 
     def arity(self, space):
         return self.method.arity(space)
@@ -95,6 +101,9 @@ class W_UserFunction(W_FunctionObject):
         return w_copy
 
     def call(self, space, w_receiver, args_w, block):
+        return self.call_with_super(space, w_receiver, args_w, block, 0)
+
+    def call_with_super(self, space, w_receiver, args_w, block, occurrence):
         frame = space.create_frame(
             self.bytecode,
             w_self=w_receiver,
@@ -102,6 +111,7 @@ class W_UserFunction(W_FunctionObject):
             block=block,
         )
         frame.w_owner = self.w_owner
+        frame.super_occurrence = occurrence
         with space.getexecutioncontext().visit_frame(frame):
             frame.handle_args(space, self.bytecode, args_w, block)
             return space.execute_frame(frame, self.bytecode)

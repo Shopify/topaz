@@ -88,11 +88,15 @@ class DefineMethodBlock(W_FunctionObject):
         return method
 
     def call(self, space, w_obj, args_w, block):
+        return self.call_with_super(space, w_obj, args_w, block, 0)
+
+    def call_with_super(self, space, w_obj, args_w, block, occurrence):
         from topaz.interpreter import RaiseReturn
 
         method_block = self.block.copy(space, w_self=w_obj, is_lambda=True)
         if self.w_owner is not None:
             method_block.w_owner = self.w_owner
+        method_block.super_occurrence = occurrence
         method_block.super_name = self.name
         try:
             return space.invoke_block(method_block, args_w, block)
@@ -117,6 +121,14 @@ class DefineMethodMethod(W_FunctionObject):
     def call(self, space, w_obj, args_w, block):
         w_bound_method = space.send(self.w_unbound_method, "bind", [w_obj])
         return space.send(w_bound_method, "call", args_w, block)
+
+    def call_with_super(self, space, w_obj, args_w, block, occurrence):
+        from topaz.objects.methodobject import W_MethodObject
+
+        w_bound_method = space.send(self.w_unbound_method, "bind", [w_obj])
+        assert isinstance(w_bound_method, W_MethodObject)
+        return w_bound_method.w_function.call_with_super(
+            space, w_obj, args_w, block, occurrence)
 
     def parameters(self, space):
         return space.send(self.w_unbound_method, "parameters")
@@ -319,39 +331,55 @@ class W_ModuleObject(W_RootObject):
         return self._find_method_pure(space, name, self.version)
 
     @jit.unroll_safe
-    def find_method_after(self, space, w_owner, name):
-        """For super: the method `name` in these ancestors that comes
-        after `w_owner`, the module that defines the calling method."""
+    def find_method_after(self, space, w_owner, name, occurrence=0):
+        method, next_occurrence = self.find_method_after_with_occurrence(
+            space, w_owner, name, occurrence)
+        return method
+
+    def find_method_after_with_occurrence(self, space, w_owner, name, occurrence):
+        """The next method and its owner's occurrence number for super.
+
+        The same module can occur more than once in an ancestor chain;
+        resume after the occurrence that supplied the calling method.
+        """
         # The walk over ancestors() cannot be folded by the JIT directly:
         # the module lists are quasi-immutable, but RPython drops the
         # immutability of their items because ancestors() concatenates
         # them in place, so each step was a residual _find_method_pure
         # call with a dict lookup (62 calls for a 30-module chain, which
         # ActiveRecord models have). Instead the whole walk is elidable on
-        # (class, owner, name, class version, global cache state): the
+        # (class, owner, occurrence, name, class version, global state): the
         # class version covers its own methods and ancestors, and every
         # other module in the chain has descendants, so a change to it
         # bumps method_cache_state.state.
         return self._find_method_after_pure(
             space, jit.promote(w_owner), name, self.version,
-            method_cache_state.state)
+            method_cache_state.state, jit.promote(occurrence))
 
     @jit.elidable
-    def _find_method_after_pure(self, space, w_owner, name, version, state):
+    def _find_method_after_pure(self, space, w_owner, name, version, state, occurrence):
         ancestors = self.ancestors()
         found = False
-        for w_mod in ancestors:
+        owner_occurrence = 0
+        for i in range(len(ancestors)):
+            w_mod = ancestors[i]
             if found:
                 method = w_mod.find_local_method(space, name)
                 if method is not None:
                     if isinstance(method, UndefMethod):
-                        return None
-                    return method
+                        return None, 0
+                    next_occurrence = 0
+                    for j in range(i):
+                        if ancestors[j] is w_mod:
+                            next_occurrence += 1
+                    return method, next_occurrence
             elif w_mod is w_owner:
-                found = True
+                if owner_occurrence == occurrence:
+                    found = True
+                owner_occurrence += 1
         if not found:
-            return w_owner.find_method_super(space, name)
-        return None
+            return w_owner.find_method_super(space, name), 0
+        return None, 0
 
     @jit.unroll_safe
     def find_method_super(self, space, name):

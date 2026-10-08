@@ -67,6 +67,8 @@ class Frame(BaseFrame):
         # The module that owns the running method, for `super`; None when
         # not known (then the lexical scope is used).
         self.w_owner = None
+        # Which occurrence of the owner supplied this call (usually the first).
+        self.super_occurrence = 0
         # The name `super` calls: set in define_method bodies, whose code
         # was compiled inside some other method.
         self.super_name = None

@@ -442,6 +442,7 @@ class Interpreter(object):
             self, frame.top_parent_interp or self, frame.get_regexp_match_cell()
         )
         w_proc.w_owner = frame.w_owner
+        w_proc.super_occurrence = frame.super_occurrence
         w_proc.super_name = frame.super_name
         frame.push(w_proc)
 
@@ -722,7 +723,7 @@ class Interpreter(object):
             w_res = space.send_super_from(
                 w_owner, w_receiver,
                 self._super_name(space, bytecode, frame, meth_idx), args_w,
-                block=w_block)
+                block=w_block, occurrence=frame.super_occurrence)
         else:
             w_res = space.send_super(
                 space.getclass(w_receiver), w_receiver,
@@ -751,7 +752,7 @@ class Interpreter(object):
             w_res = space.send_super_from(
                 w_owner, w_receiver,
                 self._super_name(space, bytecode, frame, meth_idx), args_w,
-                block=w_block)
+                block=w_block, occurrence=frame.super_occurrence)
         else:
             w_res = space.send_super(
                 space.getclass(w_receiver), w_receiver,
@@ -768,7 +769,8 @@ class Interpreter(object):
         if w_owner is None and frame.lexical_scope is not None:
             w_owner = frame.lexical_scope.w_mod
         if w_owner is not None:
-            w_method = w_cls.find_method_after(space, w_owner, name)
+            w_method = w_cls.find_method_after(
+                space, w_owner, name, frame.super_occurrence)
         else:
             w_method = w_cls.find_method_super(space, name)
         if w_method is not None:
