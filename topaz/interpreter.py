@@ -1,6 +1,6 @@
 from rpython.rlib import jit, rstackovf, rvmprof
 from rpython.rlib.debug import check_nonneg
-from rpython.rlib.objectmodel import we_are_translated, specialize
+from rpython.rlib.objectmodel import we_are_translated, specialize, always_inline
 
 from topaz import consts
 from topaz.error import RubyError
@@ -153,6 +153,7 @@ class Interpreter(object):
         return pc
 
     @specialize.arg(2, 3)
+    @always_inline
     def run_instr(self, space, name, num_args, bytecode, frame, pc):
         args = ()
         # Do not change these from * 256 to << 8, lshift has defined overflow

@@ -1,4 +1,5 @@
 from rpython.rlib import jit
+from rpython.rlib.objectmodel import try_inline
 
 from topaz.error import RubyError
 from topaz.frame import Frame
@@ -120,6 +121,7 @@ class _VisitFrameContextManager(object):
     def __enter__(self):
         self.ec.enter(self.frame)
 
+    @try_inline
     def __exit__(self, exc_type, exc_value, tb):
         ruby_exception = False
         if exc_value is not None and isinstance(exc_value, RubyError):
@@ -140,6 +142,7 @@ class _RecursionGuardContextManager(object):
         self.w_obj = w_obj
         self.added = False
 
+    @try_inline
     def __enter__(self):
         if self.w_obj in self.recursive_objects:
             return True
