@@ -24,31 +24,112 @@ class Struct
       end
     end
 
+    ivars = attrs.map { |attr| :"@#{attr}" }
+    keyword_init = keyword_init.nil? ? nil : !!keyword_init
+
     klass = Class.new(self) do
       attr_accessor(*attrs)
-
-      def self.new(*args, **kwargs, &block)
-        return subclass_new(*args, **kwargs, &block)
-      end
-
-      def self.[](*args, **kwargs)
-        return new(*args, **kwargs)
-      end
 
       const_set(:STRUCT_ATTRS, attrs)
       # The fields live in instance variables; their names are built once
       # here rather than on every access.
-      const_set(:STRUCT_IVARS, attrs.map { |attr| :"@#{attr}" })
-      const_set(:STRUCT_KEYWORD_INIT, keyword_init.nil? ? nil : !!keyword_init)
+      const_set(:STRUCT_IVARS, ivars)
+      const_set(:STRUCT_KEYWORD_INIT, keyword_init)
+
+      # Class#new itself rather than a forwarding `new(*args, **kwargs)`
+      # frame on top of it.
+      singleton_class.alias_method(:new, :subclass_new)
+      singleton_class.alias_method(:[], :subclass_new)
 
       def self.keyword_init?
         self::STRUCT_KEYWORD_INIT
       end
     end
 
+    code = __topaz_struct_code(attrs, ivars, keyword_init)
+    klass.class_eval(code) if code
     Struct.const_set(klass_name, klass) if klass_name
     klass.module_eval(&block) if block
     klass
+  end
+
+  # Straight-line methods for this particular set of fields. Reading and
+  # writing the fields directly is several times faster than looping over
+  # STRUCT_IVARS with instance_variable_get/set, and `==`, `eql?` and `hash`
+  # no longer build arrays or dispatch per field. Everything that is not on
+  # the fast path (keyword arguments, too many arguments, odd member names)
+  # falls back to the generic implementations below.
+  def self.__topaz_struct_code(attrs, ivars, keyword_init)
+    # Only plain identifiers can be spliced into source; anything else
+    # keeps the generic methods.
+    attrs.each do |attr|
+      return nil unless attr.to_s =~ /\A[A-Za-z_][A-Za-z0-9_]*\z/
+    end
+    n = attrs.length
+    return nil if n == 0
+    values = ivars.join(", ")
+    eqs = []
+    eqls = []
+    i = 0
+    while i < n
+      eqs << "#{ivars[i]} == o[#{i}]"
+      eqls << "#{ivars[i]}.eql?(o[#{i}])"
+      i += 1
+    end
+    code = ""
+    code << "def __topaz_struct_values; [#{values}]; end\n"
+    code << "def to_a; [#{values}]; end\n"
+    code << "alias values to_a\n"
+    if keyword_init != true
+      code << "def initialize(*args, **kwargs)\n"
+      code << "  if kwargs.empty? && args.length <= #{n}\n"
+      i = 0
+      while i < n
+        code << "    #{ivars[i]} = args[#{i}]\n"
+        i += 1
+      end
+      code << "  else\n    __topaz_struct_initialize(args, kwargs)\n  end\nend\n"
+      code << "private :initialize\n"
+    end
+    code << "def ==(other)\n"
+    code << "  return true if equal?(other)\n"
+    code << "  return false unless self.class.equal?(other.class)\n"
+    code << "  o = other.__topaz_struct_values\n"
+    code << "  Thread.current.recursion_guard(:==, self) do\n"
+    code << "    return #{eqs.join(" && ")}\n"
+    code << "  end\n  true\nend\n"
+    code << "def eql?(other)\n"
+    code << "  return true if equal?(other)\n"
+    code << "  return false unless self.class.equal?(other.class)\n"
+    code << "  o = other.__topaz_struct_values\n"
+    code << "  Thread.current.recursion_guard(:eql?, self) do\n"
+    code << "    return #{eqls.join(" && ")}\n"
+    code << "  end\n  true\nend\n"
+    code << "def hash\n  h = #{n}\n"
+    code << "  Thread.current.recursion_guard(:hash, self) do\n"
+    i = 0
+    while i < n
+      code << "    h ^= #{ivars[i]}.hash\n"
+      i += 1
+    end
+    code << "  end\n  h\nend\n"
+    code << "def [](var)\n  case var\n"
+    i = 0
+    while i < n
+      code << "  when #{i}, #{i - n}, :#{attrs[i]}, \"#{attrs[i]}\" then #{ivars[i]}\n"
+      i += 1
+    end
+    code << "  else __topaz_struct_aref(var)\n  end\nend\n"
+    code << "def []=(var, obj)\n"
+    code << %q{  raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}") if frozen?} << "\n"
+    code << "  case var\n"
+    i = 0
+    while i < n
+      code << "  when #{i}, #{i - n}, :#{attrs[i]}, \"#{attrs[i]}\" then #{ivars[i]} = obj\n"
+      i += 1
+    end
+    code << "  else __topaz_struct_aset(var, obj)\n  end\nend\n"
+    code
   end
 
   def self.make_struct(name, attrs)
@@ -64,6 +145,12 @@ class Struct
   # arguments (a hash is one of them), and nil (the default) keywords when
   # there are no positional arguments.
   def initialize(*args, **kwargs)
+    __topaz_struct_initialize(args, kwargs)
+  end
+
+  private :initialize
+
+  def __topaz_struct_initialize(args, kwargs)
     attrs = self.class::STRUCT_ATTRS
     keyword_init = self.class::STRUCT_KEYWORD_INIT
     if keyword_init == true && !args.empty?
@@ -90,7 +177,9 @@ class Struct
     end
   end
 
-  private :initialize
+  def __topaz_struct_values
+    self.class::STRUCT_IVARS.map { |ivar| instance_variable_get(ivar) }
+  end
 
   def ==(other)
     return false if self.class != other.class
@@ -116,6 +205,10 @@ class Struct
   end
 
   def [](var)
+    __topaz_struct_aref(var)
+  end
+
+  def __topaz_struct_aref(var)
     case var
     when Symbol, String
       idx = self.class::STRUCT_ATTRS.index(var.to_sym)
@@ -135,6 +228,10 @@ class Struct
   end
 
   def []=(var, obj)
+    __topaz_struct_aset(var, obj)
+  end
+
+  def __topaz_struct_aset(var, obj)
     case var
     when Symbol, String
       idx = self.class::STRUCT_ATTRS.index(var.to_sym)
