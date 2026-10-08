@@ -266,7 +266,7 @@ class String
 
   def delete_prefix!(prefix)
     return nil unless start_with?(prefix)
-    __topaz_replace(self[prefix.size..])
+    replace(self[prefix.size..])
   end
 
   def delete_suffix(suffix)
@@ -276,7 +276,7 @@ class String
 
   def delete_suffix!(suffix)
     return nil if suffix.empty? || !end_with?(suffix)
-    __topaz_replace(self[0, size - suffix.size])
+    replace(self[0, size - suffix.size])
   end
 
   # Ruby 2.4

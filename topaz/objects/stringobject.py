@@ -482,11 +482,16 @@ class W_StringObject(W_Object):
         W_Object.__init__(self, space, klass)
         self.str_storage = storage
         self.strategy = strategy
+        # The encoding tag: None is UTF-8, the default, so that the common
+        # string carries nothing. Encoding objects themselves are defined
+        # by lib-topaz/encoding.rb.
+        self.w_encoding = None
 
     def __deepcopy__(self, memo):
         obj = super(W_StringObject, self).__deepcopy__(memo)
         obj.str_storage = copy.deepcopy(self.str_storage, memo)
         obj.strategy = copy.deepcopy(self.strategy, memo)
+        obj.w_encoding = copy.deepcopy(self.w_encoding, memo)
         return obj
 
     @staticmethod
@@ -528,7 +533,9 @@ class W_StringObject(W_Object):
         return self.strategy.length(self.str_storage)
 
     def copy(self, space):
-        return W_StringObject(space, self.strategy.copy(self.str_storage), self.strategy)
+        w_res = W_StringObject(space, self.strategy.copy(self.str_storage), self.strategy)
+        w_res.w_encoding = self.w_encoding
+        return w_res
 
     def replace(self, space, chars):
         strategy = space.fromcache(MutableStringStrategy)
@@ -608,8 +615,7 @@ class W_StringObject(W_Object):
     @check_frozen()
     def method_initialize(self, space, args_w):
         """String.new(str = "", encoding: nil, capacity: nil). The copy of
-        str keeps its encoding tag (the @__topaz_encoding ivar of
-        lib-topaz/encoding.rb); with no str the string is binary, as in
+        str keeps its encoding tag; with no str the string is binary, as in
         CRuby. capacity is accepted and ignored.
 
         Kept free of loops so the JIT inlines it and a String.new whose
@@ -631,15 +637,33 @@ class W_StringObject(W_Object):
             assert isinstance(w_s, W_StringObject)
             self.strategy = w_s.strategy
             self.str_storage = w_s.strategy.copy(w_s.str_storage)
-            w_enc = w_s.find_instance_var(space, "@__topaz_encoding")
-            if w_enc is not None and w_enc is not space.w_nil:
-                self.set_instance_var(space, "@__topaz_encoding", w_enc)
-            elif self.find_instance_var(space, "@__topaz_encoding") is not None:
-                self.set_instance_var(space, "@__topaz_encoding", space.w_nil)
+            self.w_encoding = w_s.w_encoding
         if w_encoding is not None:
-            space.send(self, "force_encoding", [w_encoding])
+            self.force_encoding(space, w_encoding)
         elif not args_w:
-            self.set_instance_var(space, "@__topaz_encoding", space.encoding_binary())
+            self.w_encoding = space.encoding_binary()
+        return self
+
+    def force_encoding(self, space, w_enc):
+        from topaz.objects.encodingobject import W_EncodingObject
+        if not isinstance(w_enc, W_EncodingObject):
+            w_enc = space.send(space.getclassfor(W_EncodingObject), "find", [w_enc])
+        if w_enc is space.encoding_utf8():
+            self.w_encoding = None
+        else:
+            self.w_encoding = w_enc
+
+    @classdef.method("encoding")
+    def method_encoding(self, space):
+        w_enc = self.w_encoding
+        if w_enc is None:
+            return space.encoding_utf8()
+        return w_enc
+
+    @classdef.method("force_encoding")
+    @check_frozen()
+    def method_force_encoding(self, space, w_enc):
+        self.force_encoding(space, w_enc)
         return self
 
     @classdef.method("b")
@@ -647,7 +671,7 @@ class W_StringObject(W_Object):
         # A plain String copy of the bytes, tagged binary; in Ruby this
         # was dup + force_encoding, two more frames per call.
         w_res = W_StringObject(space, self.strategy.copy(self.str_storage), self.strategy)
-        w_res.set_instance_var(space, "@__topaz_encoding", space.encoding_binary())
+        w_res.w_encoding = space.encoding_binary()
         return w_res
 
     @classdef.method("initialize_copy")
@@ -655,6 +679,7 @@ class W_StringObject(W_Object):
         assert isinstance(w_other, W_StringObject)
         self.strategy = w_other.strategy
         self.str_storage = w_other.strategy.copy(w_other.str_storage)
+        self.w_encoding = w_other.w_encoding
         return self
 
     # In RPython rather than through insert or []=, which subclasses such as
@@ -667,6 +692,7 @@ class W_StringObject(W_Object):
         if w_other is not self:
             self.strategy = w_other.strategy
             self.str_storage = w_other.strategy.copy(w_other.str_storage)
+            self.w_encoding = w_other.w_encoding
         return self
 
     @classdef.method("to_str")
@@ -676,9 +702,7 @@ class W_StringObject(W_Object):
             return self
         # A String subclass gives a plain String copy (keeping the encoding).
         w_copy = space.newstr_fromstr(space.str_w(self))
-        w_enc = space.find_instance_var(self, "@__topaz_encoding")
-        if w_enc is not None and w_enc is not space.w_nil:
-            space.set_instance_var(w_copy, "@__topaz_encoding", w_enc)
+        w_copy.w_encoding = self.w_encoding
         return w_copy
 
     @classdef.method("ord")
@@ -701,6 +725,8 @@ class W_StringObject(W_Object):
         s = space.newstr_fromchars(newlist_hint(total_size))
         s.extend(space, self)
         s.extend(space, w_other)
+        if self.w_encoding is w_other.w_encoding:
+            s.w_encoding = self.w_encoding
         space.infect(s, self)
         space.infect(s, w_other)
         return s
@@ -711,6 +737,7 @@ class W_StringObject(W_Object):
             raise space.error(space.w_ArgumentError, "negative argument")
         res = self.strategy.mul(space, self.str_storage, times)
         space.infect(res, self)
+        res.w_encoding = self.w_encoding
         return res
 
     @classdef.method("<<")

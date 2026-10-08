@@ -716,3 +716,32 @@ class TestStringMod(object):
         assert space.str_w(w_res) == "12-happy"
         w_res = space.execute("return '1%02d%02d%02d%04d' % [1, 2, 3, 4]")
         assert space.str_w(w_res) == "10102030004"
+
+
+class TestStringEncoding(BaseTopazTest):
+    def test_encoding_tag(self, space):
+        w_res = space.execute("""
+        r = []
+        s = "abc"
+        r << s.encoding.name
+        r << s.force_encoding("ASCII-8BIT").equal?(s) << s.encoding.name
+        r << s.dup.encoding.name << s.clone.encoding.name << (s * 2).encoding.name
+        r << String.new(s).encoding.name << String.new.encoding.name
+        r << String.new("x", encoding: "US-ASCII").encoding.name
+        t = +"zzz"; t.replace(s); r << t.encoding.name
+        r << s.force_encoding(Encoding::UTF_8).encoding.name
+        r << "x".b.encoding.name
+        r << s.instance_variables
+        r << "x".force_encoding(Encoding::US_ASCII).to_s.encoding.name
+        r << ("a".b + "b".b).encoding.name << ("a".b + "b").encoding.name
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            "UTF-8", True, "ASCII-8BIT", "ASCII-8BIT", "ASCII-8BIT", "ASCII-8BIT",
+            "ASCII-8BIT", "ASCII-8BIT", "US-ASCII", "ASCII-8BIT", "UTF-8", "ASCII-8BIT",
+            [], "US-ASCII", "ASCII-8BIT", "UTF-8",
+        ]
+        with self.raises(space, "FrozenError"):
+            space.execute('"abc".freeze.force_encoding("ASCII-8BIT")')
+        with self.raises(space, "ArgumentError", "unknown encoding name - nope"):
+            space.execute('"abc".force_encoding("nope")')

@@ -437,33 +437,8 @@ module Topaz
 end
 
 class String
-  def encoding
-    @__topaz_encoding || Encoding::UTF_8
-  end
-
-  def force_encoding(enc)
-    raise FrozenError, "can't modify frozen String: #{inspect}" if frozen?
-    enc = Encoding.find(enc)
-    @__topaz_encoding = enc.equal?(Encoding::UTF_8) ? nil : enc
-    self
-  end
-
-  # These keep the encoding tag, which lives in an instance variable the
-  # RPython methods do not see.
-  alias __topaz_times *
-  def *(times)
-    s = __topaz_times(times)
-    s.force_encoding(@__topaz_encoding) if @__topaz_encoding
-    s
-  end
-
-  alias __topaz_replace replace
-  def replace(other)
-    __topaz_replace(other)
-    enc = other.instance_variable_get(:@__topaz_encoding) if other.is_a?(String)
-    @__topaz_encoding = enc
-    self
-  end
+  # encoding and force_encoding are RPython (topaz/objects/stringobject.py);
+  # the tag is a field of the string, copied by dup, replace, * and String.new.
 
   def ascii_only?
     Topaz::EncodingSupport.ascii_only?(self)

@@ -83,6 +83,7 @@ class EncodingCache(object):
     lives on a separate object."""
     def __init__(self):
         self.w_binary = None
+        self.w_utf8 = None
 
 
 class SpaceCache(Cache):
@@ -842,6 +843,15 @@ class ObjectSpace(object):
             w_encoding = self.find_const(self.w_object, "Encoding")
             w_enc = self.find_const(w_encoding, "ASCII_8BIT")
             cache.w_binary = w_enc
+        return w_enc
+
+    def encoding_utf8(self):
+        cache = self.encoding_cache
+        w_enc = cache.w_utf8
+        if w_enc is None:
+            w_encoding = self.find_const(self.w_object, "Encoding")
+            w_enc = self.find_const(w_encoding, "UTF_8")
+            cache.w_utf8 = w_enc
         return w_enc
 
     def respond_to(self, w_receiver, name):
