@@ -69,17 +69,20 @@ def symbol_needs_quotes(s):
 
 
 class W_SymbolObject(W_Object):
-    _immutable_fields_ = ["symbol"]
+    _immutable_fields_ = ["symbol", "w_proc?"]
     classdef = ClassDef("Symbol", W_Object.classdef)
     classdef.include_module(Comparable)
 
     def __init__(self, space, symbol):
         W_Object.__init__(self, space)
         self.symbol = symbol
+        # Symbol#to_proc's lambda, built once by lib-topaz/symbol.rb.
+        self.w_proc = None
 
     def __deepcopy__(self, memo):
         obj = super(W_SymbolObject, self).__deepcopy__(memo)
         obj.symbol = self.symbol
+        obj.w_proc = None
         return obj
 
     def symbol_w(self, space):
@@ -97,6 +100,17 @@ class W_SymbolObject(W_Object):
     @classdef.singleton_method("all_symbols")
     def singleton_method_all_symbols(self, space):
         return space.newarray(space.symbol_cache.values())
+
+    # Symbols are interned and never collected, so the lambda lives on the
+    # symbol itself; a quasi-immutable field, so `&:name` at a call site
+    # whose symbol is a constant folds to a constant Proc under the JIT.
+    @classdef.method("to_proc")
+    def method_to_proc(self, space):
+        w_proc = self.w_proc
+        if w_proc is None:
+            w_proc = space.send(space.w_symbol, "__topaz_build_proc", [self])
+            self.w_proc = w_proc
+        return w_proc
 
     # Symbols are unique: identity, not Comparable#== (Ruby, with a rescue).
     @classdef.method("==")
