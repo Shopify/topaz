@@ -3,6 +3,74 @@ from ..base import BaseTopazTest
 
 
 class TestClassObject(BaseTopazTest):
+    @pytest.mark.parametrize("change, expected", [
+        ("def CacheParent.f; 2; end", 2),
+        ("CacheParent.singleton_class.send(:remove_method, :f)", 0),
+        ("CacheParent.singleton_class.prepend(CacheOverride)", 3),
+    ])
+    def test_inherited_class_method_cache_invalidation(self, space, change, expected):
+        w_res = space.execute("""
+        module CacheOverride; def f; 3; end; end
+        class CacheRoot; def self.f; 0; end; end
+        class CacheParent < CacheRoot; def self.f; 1; end; end
+        class CacheChild < CacheParent; end
+        class CacheGrandchild < CacheChild; end
+        before = CacheGrandchild.f
+        %s
+        return [before, CacheGrandchild.f]
+        """ % change)
+        assert self.unwrap(space, w_res) == [1, expected]
+
+    def test_inherited_class_method_cached_miss(self, space):
+        w_res = space.execute("""
+        class CacheParent; end
+        class CacheChild < CacheParent; end
+        before = CacheChild.respond_to?(:added)
+        def CacheParent.added; 2; end
+        return [before, CacheChild.respond_to?(:added), CacheChild.added]
+        """)
+        assert self.unwrap(space, w_res) == [False, True, 2]
+
+    def test_inherited_class_method_undef_invalidates_cache(self, space):
+        w_res = space.execute("""
+        class CacheParent; def self.f; 1; end; end
+        class CacheChild < CacheParent; end
+        before = CacheChild.f
+        CacheParent.singleton_class.send(:undef_method, :f)
+        return [before, CacheChild.respond_to?(:f)]
+        """)
+        assert self.unwrap(space, w_res) == [1, False]
+
+    def test_instance_singleton_inherited_method_cache(self, space):
+        w_res = space.execute("""
+        class CacheClass; def f; 1; end; end
+        obj = CacheClass.new
+        def obj.g; end
+        before = obj.f
+        class CacheClass; def f; 2; end; end
+        return [before, obj.f]
+        """)
+        assert self.unwrap(space, w_res) == [1, 2]
+
+    def test_singleton_dependencies_do_not_call_inherited(self, space):
+        w_res = space.execute("""
+        class CacheParent
+          @children = []
+          def self.inherited(child); @children << child; end
+          def self.children; @children; end
+        end
+        class CacheChild < CacheParent; end
+        obj = CacheParent.new
+        def obj.f; end
+        return [CacheParent.children == [CacheChild],
+                CacheParent.subclasses == [CacheChild],
+                CacheParent.singleton_class.subclasses]
+        """)
+        assert self.unwrap(space, w_res) == [True, True, []]
+
+    def test_bootstrap_singleton_dependency(self, space):
+        assert space.w_basicobject.klass in space.w_class.descendants_w()
+
     def test_name(self, space):
         space.execute("Class")
 

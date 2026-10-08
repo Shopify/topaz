@@ -32,9 +32,11 @@ class W_ClassObject(W_ModuleObject):
             # superclass's class methods on the new class.
             if not self.is_singleton and not space.bootstrap:
                 self.getsingletonclass(space)
-            # A singleton class is not a subclass as far as Ruby code can
-            # tell: the inherited hook is not called for it.
-            if not self.is_singleton:
+            # Singleton classes still depend on their superclass's method
+            # lookups, but must not trigger Ruby's inherited hook.
+            if self.is_singleton:
+                self.superclass.add_descendant(self)
+            else:
                 self.superclass.inherited(space, self)
 
     def __deepcopy__(self, memo):

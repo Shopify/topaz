@@ -125,6 +125,7 @@ class ObjectSpace(object):
         self.w_class = self.getclassfor(W_ClassObject)
         # We replace the one reference to our FakeClass with the real class.
         self.w_basicobject.klass.superclass = self.w_class
+        self.w_class.add_descendant(self.w_basicobject.klass)
 
         gc.collect()
         assert cls_reference() is None
