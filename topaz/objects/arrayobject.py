@@ -79,6 +79,10 @@ flat_map_driver = _enum_driver("flat_map")
 # loop is either unrolled into the caller's trace (a fresh array literal) or
 # a loop of its own.
 hash_driver = jit.JitDriver(greens=[], reds="auto", name="Array#hash")
+uniq_block_driver = jit.JitDriver(
+    greens=["bytecode"], reds="auto", name="Array#uniq!{}",
+    get_printable_location=get_each_location)
+uniq_plain_driver = jit.JitDriver(greens=[], reds="auto", name="Array#uniq!")
 
 HASH_SEED = 0x345678
 HASH_MULT = 1000003
@@ -713,6 +717,55 @@ class W_ArrayObject(W_Object):
         if kept < len(self.items_w):
             del self.items_w[kept:]
         return self
+
+    def _uniq_into(self, space, block, result_w):
+        # Appends the first occurrence of each item (or of each item's
+        # block value) to result_w, in order. Membership is Hash
+        # membership, i.e. `hash` and `eql?`. One jit_merge_point per
+        # function, hence the two helpers.
+        w_seen = space.newhash()
+        if block is not None:
+            self._uniq_block(space, block, w_seen, result_w)
+        else:
+            self._uniq_plain(space, w_seen, result_w)
+
+    def _uniq_block(self, space, block, w_seen, result_w):
+        bytecode = block.bytecode
+        i = 0
+        while i < len(self.items_w):
+            uniq_block_driver.jit_merge_point(bytecode=bytecode)
+            w_item = self.items_w[i]
+            w_key = space.invoke_block(block, [w_item])
+            if not w_seen.strategy.contains(w_seen.dict_storage, w_key):
+                w_seen.setitem(w_key, space.w_nil)
+                result_w.append(w_item)
+            i += 1
+
+    def _uniq_plain(self, space, w_seen, result_w):
+        i = 0
+        while i < len(self.items_w):
+            uniq_plain_driver.jit_merge_point()
+            w_item = self.items_w[i]
+            if not w_seen.strategy.contains(w_seen.dict_storage, w_item):
+                w_seen.setitem(w_item, space.w_nil)
+                result_w.append(w_item)
+            i += 1
+
+    @classdef.method("uniq!")
+    @check_frozen()
+    def method_uniq_bang(self, space, block):
+        result_w = []
+        self._uniq_into(space, block, result_w)
+        if len(result_w) == len(self.items_w):
+            return space.w_nil
+        self.items_w = result_w
+        return self
+
+    @classdef.method("uniq")
+    def method_uniq(self, space, block):
+        result_w = []
+        self._uniq_into(space, block, result_w)
+        return space.newarray(result_w)
 
     @classdef.method("reverse_each")
     def method_reverse_each(self, space, block):

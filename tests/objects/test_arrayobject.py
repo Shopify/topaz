@@ -6,6 +6,25 @@ from ..base import BaseTopazTest
 
 
 class TestArrayObject(BaseTopazTest):
+    def test_uniq(self, space):
+        w_res = space.execute("""
+        class ArraySub < Array; end
+        a = [1, 2, 1]
+        b = [1, 2]
+        return [[1, 2, 2, 3, 1].uniq, [[1, 2], [1, 2], [2, 1]].uniq, [1.0, 1].uniq,
+                ["a", "a".dup].uniq, [nil, nil].uniq, [].uniq!, [1, 2].uniq!,
+                %w[a A b].uniq { |s| s.downcase }, %w[a A b].uniq! { |s| s.downcase },
+                a.uniq!.equal?(a), a, b.uniq!, b, ArraySub[1, 1].uniq.class.name,
+                ArraySub[1, 1].uniq!.class.name, [1].freeze.uniq]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 2, 3], [[1, 2], [2, 1]], [1.0, 1], ["a"], [None], None, None,
+            ["a", "b"], ["a", "b"], True, [1, 2], None, [1, 2], "Array", "ArraySub", [1]]
+        with self.raises(space, "FrozenError"):
+            space.execute("[1, 1].freeze.uniq!")
+        with self.raises(space, "FrozenError"):
+            space.execute("[1].freeze.uniq!")
+
     def test_initialize(self, space):
         w_res = space.execute("""
         class ArraySub < Array; end

@@ -201,37 +201,6 @@ class Array
 
   alias :collect! :map!
 
-  def uniq!(&block)
-    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    seen = {}
-    old_length = self.length
-    i = 0
-    shifted = 0
-    while i < old_length do
-      item = self[i]
-      item = yield(item) if block
-      if seen.include? item
-        shifted += 1
-      else
-        seen[item] = nil
-        self[i - shifted] = item if shifted > 0
-      end
-      i += 1
-    end
-    if shifted > 0
-      self.slice!(-shifted, shifted)
-      return self
-    else
-      return nil
-    end
-  end
-
-  def uniq(&block)
-    arr = self.dup
-    arr.uniq!(&block)
-    return arr
-  end
-
   def values_at(*args)
     out = []
     args.each do |arg|
