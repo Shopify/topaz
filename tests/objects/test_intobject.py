@@ -9,6 +9,15 @@ from ..base import BaseTopazTest
 
 
 class TestFixnumObject(BaseTopazTest):
+    def test_gcd(self, space):
+        w_res = space.execute("""
+        return [12.gcd(18), -12.gcd(18), 12.gcd(-18), 0.gcd(5), 5.gcd(0), 0.gcd(0),
+                7.gcd(2**70), (2**70).gcd(6), (-2**63).gcd(2), 6.gcd(-2**63)]
+        """)
+        assert self.unwrap(space, w_res) == [6, 6, 6, 5, 5, 0, 1, 2, 2, 2]
+        with self.raises(space, "TypeError"):
+            space.execute("3.gcd(1.5)")
+
     def test_overflow_boundaries(self, space):
         from topaz.objects.intobject import W_FixnumObject
 

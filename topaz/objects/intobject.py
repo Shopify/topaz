@@ -1,5 +1,6 @@
 import math
 import operator
+import sys
 
 from rpython.rlib import rfloat
 from rpython.rlib.debug import check_regular_int
@@ -294,6 +295,27 @@ class W_FixnumObject(W_RootObject):
                     space.obj_to_s(space.getclass(w_other))
                 )
             )
+
+    # Integer#gcd was Ruby (integer.rb); Rational arithmetic from Time
+    # calls it constantly and the Euclid loop compiled poorly.
+    @classdef.method("gcd")
+    def method_gcd(self, space, w_other):
+        if (space.is_kind_of(w_other, space.w_fixnum) and
+                self.intvalue != -sys.maxint - 1):
+            b = space.int_w(w_other)
+            if b == -sys.maxint - 1:
+                return space.send(space.newbigint_fromint(self.intvalue), "gcd", [w_other])
+            a = abs(self.intvalue)
+            b = abs(b)
+            while b != 0:
+                a, b = b, a % b
+            return space.newint(a)
+        elif space.is_kind_of(w_other, space.w_bignum):
+            return space.send(space.newbigint_fromint(self.intvalue), "gcd", [w_other])
+        elif space.is_kind_of(w_other, space.w_fixnum):
+            return space.send(space.newbigint_fromint(self.intvalue), "gcd", [w_other])
+        else:
+            raise space.error(space.w_TypeError, "not an integer")
 
     @classdef.method("%")
     @classdef.method("modulo")
