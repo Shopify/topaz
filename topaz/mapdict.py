@@ -225,6 +225,14 @@ class FlagNode(StorageNode):
     def copy_attrs(self, space, w_obj, w_target):
         self.prev.copy_attrs(space, w_obj, w_target)
 
+    def remove_attr(self, space, node, w_obj):
+        # Removing an earlier attribute can move this flag's storage slot.
+        w_value = self.read(space, w_obj)
+        new_prev = self.prev.remove_attr(space, node, w_obj)
+        new_node = new_prev.add(space, FlagNode, self.name, w_obj)
+        new_node.write(space, w_obj, w_value)
+        return new_node
+
     def write(self, space, w_obj, w_value):
         w_obj.object_storage[self.pos] = w_value
 
