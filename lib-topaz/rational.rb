@@ -322,6 +322,9 @@ end
 
 module Kernel
   def Rational(a, b = 1, exception: true)
+    # Integer pairs are the common case (Time#subsec, Time#to_r); build the
+    # result directly instead of converting both to Rationals and dividing.
+    return Rational.__topaz_new(a, b) if a.is_a?(Integer) && b.is_a?(Integer)
     a = Topaz.__topaz_to_rational(a, exception)
     return nil if a.nil?
     return a if b == 1
