@@ -10,10 +10,24 @@ from topaz.error import error_for_oserror, ERRNO_LIST
 from topaz.module import ModuleDef
 from topaz.objects.classobject import W_ClassObject
 from topaz.objects.symbolobject import is_label_symbol
+from topaz.utils.heapdump import dump_heap, HeapDumpUnsupported
 
 
 class Topaz(object):
     moduledef = ModuleDef("Topaz")
+
+    @moduledef.function("dump_rpy_heap", path="path")
+    def method_dump_rpy_heap(self, space, path):
+        try:
+            dump_heap(path)
+        except OSError as e:
+            raise error_for_oserror(space, e)
+        except ValueError as e:
+            raise space.error(space.w_ArgumentError, str(e))
+        except HeapDumpUnsupported:
+            raise space.error(space.w_NotImplementedError,
+                              "heap dumps require a translated GC with heap inspection")
+        return space.w_nil
 
     @moduledef.setup_module
     def setup_module(space, w_mod):

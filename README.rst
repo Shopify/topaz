@@ -25,8 +25,8 @@ You need:
 
 * A Python 2.7 to run RPython with. PyPy 2.7 is recommended, as translating
   with it is about twice as fast as with CPython 2.7.
-* A C compiler, ``make``, and the libffi headers (e.g. ``libffi-dev`` on
-  Debian).
+* A C compiler, ``make``, and the libffi and zlib headers (e.g.
+  ``libffi-dev`` and ``zlib1g-dev`` on Debian).
 
 To translate run::
 
@@ -49,6 +49,32 @@ PyPy::
 To run Topaz directly on top of Python (very slowly) you can do::
 
     $ PYTHONPATH=/path/to/pypy pypy -m topaz /path/to/file.rb
+
+Heap dumps
+----------
+
+Translated Topaz builds expose RPython's heap dumper::
+
+    ObjectSpace.garbage_collect # optional: collect before taking the snapshot
+    Topaz.dump_rpy_heap("/tmp/snapshot/heap.dump")
+
+Create the output directory first. The method accepts a filename (including
+objects implementing ``to_path``), returns ``nil``, and writes the binary dump
+plus ``typeids.txt`` and ``typeids.lst`` in the same directory. Existing files
+are overwritten; use a separate directory for each build's snapshots so their
+type metadata stays together. The two metadata filenames are reserved.
+Untranslated Topaz raises ``NotImplementedError``.
+
+Summarize a dump using the PyPy checkout, on a machine with the same word size
+and byte order::
+
+    pypy /path/to/pypy/pypy/tool/gcdump.py /tmp/snapshot/heap.dump
+
+Dumping synchronously walks the reachable RPython heap, including interpreter
+internals. It records object addresses, types, sizes and references, not Ruby
+object contents or all native allocations. Type names describe RPython types,
+not individual Ruby classes. Dumping does not automatically run a collection;
+``GC.start`` is currently a stub, so use ``ObjectSpace.garbage_collect`` above.
 
 Prism
 -----
