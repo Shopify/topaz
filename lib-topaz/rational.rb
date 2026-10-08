@@ -2,17 +2,25 @@
 # terms.
 class Rational < Numeric
   def self.__topaz_new(num, den)
-    if den == 0
-      raise ZeroDivisionError, "divided by 0"
-    end
-    if den < 0
-      num = -num
-      den = -den
-    end
-    g = num.gcd(den)
-    if g != 1
-      num /= g
-      den /= g
+    # den == 1 (an Integer coerced for Time arithmetic) is already in
+    # lowest terms; skip the gcd.
+    unless den == 1
+      if den == 0
+        raise ZeroDivisionError, "divided by 0"
+      end
+      if den < 0
+        num = -num
+        den = -den
+      end
+      if num == 0
+        den = 1
+      else
+        g = num.gcd(den)
+        if g != 1
+          num /= g
+          den /= g
+        end
+      end
     end
     r = allocate
     r.__topaz_init(num, den)

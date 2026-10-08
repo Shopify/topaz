@@ -1266,6 +1266,19 @@ class TestNumbers(BaseTopazTest):
 
 
 class TestTimeAndDate(BaseTopazTest):
+    def test_subsec_and_rational_seconds(self, space):
+        w_res = space.execute("""
+        r = []
+        r << Time.utc(2025, 1, 1).subsec << Time.utc(2025, 1, 1).subsec.class.name
+        r << Time.utc(2025, 1, 1, 0, 0, Rational(2, 3)).nsec
+        r << Time.utc(2025, 1, 1, 0, 0, Rational(2, 3)).subsec.class.name
+        r << Time.utc(2025, 1, 1, 0, 0, 1, 500).nsec
+        r << Time.new("2025-10-08 12:34:56.1234567895 UTC").nsec
+        r << (3 + Rational(1, 2)).to_s << Rational(0, 5).denominator << Rational(3, -6).to_s
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [0, "Integer", 666666666, "Rational", 500000, 123456789, "7/2", 1, "-1/2"]
+
     def test_time(self, space):
         w_res = space.execute("""
         t = Time.utc(2024, 3, 5, 14, 7, 9)

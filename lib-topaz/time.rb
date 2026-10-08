@@ -121,10 +121,22 @@ class Time
         extra = 0
       end
       days = __topaz_days_from_civil(year, mon, day) + extra
-      whole_sec = sec.floor
-      ns = ((days * 86400 + hour * 3600 + min * 60 + whole_sec) * NS)
-      ns += ((sec - whole_sec) * NS).round
-      ns += (usec.to_r * 1000).round if usec
+      base = days * 86400 + hour * 3600 + min * 60
+      if sec.is_a?(Integer)
+        ns = (base + sec) * NS
+      elsif sec.is_a?(Rational)
+        # Truncate to the nanosecond as MRI's nsec does (it keeps the exact
+        # Rational; we store nanoseconds), in integer arithmetic without
+        # building two more Rationals.
+        ns = base * NS + (sec.numerator * NS).div(sec.denominator)
+      else
+        whole_sec = sec.floor
+        ns = (base + whole_sec) * NS
+        ns += ((sec - whole_sec) * NS).round
+      end
+      if usec
+        ns += usec.is_a?(Integer) ? usec * 1000 : (usec.to_r * 1000).round
+      end
       ns
     end
 
@@ -214,7 +226,10 @@ class Time
       m = string.match(/\A\s*(-?\d{4,})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?)?\s*(Z|UTC|[-+]\d{2}:?\d{2})?\s*\z/)
       raise ArgumentError, "can't parse: #{string.inspect}" unless m
       sec = m[6].to_i
-      sec = sec + Rational(m[7].to_i, 10**m[7].size) if m[7]
+      if m[7]
+        den = 10**m[7].size
+        sec = Rational.__topaz_new(sec * den + m[7].to_i, den)
+      end
       new(m[1].to_i, m[2].to_i, m[3].to_i, m[4].to_i, m[5].to_i, sec, m[8] || zone)
     end
   end
@@ -248,7 +263,7 @@ class Time
   end
 
   def to_r
-    Rational(@ns, NS)
+    Rational.__topaz_new(@ns, NS)
   end
 
   def usec
@@ -262,7 +277,9 @@ class Time
   alias tv_nsec nsec
 
   def subsec
-    Rational(@ns % NS, NS)
+    rem = @ns % NS
+    # MRI answers the Integer 0 for a whole second.
+    rem == 0 ? 0 : Rational.__topaz_new(rem, NS)
   end
 
   def to_time
