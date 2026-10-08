@@ -118,7 +118,11 @@ class DefineMethodMethod(W_FunctionObject):
 
 class MethodCacheState(object):
     """Counts changes to any module's methods or ancestors: the
-    interpreter's per-class method caches are good while it is unchanged."""
+    interpreter's per-class method caches are good while it is unchanged.
+
+    `state` is quasi-immutable so that traces can fold lookups that depend
+    on the whole ancestor chain (super) and be invalidated when it bumps."""
+    _immutable_fields_ = ["state?"]
 
     def __init__(self):
         self.state = 0
@@ -312,6 +316,22 @@ class W_ModuleObject(W_RootObject):
     def find_method_after(self, space, w_owner, name):
         """For super: the method `name` in these ancestors that comes
         after `w_owner`, the module that defines the calling method."""
+        # The walk over ancestors() cannot be folded by the JIT directly:
+        # the module lists are quasi-immutable, but RPython drops the
+        # immutability of their items because ancestors() concatenates
+        # them in place, so each step was a residual _find_method_pure
+        # call with a dict lookup (62 calls for a 30-module chain, which
+        # ActiveRecord models have). Instead the whole walk is elidable on
+        # (class, owner, name, class version, global cache state): the
+        # class version covers its own methods and ancestors, and every
+        # other module in the chain has descendants, so a change to it
+        # bumps method_cache_state.state.
+        return self._find_method_after_pure(
+            space, jit.promote(w_owner), name, self.version,
+            method_cache_state.state)
+
+    @jit.elidable
+    def _find_method_after_pure(self, space, w_owner, name, version, state):
         ancestors = self.ancestors()
         found = False
         for w_mod in ancestors:
