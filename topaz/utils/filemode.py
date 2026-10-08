@@ -4,6 +4,14 @@ from topaz.objects.stringobject import W_StringObject
 from topaz.utils.ll_file import O_BINARY
 
 
+def invalid_mode(space, mode_str):
+    # Built only on the error path: it used to be built up front on every
+    # File.open with a string mode, an ArgumentError (a Ruby object with
+    # a formatted message) per open.
+    return space.error(space.w_ArgumentError,
+                       "invalid access mode %s" % mode_str)
+
+
 def map_filemode(space, w_mode):
     encoding = ""
     if w_mode is space.w_nil:
@@ -11,9 +19,6 @@ def map_filemode(space, w_mode):
     elif isinstance(w_mode, W_StringObject):
         mode_str = space.str_w(w_mode)
         mode = 0
-        invalid_error = space.error(space.w_ArgumentError,
-            "invalid access mode %s" % mode_str
-        )
         major_mode_seen = False
         readable = writeable = append = False
 
@@ -26,18 +31,18 @@ def map_filemode(space, w_mode):
                 readable = writeable = True
             elif ch == "r":
                 if major_mode_seen:
-                    raise invalid_error
+                    raise invalid_mode(space, mode_str)
                 major_mode_seen = True
                 readable = True
             elif ch == "a":
                 if major_mode_seen:
-                    raise invalid_error
+                    raise invalid_mode(space, mode_str)
                 major_mode_seen = True
                 mode |= os.O_CREAT
                 append = writeable = True
             elif ch == "w":
                 if major_mode_seen:
-                    raise invalid_error
+                    raise invalid_mode(space, mode_str)
                 major_mode_seen = True
                 mode |= os.O_TRUNC | os.O_CREAT
                 writeable = True
@@ -45,7 +50,7 @@ def map_filemode(space, w_mode):
                 encoding = mode_str[pos + 1:]
                 break
             else:
-                raise invalid_error
+                raise invalid_mode(space, mode_str)
         if readable and writeable:
             mode |= os.O_RDWR
         elif readable:
