@@ -114,6 +114,10 @@ each_driver = jit.JitDriver(
     greens=["bytecode"], reds="auto", name="Hash#each",
     get_printable_location=get_each_location,
 )
+each_with_object_driver = jit.JitDriver(
+    greens=["bytecode"], reds="auto", name="Hash#each_with_object",
+    get_printable_location=get_each_location,
+)
 merge_driver = jit.JitDriver(
     greens=["bytecode"], reds="auto", name="Hash#merge!",
     get_printable_location=get_merge_location,
@@ -342,6 +346,24 @@ class W_HashObject(W_Object):
                 break
             space.invoke_block(block, [space.newarray([w_key, w_value])])
         return self
+
+    # Enumerable#each_with_object goes through each_entry, which re-splats
+    # every pair into a fresh array in a second block frame.
+    @classdef.method("each_with_object")
+    def method_each_with_object(self, space, w_memo, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("each_with_object"), w_memo])
+        bytecode = block.bytecode
+        strategy = self.strategy
+        iterator = strategy.iteritems(self.dict_storage)
+        while True:
+            each_with_object_driver.jit_merge_point(bytecode=bytecode)
+            try:
+                w_key, w_value = strategy.iternext(iterator)
+            except StopIteration:
+                break
+            space.invoke_block(block, [space.newarray([w_key, w_value]), w_memo])
+        return w_memo
 
     @classdef.method("update")
     @classdef.method("merge!")

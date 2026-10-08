@@ -139,6 +139,14 @@ class TestHashObject(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [2, "four", 3]
 
+    def test_each_with_object(self, space):
+        w_res = space.execute("""
+        h = {a: 1, b: 2}
+        r = h.each_with_object([]) { |(k, v), m| m << k << v }
+        return [r, h.each_with_object(0).class.name]
+        """)
+        assert self.unwrap(space, w_res) == [["a", 1, "b", 2], "Enumerator"]
+
     def test_each(self, space):
         w_res = space.execute("""
         x = {2 => 3, "four" => 5, 3 => 2}
