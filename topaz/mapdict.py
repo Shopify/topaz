@@ -1,8 +1,13 @@
-from rpython.rlib import jit, longlong2float
+from rpython.rlib import jit, longlong2float, rerased
 from rpython.rlib.objectmodel import specialize
 from rpython.rlib.rarithmetic import intmask
 from rpython.rlib.unroll import unrolling_iterable
 from rpython.rtyper.lltypesystem import rffi, lltype
+
+
+erase_value, unerase_value = rerased.new_erasing_pair("mapdict_inline_value")
+erase_objects, unerase_objects = rerased.new_erasing_pair("mapdict_objects")
+erase_unboxed, unerase_unboxed = rerased.new_erasing_pair("mapdict_unboxed")
 
 
 NUM_DIGITS = 4
@@ -27,8 +32,11 @@ class MapTransitionCache(object):
 
 
 class BaseNode(object):
-    _attrs_ = ["size_estimate"]
-    _immutable_fields_ = ["size_estimate"]
+    _attrs_ = ["size_estimate", "object_size", "unboxed_size"]
+    _immutable_fields_ = ["size_estimate", "object_size", "unboxed_size"]
+
+    def has_inline_storage(self):
+        return self.object_size <= 2 and self.unboxed_size == 0
 
     @jit.elidable
     def find(self, node_cls, name=None):
@@ -56,6 +64,8 @@ class ClassNode(BaseNode):
     def __init__(self, w_cls):
         self.w_cls = w_cls
         self.size_estimate = SizeEstimate(0, 0)
+        self.object_size = 0
+        self.unboxed_size = 0
 
     def getclass(self):
         return self.w_cls
@@ -77,6 +87,8 @@ class StorageNode(BaseNode):
         self.prev = prev
         self.name = name
         self.pos = self.compute_position()
+        self.object_size = prev.object_size + self.uses_object_storage
+        self.unboxed_size = prev.unboxed_size + self.uses_unboxed_storage
 
     def length(self):
         return self.pos + 1
@@ -95,6 +107,7 @@ class StorageNode(BaseNode):
     def update_storage_size(self, w_obj, prev_node):
         if not jit.we_are_jitted():
             prev_node.size_estimate.update_from(self.size_estimate)
+        prepare_storage(self, w_obj, prev_node)
 
 
 class AttributeNode(StorageNode):
@@ -120,12 +133,17 @@ class AttributeNode(StorageNode):
 
     def remove_attr(self, space, node, w_obj):
         if node is self:
+            # The recursive rebuild reads the suffix before shrinking to
+            # this prefix. Keep the map in sync with its storage format.
+            prepare_storage(self.prev, w_obj, w_obj.map)
+            w_obj.map = self.prev
             return self.prev
         w_cur_val = self.read(space, w_obj)
         new_prev = self.prev.remove_attr(space, node, w_obj)
         node = new_prev.add(
             space, AttributeNode.select_type(space, w_cur_val), self.name,
             w_obj)
+        w_obj.map = node
         node.write(space, w_obj, w_cur_val)
         return node
 
@@ -144,10 +162,6 @@ class UnboxedAttributeNode(AttributeNode):
     def compute_position(self):
         return compute_position(self, "uses_unboxed_storage")
 
-    def update_storage_size(self, w_obj, prev_node):
-        AttributeNode.update_storage_size(self, w_obj, prev_node)
-        update_storage(self, w_obj, "unboxed", 0.0)
-
 
 class IntAttributeNode(UnboxedAttributeNode):
     @staticmethod
@@ -155,12 +169,12 @@ class IntAttributeNode(UnboxedAttributeNode):
         return space.is_kind_of(w_value, space.w_fixnum)
 
     def _store(self, space, w_obj, w_value):
-        w_obj.unboxed_storage[self.pos] = longlong2float.longlong2float(
+        unerase_unboxed(w_obj.unboxed_storage)[self.pos] = longlong2float.longlong2float(
             rffi.cast(lltype.SignedLongLong, space.int_w(w_value)))
 
     def read(self, space, w_obj):
         return space.newint(intmask(longlong2float.float2longlong(
-            w_obj.unboxed_storage[self.pos])))
+            unerase_unboxed(w_obj.unboxed_storage)[self.pos])))
 
 
 class FloatAttributeNode(UnboxedAttributeNode):
@@ -169,10 +183,10 @@ class FloatAttributeNode(UnboxedAttributeNode):
         return space.is_kind_of(w_value, space.w_float)
 
     def _store(self, space, w_obj, w_value):
-        w_obj.unboxed_storage[self.pos] = space.float_w(w_value)
+        unerase_unboxed(w_obj.unboxed_storage)[self.pos] = space.float_w(w_value)
 
     def read(self, space, w_obj):
-        return space.newfloat(w_obj.unboxed_storage[self.pos])
+        return space.newfloat(unerase_unboxed(w_obj.unboxed_storage)[self.pos])
 
 
 class ObjectAttributeNode(AttributeNode):
@@ -193,15 +207,11 @@ class ObjectAttributeNode(AttributeNode):
     def compute_position(self):
         return compute_position(self, "uses_object_storage")
 
-    def update_storage_size(self, w_obj, prev_node):
-        AttributeNode.update_storage_size(self, w_obj, prev_node)
-        update_storage(self, w_obj, "object", None)
-
     def _store(self, space, w_obj, w_value):
-        w_obj.object_storage[self.pos] = w_value
+        write_object_storage(w_obj, self.pos, w_value)
 
     def read(self, space, w_obj):
-        return w_obj.object_storage[self.pos]
+        return read_object_storage(w_obj, self.pos)
 
 
 class FlagNode(StorageNode):
@@ -218,10 +228,6 @@ class FlagNode(StorageNode):
     def compute_position(self):
         return compute_position(self, "uses_object_storage")
 
-    def update_storage_size(self, w_obj, prev_node):
-        StorageNode.update_storage_size(self, w_obj, prev_node)
-        update_storage(self, w_obj, "object", None)
-
     def copy_attrs(self, space, w_obj, w_target):
         self.prev.copy_attrs(space, w_obj, w_target)
 
@@ -230,14 +236,15 @@ class FlagNode(StorageNode):
         w_value = self.read(space, w_obj)
         new_prev = self.prev.remove_attr(space, node, w_obj)
         new_node = new_prev.add(space, FlagNode, self.name, w_obj)
+        w_obj.map = new_node
         new_node.write(space, w_obj, w_value)
         return new_node
 
     def write(self, space, w_obj, w_value):
-        w_obj.object_storage[self.pos] = w_value
+        write_object_storage(w_obj, self.pos, w_value)
 
     def read(self, space, w_obj):
-        return w_obj.object_storage[self.pos]
+        return read_object_storage(w_obj, self.pos)
 
 
 ATTRIBUTE_CLASSES = unrolling_iterable([
@@ -247,17 +254,85 @@ ATTRIBUTE_CLASSES = unrolling_iterable([
 ])
 
 
+def read_object_storage(w_obj, pos):
+    if jit.promote(w_obj.map).has_inline_storage():
+        if pos == 0:
+            return unerase_value(w_obj.object_storage)
+        assert pos == 1
+        return unerase_value(w_obj.unboxed_storage)
+    return unerase_objects(w_obj.object_storage)[pos]
+
+
+def write_object_storage(w_obj, pos, w_value):
+    if jit.promote(w_obj.map).has_inline_storage():
+        if pos == 0:
+            w_obj.object_storage = erase_value(w_value)
+        else:
+            assert pos == 1
+            w_obj.unboxed_storage = erase_value(w_value)
+    else:
+        unerase_objects(w_obj.object_storage)[pos] = w_value
+
+
+def prepare_storage(node, w_obj, prev):
+    if node.has_inline_storage():
+        if not prev.has_inline_storage():
+            storage = unerase_objects(w_obj.object_storage)
+            w_first = w_second = None
+            if node.object_size > 0:
+                w_first = storage[0]
+            if node.object_size > 1:
+                w_second = storage[1]
+            w_obj.object_storage = erase_value(w_first)
+            w_obj.unboxed_storage = erase_value(w_second)
+        else:
+            # Clear slots discarded by attribute removal.
+            if node.object_size < 2:
+                w_obj.unboxed_storage = erase_value(None)
+            if node.object_size < 1:
+                w_obj.object_storage = erase_value(None)
+        return
+
+    if prev.has_inline_storage():
+        w_first = unerase_value(w_obj.object_storage)
+        w_second = unerase_value(w_obj.unboxed_storage)
+        storage = None
+        if node.object_size:
+            storage = [None] * max(
+                node.object_size, node.size_estimate.object_size_estimate())
+            if prev.object_size > 0:
+                storage[0] = w_first
+            if prev.object_size > 1:
+                storage[1] = w_second
+        w_obj.object_storage = erase_objects(storage)
+        w_obj.unboxed_storage = erase_unboxed(None)
+    update_storage(node, w_obj, "object", None)
+    update_storage(node, w_obj, "unboxed", 0.0)
+
+
 @specialize.arg(2)
 @jit.unroll_safe
 def update_storage(node, w_obj, storage_name, empty_value):
-    storage = getattr(w_obj, storage_name + "_storage")
-    if storage is None or node.length() >= len(storage):
-        new_storage = [empty_value] * getattr(
-            node.size_estimate, storage_name + "_size_estimate")()
+    if storage_name == "object":
+        storage = unerase_objects(w_obj.object_storage)
+        size = node.object_size
+    else:
+        storage = unerase_unboxed(w_obj.unboxed_storage)
+        size = node.unboxed_size
+    if size == 0:
+        new_storage = None
+    elif storage is None or size > len(storage):
+        new_storage = [empty_value] * max(size, getattr(
+            node.size_estimate, storage_name + "_size_estimate")())
         if storage is not None:
             for i, value in enumerate(storage):
                 new_storage[i] = value
-        setattr(w_obj, storage_name + "_storage", new_storage)
+    else:
+        return
+    if storage_name == "object":
+        w_obj.object_storage = erase_objects(new_storage)
+    else:
+        w_obj.unboxed_storage = erase_unboxed(new_storage)
 
 
 @specialize.arg(1)

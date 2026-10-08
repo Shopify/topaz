@@ -6,7 +6,8 @@ from topaz import mapdict
 class FakeObject(object):
     def __init__(self, map):
         self.map = map
-        self.object_storage = self.unboxed_storage = None
+        self.object_storage = mapdict.erase_value(None)
+        self.unboxed_storage = mapdict.erase_value(None)
 
 
 class TestMapDict(object):

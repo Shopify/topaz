@@ -18,7 +18,7 @@ class BaseJITTest(object):
             cwd=str(tmpdir),
             env={"PYPYLOG": "jit-log-opt:%s" % tmpdir.join("x.pypylog")}
         )
-        proc.wait()
+        assert proc.wait() == 0
         data = logparser.parse_log_file(str(tmpdir.join("x.pypylog")), verbose=False)
         data = logparser.extract_category(data, "jit-log-opt-")
 

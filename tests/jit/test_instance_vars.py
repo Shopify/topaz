@@ -2,6 +2,46 @@ from .base import BaseJITTest
 
 
 class TestInstanceVars(BaseJITTest):
+    def test_two_inline_boxed_fields(self, topaz, tmpdir):
+        traces = self.run(topaz, tmpdir, """
+        class Pair
+          attr_accessor :left, :right
+        end
+        a = Pair.new
+        b = Pair.new
+        a.left = b
+        a.right = a
+        b.left = a
+        b.right = b
+        node = a
+        i = 0
+        while i < 10_000
+          following = node.left
+          node.left = node.right
+          node.right = following
+          node = following
+          i += 1
+        end
+        raise 'lost a link' if a.left.equal?(a.right)
+        raise 'lost a link' if b.left.equal?(b.right)
+        """)
+        loop = traces[0].loop
+        # Both boxed slots should be accessed directly on the object, with
+        # no backing-array accesses or allocations in the steady-state loop.
+        storage_ops = []
+        for op in loop:
+            for field in ("inst_object_storage", "inst_unboxed_storage"):
+                if field in str(op.descr):
+                    storage_ops.append((op.name, field))
+        assert sorted(storage_ops) == sorted([
+            ("getfield_gc_r", "inst_object_storage"),
+            ("getfield_gc_r", "inst_unboxed_storage"),
+            ("setfield_gc", "inst_object_storage"),
+            ("setfield_gc", "inst_unboxed_storage"),
+        ])
+        assert not any(op.name.startswith(("getarrayitem", "setarrayitem", "new"))
+                       for op in loop)
+
     def test_initialize(self, topaz, tmpdir):
         traces = self.run(topaz, tmpdir, """
         class A

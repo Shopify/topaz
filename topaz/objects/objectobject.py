@@ -166,8 +166,9 @@ class W_Object(W_RootObject):
         # of a class whose instance variables are set in varying orders
         # have many maps).
         self.klass = klass
-        self.object_storage = None
-        self.unboxed_storage = None
+        # Two inline boxed slots until the map requires backing arrays.
+        self.object_storage = mapdict.erase_value(None)
+        self.unboxed_storage = mapdict.erase_value(None)
 
     def __deepcopy__(self, memo):
         obj = super(W_Object, self).__deepcopy__(memo)

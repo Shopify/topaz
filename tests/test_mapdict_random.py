@@ -1,5 +1,6 @@
 """Model-based storage tests, independent of the inline/array layout."""
 
+import copy
 import struct
 import sys
 
@@ -8,6 +9,7 @@ import pytest
 pytest.importorskip("hypothesis")
 from hypothesis import example, given, settings, strategies as st
 
+from topaz import mapdict
 from topaz.objects.floatobject import W_FloatObject
 from topaz.objects.intobject import W_FixnumObject
 from topaz.objects.objectobject import W_Object, W_Root
@@ -172,3 +174,56 @@ def test_instance_storage_matches_model(sequence):
 ])
 def test_instance_storage_with_flags_matches_model(sequence):
     run_sequence(sequence)
+
+
+def test_inline_storage_spills_and_shrinks():
+    space = StorageSpace()
+    obj = W_Object(space, object())
+    values = [W_Root() for _ in range(3)]
+    obj.set_instance_var(space, "@a", values[0])
+    obj.set_instance_var(space, "@b", values[1])
+    assert obj.map.has_inline_storage()
+    assert mapdict.unerase_value(obj.object_storage) is values[0]
+    assert mapdict.unerase_value(obj.unboxed_storage) is values[1]
+
+    obj.set_instance_var(space, "@c", values[2])
+    assert not obj.map.has_inline_storage()
+    assert mapdict.unerase_objects(obj.object_storage)[:3] == values
+    obj.remove_instance_var(space, "@a")
+    assert obj.map.has_inline_storage()
+    assert mapdict.unerase_value(obj.object_storage) is values[1]
+    assert mapdict.unerase_value(obj.unboxed_storage) is values[2]
+
+    obj.set_instance_var(space, "@a", space.newint(42))
+    assert not obj.map.has_inline_storage()
+    assert obj.find_instance_var(space, "@a").intvalue == 42
+    obj.remove_instance_var(space, "@a")
+    assert obj.map.has_inline_storage()
+    assert obj.find_instance_var(space, "@b") is values[1]
+    assert obj.find_instance_var(space, "@c") is values[2]
+    obj.remove_instance_var(space, "@b")
+    assert mapdict.unerase_value(obj.unboxed_storage) is None
+    obj.remove_instance_var(space, "@c")
+    assert mapdict.unerase_value(obj.object_storage) is None
+
+
+@pytest.mark.parametrize("kind", ["inline", "boxed_array", "unboxed_array"])
+def test_deepcopy_storage(kind):
+    space = StorageSpace()
+    obj = W_Object(space, object())
+    obj.set_instance_var(space, "@a", W_Root())
+    obj.set_flag(space, "tainted?")
+    if kind == "boxed_array":
+        obj.set_instance_var(space, "@b", W_Root())
+    elif kind == "unboxed_array":
+        obj.set_instance_var(space, "@b", space.newfloat(-0.0))
+    memo = {id(space.w_true): space.w_true, id(space.w_false): space.w_false}
+    duplicate = copy.deepcopy(obj, memo)
+    assert duplicate.instance_variable_names(space) == obj.instance_variable_names(space)
+    assert duplicate.get_flag(space, "tainted?") is space.w_true
+    assert duplicate.find_instance_var(space, "@a") is not obj.find_instance_var(space, "@a")
+    if kind == "unboxed_array":
+        check_value(duplicate.find_instance_var(space, "@b"), space.newfloat(-0.0))
+    duplicate.remove_instance_var(space, "@a")
+    assert obj.find_instance_var(space, "@a") is not None
+    assert duplicate.find_instance_var(space, "@a") is None
