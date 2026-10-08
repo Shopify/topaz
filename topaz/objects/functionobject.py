@@ -79,7 +79,11 @@ class W_VisibilityFunction(W_FunctionObject):
 
 
 class W_UserFunction(W_FunctionObject):
-    _immutable_fields_ = ["bytecode", "lexical_scope"]
+    # w_owner is written once, by define_method right after `def` creates
+    # the function (and on fresh copies): quasi-immutable, so that traces
+    # calling a known method get its owner (for super and Method#owner) as
+    # a constant instead of a getfield and a guard per call.
+    _immutable_fields_ = ["bytecode", "lexical_scope", "w_owner?"]
 
     def __init__(self, name, bytecode, lexical_scope, visibility=W_FunctionObject.PUBLIC):
         W_FunctionObject.__init__(self, name, visibility=visibility)
