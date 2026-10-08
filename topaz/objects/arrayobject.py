@@ -69,6 +69,7 @@ map_driver = _enum_driver("map")
 reject_driver = _enum_driver("reject")
 delete_if_driver = _enum_driver("delete_if")
 reverse_each_driver = _enum_driver("reverse_each")
+flat_map_driver = _enum_driver("flat_map")
 
 
 # Array#hash was Ruby code (Thread.current.recursion_guard around an each
@@ -719,6 +720,25 @@ class W_ArrayObject(W_Object):
                 i = len(self.items_w)
             i -= 1
         return self
+
+    @classdef.method("collect_concat")
+    @classdef.method("flat_map")
+    def method_flat_map(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("flat_map")])
+        bytecode = block.bytecode
+        result_w = []
+        i = 0
+        while i < len(self.items_w):
+            flat_map_driver.jit_merge_point(bytecode=bytecode)
+            w_res = space.invoke_block(block, [self.items_w[i]])
+            w_ary = space.convert_type(w_res, space.w_array, "to_ary", raise_error=False)
+            if w_ary is space.w_nil:
+                result_w.append(w_res)
+            else:
+                result_w.extend(space.listview(w_ary))
+            i += 1
+        return space.newarray(result_w)
 
     @classdef.method("sort_by!")
     @check_frozen()

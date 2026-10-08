@@ -324,6 +324,17 @@ class TestArrayObject(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [[3, 2, 1, 4, 4, 4, 4], True, "Enumerator"]
 
+    def test_flat_map(self, space):
+        w_res = space.execute("""
+        o = Object.new
+        def o.to_ary; [8, 9]; end
+        return [[1, [2, 3], 4].flat_map { |x| x }, [1, 2].flat_map { |x| [x, [x]] },
+                [1].flat_map { |x| o }, [1, 2].collect_concat { |x| x + 1 },
+                [].flat_map.class.name]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 2, 3, 4], [1, [1], 2, [2]], [8, 9], [2, 3], "Enumerator"]
+
     def test_shift(self, space):
         w_res = space.execute("return [].shift")
         assert w_res is space.w_nil
