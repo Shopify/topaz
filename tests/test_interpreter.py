@@ -1443,6 +1443,51 @@ class TestInterpreter(BaseTopazTest):
         w_res = space.execute("return ->{ 1 + 1 }.call")
         assert space.int_w(w_res) == 2
 
+    def test_lambda_return(self, space):
+        w_res = space.execute("""
+        r = []
+        l = lambda { return 1; 2 }
+        r << l.call
+        # A return in a block the lambda's body creates returns from the
+        # lambda.
+        l2 = lambda { [1, 2].each { |x| return x * 10 }; :no }
+        r << l2.call
+        # Yielding to a lambda: its return ends at the lambda.
+        def m
+          yield
+          :after
+        end
+        r << m(&lambda { return :from_lambda })
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [1, 10, "after"]
+
+    def test_return_through_lambda_and_define_method(self, space):
+        w_res = space.execute("""
+        r = []
+        l = lambda { |&b| b.call; :lambda_done }
+        def through_lambda(l)
+          l.call { return :from_method }
+          :not_reached
+        end
+        r << through_lambda(l)
+
+        class Wrapper
+          define_method(:each3) { |&b| 3.times { |i| b.call(i) }; :done }
+          define_method(:own_return) { |x| return x * 2; :no }
+          define_method(:nested_return) { |x| [x].each { |y| return y + 1 }; :no }
+        end
+        def through_define_method
+          Wrapper.new.each3 { |i| return i if i == 1 }
+          :not_reached
+        end
+        r << through_define_method
+        r << Wrapper.new.own_return(4) << Wrapper.new.nested_return(4)
+        r << Wrapper.new.each3 { |i| }
+        return r
+        """)
+        assert self.unwrap(space, w_res) == ["from_method", 1, 8, 5, "done"]
+
 
 class TestBlocks(BaseTopazTest):
     def test_self(self, space):

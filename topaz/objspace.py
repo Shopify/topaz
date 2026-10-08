@@ -855,10 +855,22 @@ class ObjectSpace(object):
     @jit.unroll_safe
     def invoke_block(self, block, args_w, block_arg=None):
         bc = block.bytecode
+        if block.is_lambda:
+            # A return in a lambda's body, or in a block the body creates,
+            # returns from the lambda: it targets the interpreter running
+            # the lambda's frame, which catches it. A return raised by a
+            # block that was merely passed through the lambda (a
+            # define_method wrapper forwarding &b, say) keeps its own
+            # target and propagates past it.
+            interp = Interpreter()
+            top_parent_interp = interp
+        else:
+            interp = None
+            top_parent_interp = block.top_parent_interp
         frame = self.create_frame(
             bc, w_self=block.w_self, lexical_scope=block.lexical_scope,
             block=block.block, parent_interp=block.parent_interp,
-            top_parent_interp=block.top_parent_interp,
+            top_parent_interp=top_parent_interp,
             regexp_match_cell=block.regexp_match_cell,
         )
         frame.w_owner = block.w_owner
@@ -875,6 +887,8 @@ class ObjectSpace(object):
             frame.set_cell(len(bc.cellvars) + i, block.cells[i])
 
         with self.getexecutioncontext().visit_frame(frame):
+            if interp is not None:
+                return interp.run(self, frame, bc)
             return self.execute_frame(frame, bc)
 
     def invoke_function(self, w_function, w_receiver, args_w, block):

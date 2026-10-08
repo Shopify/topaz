@@ -91,17 +91,15 @@ class DefineMethodBlock(W_FunctionObject):
         return self.call_with_super(space, w_obj, args_w, block, 0)
 
     def call_with_super(self, space, w_obj, args_w, block, occurrence):
-        from topaz.interpreter import RaiseReturn
-
         method_block = self.block.copy(space, w_self=w_obj, is_lambda=True)
         if self.w_owner is not None:
             method_block.w_owner = self.w_owner
         method_block.super_occurrence = occurrence
         method_block.super_name = self.name
-        try:
-            return space.invoke_block(method_block, args_w, block)
-        except RaiseReturn as e:
-            return e.w_value
+        # The body is a lambda: its own returns end at the interpreter that
+        # runs it, and a return from a block the caller passed in (headed
+        # for the caller's method) propagates through.
+        return space.invoke_block(method_block, args_w, block)
 
     def arity(self, space):
         return space.newint(self.block.bytecode.arity(negative_defaults=True))

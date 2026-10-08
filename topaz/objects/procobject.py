@@ -67,15 +67,13 @@ class W_ProcObject(W_Object):
     @classdef.method("[]")
     @classdef.method("call")
     def method_call(self, space, args_w, block):
-        from topaz.interpreter import RaiseReturn, RaiseBreak
+        from topaz.interpreter import RaiseBreak
 
+        # A lambda's own returns are caught by the interpreter that runs
+        # it (see ObjectSpace.invoke_block); a return passing through from
+        # a block defined elsewhere must not be swallowed here.
         try:
             return space.invoke_block(self, args_w, block_arg=block)
-        except RaiseReturn as e:
-            if self.is_lambda:
-                return e.w_value
-            else:
-                raise
         except RaiseBreak as e:
             if e.parent_interp is not self.parent_interp:
                 # A break from a block nested in this proc, headed for a
