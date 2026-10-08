@@ -1,9 +1,21 @@
 class Symbol
-  def to_proc
-    Proc.new do |*args|
-      raise ArgumentError.new("no receiver given") if args.empty?
-      args.shift.send(self, *args)
+  # One lambda per symbol, as CRuby caches them: `recv.meth(*args)` for
+  # the first yielded value. Hash#each and friends yield a [key, value]
+  # pair as one argument, so the receiver is the pair.
+  @__topaz_procs = {}
+
+  class << self
+    private
+
+    def __topaz_proc_for(sym)
+      @__topaz_procs[sym] ||= lambda do |recv, *args, &blk|
+        recv.__send__(sym, *args, &blk)
+      end
     end
+  end
+
+  def to_proc
+    Symbol.__send__(:__topaz_proc_for, self)
   end
 
   def to_sym
