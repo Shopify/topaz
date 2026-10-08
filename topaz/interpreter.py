@@ -638,10 +638,8 @@ class Interpreter(object):
 
     def SEND(self, space, bytecode, frame, pc, meth_idx, num_args):
         space.getexecutioncontext().last_instr = pc
-        args_w = frame.popitemsreverse(num_args)
-        w_receiver = frame.pop()
-        w_res = space.send(
-            w_receiver, space.symbol_w(bytecode.consts_w[meth_idx]), args_w)
+        w_res = space.send_valuestack(
+            space.symbol_w(bytecode.consts_w[meth_idx]), num_args, frame)
         frame.push(w_res)
 
     def SEND_BLOCK(self, space, bytecode, frame, pc, meth_idx, num_args):

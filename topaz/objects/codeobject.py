@@ -24,7 +24,7 @@ class W_CodeObject(W_BaseObject):
         "code", "consts_w[*]", "max_stackdepth", "cellvars[*]", "freevars[*]",
         "arg_pos[*]", "defaults[*]", "block_arg_pos", "splat_arg_pos",
         "kwarg_names[*]", "kwrest_pos", "num_kw_defaults", "default_arg_begin", "num_defaults",
-        "filepath", "lineno", "default_entry_pcs[*]",
+        "filepath", "lineno", "default_entry_pcs[*]", "fast_arity",
     ]
 
     classdef = ClassDef("Code", W_BaseObject.classdef)
@@ -86,6 +86,13 @@ class W_CodeObject(W_BaseObject):
             block_arg_pos = cellvars.index(block_arg)
         self.block_arg_pos = block_arg_pos
 
+        # SEND can copy required positional arguments straight from the
+        # caller's stack into a fresh frame, bypassing handle_args.
+        self.fast_arity = -1
+        if (self.num_defaults == 0 and splat_arg_pos == -1 and
+                not kwarg_names and kwrest_pos == -1 and block_arg_pos == -1):
+            self.fast_arity = n_args
+
         # Set by Module#ruby2_keywords: keyword arguments collected by the
         # rest parameter stay keywords when splatted into another call.
         self.ruby2_keywords = False
@@ -112,6 +119,7 @@ class W_CodeObject(W_BaseObject):
         obj.freevars = self.freevars
         obj.lineno_table = self.lineno_table
         obj.arg_pos = self.arg_pos
+        obj.fast_arity = self.fast_arity
         obj.block_arg_pos = self.block_arg_pos
         obj.splat_arg_pos = self.splat_arg_pos
         obj.default_arg_begin = self.default_arg_begin

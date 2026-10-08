@@ -740,6 +740,47 @@ class ObjectSpace(object):
         return self._send_raw(
             name, raw_method, w_receiver, w_cls, args_w, block)
 
+    @jit.unroll_safe
+    def send_valuestack(self, name, nargs, caller):
+        finaldepth = jit.promote(caller.stackpos) - nargs - 1
+        assert finaldepth >= 0
+        frame = None
+        args_w = None
+        w_receiver = caller.peek(nargs)
+        try:
+            w_cls = self.getclass(w_receiver)
+            raw_method = w_cls.find_method(self, name)
+        except:
+            caller.dropvaluesuntil(finaldepth)
+            raise
+        if isinstance(raw_method, W_UserFunction):
+            bc = raw_method.bytecode
+            if bc.fast_arity == nargs:
+                # Even an empty keyword hash changes argument counting.
+                w_last = caller.peek() if nargs else None
+                if not (isinstance(w_last, W_HashObject) and w_last.is_keywords):
+                    try:
+                        frame = self.create_frame(
+                            bc, w_self=w_receiver,
+                            lexical_scope=raw_method.lexical_scope)
+                    except:
+                        caller.dropvaluesuntil(finaldepth)
+                        raise
+                    frame.w_owner = raw_method.w_owner
+                    for i in xrange(nargs):
+                        pos = bc.arg_pos[i]
+                        assert pos >= 0
+                        frame.localsstack_w[pos] = caller.peek(nargs - 1 - i)
+        # Keep stack accesses outside catch-all handlers: catching IndexError
+        # makes RPython emit bounds checks incompatible with virtualizable arrays.
+        if frame is None:
+            args_w = caller.popitemsreverse(nargs)
+        caller.dropvaluesuntil(finaldepth)
+        if frame is not None:
+            with self.getexecutioncontext().visit_frame(frame):
+                return self.execute_frame(frame, frame.bytecode)
+        return self._send_raw(name, raw_method, w_receiver, w_cls, args_w, None)
+
     def send_super(self, w_cls, w_receiver, name, args_w, block=None):
         raw_method = w_cls.find_method_super(self, name)
         return self._send_raw(

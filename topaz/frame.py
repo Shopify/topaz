@@ -320,8 +320,18 @@ class Frame(BaseFrame):
             items_w[i] = self.pop()
         return items_w
 
-    def peek(self):
-        stackpos = jit.promote(self.stackpos) - 1
+    @jit.unroll_safe
+    def dropvaluesuntil(self, finaldepth):
+        assert finaldepth >= 0
+        depth = jit.promote(self.stackpos)
+        while depth > finaldepth:
+            depth -= 1
+            assert depth >= 0
+            self.localsstack_w[depth] = None
+        self.stackpos = finaldepth
+
+    def peek(self, index_from_top=0):
+        stackpos = jit.promote(self.stackpos) - 1 - index_from_top
         assert stackpos >= 0
         return self.localsstack_w[stackpos]
 
