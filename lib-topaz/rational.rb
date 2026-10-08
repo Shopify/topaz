@@ -15,7 +15,7 @@ class Rational < Numeric
       den /= g
     end
     r = allocate
-    r.__send__(:__topaz_init, num, den)
+    r.__topaz_init(num, den)
     r
   end
 
@@ -312,12 +312,15 @@ class Rational < Numeric
     __topaz_init(array[0], array[1])
   end
 
-  private
-
+  # Topaz's own constructor hook (Rational.__topaz_new, marshal_load):
+  # public so __topaz_new can call it directly.
   def __topaz_init(num, den)
     @num = num
     @den = den
   end
+
+  private
+
 end
 
 module Kernel
