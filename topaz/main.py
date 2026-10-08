@@ -2,8 +2,9 @@ from __future__ import absolute_import
 
 import os
 
-from rpython.rlib import jit
-from rpython.rlib.objectmodel import specialize
+from rpython.rlib import jit, rvmprof
+from rpython.rlib.objectmodel import specialize, we_are_translated
+from rpython.rlib.rvmprof.cintf import IS_SUPPORTED as VMPROF_SUPPORTED
 from rpython.rlib.streamio import open_file_as_stream, fdopen_as_stream
 
 from topaz.error import RubyError, print_traceback
@@ -74,9 +75,46 @@ def get_topaz_config_options():
 def create_entry_point(config):
     def entry_point(argv):
         space = getspace(config)
-        space.setup(argv[0])
-        return _entry_point(space, argv)
+        return _run_with_vmprof(space, argv)
     return entry_point
+
+
+def _run_with_vmprof(space, argv):
+    profile_path = os.environ.get("TOPAZ_VMPROF")
+    fd = -1
+    if profile_path:
+        if not we_are_translated() or not VMPROF_SUPPORTED:
+            os.write(2, "topaz: vmprof requires a translated build on a supported platform\n")
+            return 1
+        try:
+            fd = os.open(profile_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0666)
+        except OSError as e:
+            os.write(2, "topaz: cannot open vmprof output: %s\n" % os.strerror(e.errno))
+            return 1
+        try:
+            rvmprof.enable(fd, 0.001)
+        except rvmprof.VMProfError as e:
+            os.close(fd)
+            os.write(2, "topaz: cannot enable vmprof: %s\n" % e.msg)
+            return 1
+
+    status = 1
+    try:
+        space.setup(argv[0])
+        status = _entry_point(space, argv)
+    finally:
+        if fd >= 0:
+            # disable flushes the profile, so the descriptor must stay open
+            # through this call, including after Ruby exceptions and exit.
+            try:
+                rvmprof.disable()
+            except rvmprof.VMProfError as e:
+                os.write(2, "topaz: cannot finish vmprof profile: %s\n" % e.msg)
+                if status == 0:
+                    status = 1
+            finally:
+                os.close(fd)
+    return status
 
 
 class CommandLineError(Exception):

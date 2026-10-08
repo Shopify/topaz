@@ -1,6 +1,6 @@
 import copy
 
-from rpython.rlib import jit
+from rpython.rlib import jit, rvmprof
 from rpython.rlib.rstacklet import StackletThread
 
 from topaz.interpreter import RaiseReturn, RaiseBreak
@@ -169,16 +169,24 @@ def new_stacklet_callback(h, arg):
     origin.h = h
     global_state.clear()
 
-    with self.sthread.ec.visit_frame(self.bottomframe):
-        try:
+    # StackletThread.new suspends sampling while it switches stacks. A new
+    # stack has no suspended switch() call to restore sampling for it.
+    # Balance that suspension here, and suspend again before returning to
+    # the parent (whose new()/switch() will restore its profiler stack).
+    rvmprof.start_sampling()
+    try:
+        with self.sthread.ec.visit_frame(self.bottomframe):
             try:
-                global_state.w_result = space.execute_frame(self.bottomframe, self.w_block.bytecode)
-            except RaiseReturn:
-                raise space.error(space.w_LocalJumpError, "unexpected return")
-            except RaiseBreak:
-                raise space.error(space.w_LocalJumpError, "break from proc-closure")
-        except Exception as e:
-            global_state.propagate_exception = e
+                try:
+                    global_state.w_result = space.execute_frame(self.bottomframe, self.w_block.bytecode)
+                except RaiseReturn:
+                    raise space.error(space.w_LocalJumpError, "unexpected return")
+                except RaiseBreak:
+                    raise space.error(space.w_LocalJumpError, "break from proc-closure")
+            except Exception as e:
+                global_state.propagate_exception = e
+    finally:
+        rvmprof.stop_sampling()
 
     space.fromcache(State).current = self.parent_fiber
     global_state.space = space

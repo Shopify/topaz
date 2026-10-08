@@ -57,5 +57,43 @@ Prism
 upgrading the vendored Prism (see ``vendor/prism/README.md``), regenerate it
 with ``python3 topaz/prism/gen.py``, which needs a ``ruby`` to read the YAML.
 
+Profiling with vmprof
+--------------------
+
+A translated Topaz can record Ruby call stacks with vmprof. Set
+``TOPAZ_VMPROF`` to the output filename::
+
+    $ TOPAZ_VMPROF=/tmp/topaz.prof bin/topaz program.rb
+
+This overwrites the output file and samples CPU time every millisecond,
+including startup, required libraries, and ``at_exit`` handlers. Normal
+exit, Ruby ``exit``, and unhandled Ruby exceptions finish the profile before
+closing it. Forced termination (for example, SIGKILL or ``exit!``) can leave
+an incomplete profile.
+
+Install the Python ``vmprof`` package in a separate environment to inspect
+the recording::
+
+    $ python3 -m venv /tmp/vmprof-viewer
+    $ /tmp/vmprof-viewer/bin/pip install vmprof
+    $ /tmp/vmprof-viewer/bin/vmprofshow /tmp/topaz.prof tree
+
+Ruby frames contain the method or block name, source filename, and starting
+line. Per-line sampling and native C frames are not enabled. RPython
+currently labels the interpreter in the file header as ``pypy``; the Ruby
+frames themselves use ``rb``. Recording requires a translated executable on
+a platform supported by RPython's vmprof; running ``pypy -m topaz`` is not
+supported for recording Ruby stacks.
+
+To build without the JIT, replace ``-Ojit`` with ``-O2`` in the build command::
+
+    $ pypy /path/to/pypy/rpython/bin/rpython -O2 targettopaz.py
+
+The translated profiling smoke test checks Ruby caller stacks, Fiber
+yield/resume and completion, exception unwinding, and exit handlers. Run it
+with the viewer environment::
+
+    $ /tmp/vmprof-viewer/bin/python tools/check_vmprof.py bin/topaz
+
 .. _`PyPy`: https://github.com/pypy/pypy
 .. _`Prism`: https://github.com/ruby/prism
