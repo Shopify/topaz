@@ -25,7 +25,13 @@ class TestInstanceVars(BaseJITTest):
         raise 'lost a link' if a.left.equal?(a.right)
         raise 'lost a link' if b.left.equal?(b.right)
         """)
-        loop = traces[0].loop
+        # Bootstrapping also produces regexp traces before our Ruby loop.
+        ruby_loops = [trace for trace in traces
+                      if "t.rb:" in trace.trace.comment
+                      and ":in <main>" in trace.trace.comment
+                      and "loop with" in trace.trace.comment]
+        assert len(ruby_loops) == 1
+        loop = ruby_loops[0].loop
         # Both boxed slots should be accessed directly on the object, with
         # no backing-array accesses or allocations in the steady-state loop.
         storage_ops = []
