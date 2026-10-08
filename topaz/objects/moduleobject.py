@@ -81,6 +81,12 @@ class DefineMethodBlock(W_FunctionObject):
         self.block = block
         self.w_owner = None
 
+    def with_visibility(self, visibility):
+        method = DefineMethodBlock(self.name, self.block)
+        method.visibility = visibility
+        method.w_owner = self.w_owner
+        return method
+
     def call(self, space, w_obj, args_w, block):
         from topaz.interpreter import RaiseReturn
 
@@ -253,7 +259,7 @@ class W_ModuleObject(W_RootObject):
             self.attach_method(space, name, method.with_visibility(W_FunctionObject.PUBLIC))
             method = method.with_visibility(W_FunctionObject.PRIVATE)
         if name == "initialize" or name == "initialize_copy":
-            method.update_visibility(W_FunctionObject.PRIVATE)
+            method = method.with_visibility(W_FunctionObject.PRIVATE)
         self.mutated()
         self.methods_w[name] = method
         if isinstance(method, W_UserFunction):
@@ -304,7 +310,7 @@ class W_ModuleObject(W_RootObject):
         method = self._find_method_pure(space, name, self.version)
         if method is None:
             for module in self.included_modules:
-                method = module.find_method_uncached(space, name)
+                method = module.find_local_method(space, name)
                 if method is not None:
                     return method
         return method
@@ -350,7 +356,7 @@ class W_ModuleObject(W_RootObject):
     @jit.unroll_safe
     def find_method_super(self, space, name):
         for module in self.included_modules:
-            method = module.find_method(space, name)
+            method = module.find_local_method(space, name)
             if method is not None:
                 return method
         return None
@@ -455,15 +461,18 @@ class W_ModuleObject(W_RootObject):
     def find_local_const(self, space, name, autoload=True):
         w_res = self._find_const_pure(name, self.version)
         if autoload and isinstance(w_res, W_Autoload):
-            self.constants_w[name] = None
+            self.set_const(space, name, None)
             try:
                 w_res.load()
-            finally:
-                w_new_res = self.constants_w.get(name, None)
-                if not w_res:
-                    self.constants_w[name] = w_res
-                w_res = w_new_res
-            return w_res
+            except:
+                if self.constants_w.get(name, None) is None:
+                    self.set_const(space, name, w_res)
+                raise
+            w_new_res = self.constants_w.get(name, None)
+            if w_new_res is None and name in self.constants_w:
+                del self.constants_w[name]
+                self.mutated()
+            return w_new_res
         else:
             return w_res
 
@@ -565,16 +574,70 @@ class W_ModuleObject(W_RootObject):
     def include_module(self, space, w_mod):
         assert isinstance(w_mod, W_ModuleObject)
         if w_mod not in self.ancestors():
-            self.included_modules = self._modules_to_include(w_mod) + self.included_modules
+            additions = self._modules_to_include(w_mod)
+            self.included_modules = additions + self.included_modules
             self.mutated()
+            self._propagate_ancestor_modules(additions, False, [])
             w_mod.included(space, self)
 
     def prepend_module(self, space, w_mod):
         assert isinstance(w_mod, W_ModuleObject)
         if w_mod not in self.prepended_modules:
+            previous = self.prepended_modules
             self.prepended_modules = [w_mod] + self.prepended_modules
             self.mutated()
+            self._propagate_ancestor_modules([w_mod], True, previous)
             w_mod.add_descendant(self)
+
+    def _insert_ancestor_modules(self, modules, additions, prepend, previous, trailing):
+        result = modules
+        # Work backwards so inserting at a later occurrence does not move
+        # an earlier occurrence of this module.
+        for i in range(len(modules) - 1, -1, -1):
+            if modules[i] is not self:
+                continue
+            if prepend:
+                pos = i
+                for w_mod in reversed(previous):
+                    if pos == 0 or modules[pos - 1] is not w_mod:
+                        break
+                    pos -= 1
+                new_modules = additions
+            else:
+                pos = i + 1
+                assert pos >= 0
+                suffix = modules[pos:] + trailing
+                # A preceding occurrence does not suppress an inclusion
+                # here; an occurrence later in the chain does.
+                new_modules = [w_mod for w_mod in additions if w_mod not in suffix]
+            if new_modules:
+                assert pos >= 0
+                result = result[:pos] + new_modules + result[pos:]
+        return result
+
+    def _propagate_ancestor_modules(self, additions, prepend, previous):
+        pending = self.descendants_w()
+        seen = {self: None}
+        while pending:
+            w_user = pending.pop()
+            if w_user in seen:
+                continue
+            seen[w_user] = None
+            pending.extend(w_user.descendants_w())
+            included = w_user.included_modules
+            prepended = w_user.prepended_modules
+            ancestors = w_user.ancestors()
+            trailing = ancestors[len(prepended) + 1 + len(included):]
+            new_included = self._insert_ancestor_modules(
+                included, additions, prepend, previous, trailing)
+            new_prepended = self._insert_ancestor_modules(
+                prepended, additions, prepend, previous, [w_user] + included + trailing)
+            if new_included is not included or new_prepended is not prepended:
+                w_user.included_modules = new_included
+                w_user.prepended_modules = new_prepended
+                for w_mod in additions:
+                    w_mod.add_descendant(w_user)
+                w_user.mutated()
 
     def included(self, space, w_mod):
         self.add_descendant(w_mod)
@@ -630,12 +693,9 @@ class W_ModuleObject(W_RootObject):
             raise space.error(space.w_NameError,
                 "undefined method '%s' for class '%s'" % (name, cls_name)
             )
-        if self._find_method_pure(space, name, self.version) is w_method:
-            w_method.update_visibility(visibility)
-        else:
-            # The method comes from an ancestor: change it only here.
-            self.mutated()
-            self.methods_w[name] = w_method.with_visibility(visibility)
+        # Even a local entry may be shared with a dup, clone, or alias.
+        self.mutated()
+        self.methods_w[name] = w_method.with_visibility(visibility)
 
     def method_added(self, space, w_name):
         space.send(self, "method_added", [w_name])

@@ -27,11 +27,8 @@ class W_FunctionObject(W_BaseObject):
         self.visibility = visibility
 
     def with_visibility(self, visibility):
-        """This method with another visibility, for a module that changes
-        the visibility of a method it does not define itself. Kinds of
-        method that cannot be copied are changed in place."""
-        self.visibility = visibility
-        return self
+        """Return an independent method entry with another visibility."""
+        return W_VisibilityFunction(self, visibility)
 
     def is_undefined(self):
         return False
@@ -45,6 +42,34 @@ class W_FunctionObject(W_BaseObject):
 
     def source_location(self, space):
         return space.w_nil
+
+
+class W_VisibilityFunction(W_FunctionObject):
+    _immutable_fields_ = ["method"]
+
+    def __init__(self, method, visibility):
+        W_FunctionObject.__init__(self, method.name, method.w_class, visibility)
+        self.method = method
+
+    def __deepcopy__(self, memo):
+        obj = super(W_VisibilityFunction, self).__deepcopy__(memo)
+        obj.method = copy.deepcopy(self.method, memo)
+        return obj
+
+    def with_visibility(self, visibility):
+        return W_VisibilityFunction(self.method, visibility)
+
+    def call(self, space, w_receiver, args_w, block):
+        return self.method.call(space, w_receiver, args_w, block)
+
+    def arity(self, space):
+        return self.method.arity(space)
+
+    def parameters(self, space):
+        return self.method.parameters(space)
+
+    def source_location(self, space):
+        return self.method.source_location(space)
 
 
 class W_UserFunction(W_FunctionObject):
