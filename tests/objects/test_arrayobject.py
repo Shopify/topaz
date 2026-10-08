@@ -6,6 +6,31 @@ from ..base import BaseTopazTest
 
 
 class TestArrayObject(BaseTopazTest):
+    def test_initialize(self, space):
+        w_res = space.execute("""
+        class ArraySub < Array; end
+        x = [1, 2, 3]
+        x.send(:initialize, [9])
+        y = [1]
+        y.send(:initialize)
+        return [Array.new, Array.new(3), Array.new(2, 7), Array.new([1, 2]), Array.new(3) { |i| i * 2 },
+                Array.new(2.5), Array.new(0, 1), ArraySub.new(2).class.name, ArraySub.new([1]).class.name,
+                ArraySub.new(1) { 3 }, x, y]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [], [None, None, None], [7, 7], [1, 2], [0, 2, 4], [None, None], [],
+            "ArraySub", "ArraySub", [3], [9], []]
+        with self.raises(space, "ArgumentError", "negative array size"):
+            space.execute("Array.new(-1)")
+        with self.raises(space, "TypeError"):
+            space.execute("Array.new(nil)")
+        with self.raises(space, "TypeError"):
+            space.execute("Array.new('a')")
+        with self.raises(space, "TypeError"):
+            space.execute("Array.new([1], 5)")
+        with self.raises(space, "FrozenError"):
+            space.execute("[1].freeze.send(:initialize, 2)")
+
     def test_to_s(self, space):
         w_res = space.execute("return [].to_s")
         assert space.str_w(w_res) == "[]"

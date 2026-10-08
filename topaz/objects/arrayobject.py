@@ -62,6 +62,7 @@ enum_scan_block_driver = jit.JitDriver(
 enum_scan_plain_driver = jit.JitDriver(
     greens=["want", "limit"], reds="auto", name="Array#enum_scan_plain",
 )
+initialize_driver = _enum_driver("initialize")
 detect_driver = _enum_driver("detect")
 select_driver = _enum_driver("select")
 map_driver = _enum_driver("map")
@@ -141,6 +142,35 @@ class W_ArrayObject(W_Object):
     @classdef.singleton_method("allocate")
     def singleton_method_allocate(self, space):
         return W_ArrayObject(space, [], self)
+
+    @classdef.method("initialize")
+    @check_frozen()
+    def method_initialize(self, space, w_size=None, w_obj=None, block=None):
+        """Array.new, Array.new(size, obj = nil), Array.new(array) and
+        Array.new(size) { |i| }; a block supersedes obj."""
+        del self.items_w[:]
+        if w_size is None:
+            return self
+        if w_obj is None:
+            w_ary = space.convert_type(w_size, space.w_array, "to_ary", raise_error=False)
+            if w_ary is not space.w_nil:
+                self.items_w.extend(space.listview(w_ary))
+                return self
+        length = space.int_w(space.convert_type(w_size, space.w_fixnum, "to_int"))
+        if length < 0:
+            raise space.error(space.w_ArgumentError, "negative array size")
+        if block is not None:
+            bytecode = block.bytecode
+            i = 0
+            while i < length:
+                initialize_driver.jit_merge_point(bytecode=bytecode)
+                self.items_w.append(space.invoke_block(block, [space.newint(i)]))
+                i += 1
+        else:
+            if w_obj is None:
+                w_obj = space.w_nil
+            self.items_w.extend([w_obj] * length)
+        return self
 
     @classdef.method("initialize_copy", other_w="array")
     @classdef.method("replace", other_w="array")

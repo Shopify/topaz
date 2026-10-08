@@ -1,23 +1,4 @@
 class Array
-  def initialize(size_or_arr = nil, obj = nil, &block)
-    self.clear
-    return self if size_or_arr.nil?
-    if obj.nil?
-      if ary = Topaz.try_convert_type(size_or_arr, Array, :to_ary)
-        return self.replace(ary)
-      end
-    end
-    length = Topaz.convert_type(size_or_arr, Topaz::Fixnum, :to_int)
-    raise ArgumentError.new("negative array size") if length < 0
-    if block
-      # TODO: Emit "block supersedes default value argument" warning
-      length.times { |i| self << yield(i) }
-    else
-      self.concat([obj] * length)
-    end
-    return self
-  end
-
   def self.[](*args)
     allocate.concat(args)
   end
