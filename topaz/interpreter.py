@@ -16,7 +16,7 @@ from topaz.scope import StaticScope
 from topaz.utils.regexp import RegexpError
 
 
-def get_printable_location(pc, bytecode, block_bytecode, w_trace_proc):
+def get_printable_location(pc, bytecode, w_trace_proc):
     try:
         pcline = bytecode.lineno_table[pc]
     except IndexError:
@@ -30,7 +30,7 @@ def get_printable_location(pc, bytecode, block_bytecode, w_trace_proc):
     )
 
 
-def get_unique_id(pc, bytecode, block_bytecode, w_trace_proc):
+def get_unique_id(pc, bytecode, w_trace_proc):
     return rvmprof.get_unique_id(bytecode)
 
 
@@ -48,8 +48,16 @@ def _get_vmprof_code(self, space, frame, bytecode, pc):
 
 
 class Interpreter(object):
+    # The block passed to a method is deliberately not a green: with it,
+    # every (method, call-site block) pair was a separate trace with its own
+    # counters, so a Rails method called with blocks from N sites needed N
+    # times the calls to compile and was traced N times. create_frame
+    # promotes the block's bytecode when it is yielded to, so the trace tree
+    # still specializes on the block, only at the yield instead of at the
+    # entry. lobsters at 40 iterations: 1059ms -> 978/980ms per iteration,
+    # total run 66s -> 63-64s, MAXRSS 1119 -> 1087MiB.
     jitdriver = jit.JitDriver(
-        greens=["pc", "bytecode", "block_bytecode", "w_trace_proc"],
+        greens=["pc", "bytecode", "w_trace_proc"],
         reds=["self", "frame"],
         virtualizables=["frame"],
         get_printable_location=get_printable_location,
@@ -60,9 +68,6 @@ class Interpreter(object):
 
     def __init__(self):
         self.finished = False
-
-    def get_block_bytecode(self, block):
-        return block.bytecode if block is not None else None
 
     # RPython's stacklet support (used for Fibers) always links in rvmprof,
     # which requires the interpreter to declare its code-executing function.
@@ -77,7 +82,6 @@ class Interpreter(object):
             while True:
                 self.jitdriver.jit_merge_point(
                     self=self, bytecode=bytecode, frame=frame, pc=pc,
-                    block_bytecode=self.get_block_bytecode(frame.block),
                     w_trace_proc=space.getexecutioncontext().gettraceproc(),
                 )
                 pc = self._interpret(space, pc, frame, bytecode)
@@ -210,7 +214,6 @@ class Interpreter(object):
         if target_pc < cur_pc:
             self.jitdriver.can_enter_jit(
                 self=self, bytecode=bytecode, frame=frame, pc=target_pc,
-                block_bytecode=self.get_block_bytecode(frame.block),
                 w_trace_proc=space.getexecutioncontext().gettraceproc()
             )
         return target_pc
