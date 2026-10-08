@@ -1,6 +1,7 @@
 import os
 
 from rpython.rlib.rpoll import POLLIN, PollError
+from rpython.rlib.rstring import StringBuilder
 
 from topaz.coerce import Coerce
 from topaz.error import error_for_oserror
@@ -125,12 +126,12 @@ class W_IOObject(W_Object):
         else:
             length = -1
         read_bytes = 0
-        read_chunks = []
+        builder = StringBuilder()
         while length < 0 or read_bytes < length:
             if length > 0:
                 max_read = int(length - read_bytes)
             else:
-                max_read = 8192
+                max_read = 65536
             try:
                 current_read = os.read(self.fd, max_read)
             except OSError as e:
@@ -138,11 +139,11 @@ class W_IOObject(W_Object):
             if len(current_read) == 0:
                 break
             read_bytes += len(current_read)
-            read_chunks += current_read
+            builder.append(current_read)
         # At the end of the file read(n) gives nil and read() "".
         if read_bytes == 0 and length > 0:
             return space.w_nil
-        w_read_str = space.newstr_fromchars(read_chunks)
+        w_read_str = space.newstr_fromstr(builder.build())
         if w_str is not None:
             w_str.clear(space)
             w_str.extend(space, w_read_str)
