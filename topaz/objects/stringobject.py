@@ -587,12 +587,47 @@ class W_StringObject(W_Object):
 
     @classdef.method("initialize")
     @check_frozen()
-    def method_initialize(self, space, w_s=None):
-        if w_s is not None:
-            w_s = space.convert_type(w_s, space.w_string, "to_str")
+    def method_initialize(self, space, args_w):
+        """String.new(str = "", encoding: nil, capacity: nil). The copy of
+        str keeps its encoding tag (the @__topaz_encoding ivar of
+        lib-topaz/encoding.rb); with no str the string is binary, as in
+        CRuby. capacity is accepted and ignored."""
+        from topaz.objects.hashobject import W_HashObject
+        has_encoding = False
+        w_encoding = space.w_nil
+        if args_w:
+            w_last = args_w[-1]
+            if isinstance(w_last, W_HashObject) and w_last.is_keywords:
+                end = len(args_w) - 1
+                assert end >= 0
+                args_w = args_w[:end]
+                for w_key in w_last.strategy.keys(w_last.dict_storage):
+                    key = None
+                    if space.is_kind_of(w_key, space.w_symbol):
+                        key = space.symbol_w(w_key)
+                    if key == "encoding":
+                        has_encoding = True
+                        w_encoding = w_last.getitem(w_key)
+                    elif key != "capacity":
+                        raise space.error(space.w_ArgumentError,
+                            "unknown keyword: %s" % space.str_w(space.send(w_key, "inspect")))
+        if len(args_w) > 1:
+            raise space.error(space.w_ArgumentError,
+                "wrong number of arguments (given %d, expected 0..1)" % len(args_w))
+        if args_w:
+            w_s = space.convert_type(args_w[0], space.w_string, "to_str")
             assert isinstance(w_s, W_StringObject)
             self.strategy = w_s.strategy
             self.str_storage = w_s.strategy.copy(w_s.str_storage)
+            w_enc = w_s.find_instance_var(space, "@__topaz_encoding")
+            if w_enc is not None and w_enc is not space.w_nil:
+                self.set_instance_var(space, "@__topaz_encoding", w_enc)
+            elif self.find_instance_var(space, "@__topaz_encoding") is not None:
+                self.set_instance_var(space, "@__topaz_encoding", space.w_nil)
+        if has_encoding:
+            space.send(self, "force_encoding", [w_encoding])
+        elif not args_w:
+            self.set_instance_var(space, "@__topaz_encoding", space.encoding_binary())
         return self
 
     @classdef.method("initialize_copy")

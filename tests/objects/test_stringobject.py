@@ -10,6 +10,34 @@ class TestStringObject(BaseTopazTest):
         assert space.str_w(w_res) == "abc"
         w_res = space.execute("return String.new")
         assert space.str_w(w_res) == ""
+        w_res = space.execute("""
+        class StrSub < String; end
+        s = "orig"
+        s.send(:initialize, "new")
+        u = "x"
+        u.send(:initialize, encoding: "BINARY")
+        rebound = "b".b
+        rebound.send(:initialize, "utf")
+        return [String.new.encoding.to_s, String.new("ab").encoding.to_s, String.new("ab".b).encoding.to_s,
+                String.new(encoding: "UTF-8").encoding.to_s, String.new("x", encoding: "ASCII-8BIT").encoding.to_s,
+                String.new(capacity: 100), String.new("q", capacity: 5), StrSub.new("z").class.name,
+                StrSub.new.class.name, s, u, u.encoding.to_s, rebound.encoding.to_s, String.new("ab").frozen?]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "ASCII-8BIT", "UTF-8", "ASCII-8BIT", "UTF-8", "ASCII-8BIT", "", "q", "StrSub", "StrSub",
+            "new", "x", "ASCII-8BIT", "UTF-8", False]
+        with self.raises(space, "TypeError"):
+            space.execute("String.new(nil)")
+        with self.raises(space, "TypeError"):
+            space.execute("String.new(1)")
+        with self.raises(space, "ArgumentError", "wrong number of arguments (given 2, expected 0..1)"):
+            space.execute("String.new('a', 'b')")
+        with self.raises(space, "ArgumentError", "unknown keyword: :foo"):
+            space.execute("String.new(foo: 1)")
+        with self.raises(space, "TypeError"):
+            space.execute("String.new({encoding: 'UTF-8'})")
+        with self.raises(space, "FrozenError"):
+            space.execute("'a'.freeze.send(:initialize, 'b')")
 
     def test_escape_html(self, space):
         w_res = space.execute("""

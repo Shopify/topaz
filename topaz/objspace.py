@@ -76,6 +76,14 @@ from topaz.objects.timeobject import W_TimeObject
 from topaz.utils.ll_file import isdir
 
 
+class EncodingCache(object):
+    """Encoding objects looked up once lib-topaz/encoding.rb has defined
+    them. The space itself is a frozen prebuilt constant, so the cache
+    lives on a separate object."""
+    def __init__(self):
+        self.w_binary = None
+
+
 class SpaceCache(Cache):
     def __init__(self, space):
         Cache.__init__(self)
@@ -150,6 +158,9 @@ class ObjectSpace(object):
         self.w_unbound_method = self.getclassfor(W_UnboundMethodObject)
         self.w_io = self.getclassfor(W_IOObject)
         self.w_NoMethodError = self.getclassfor(W_NoMethodError)
+        # Encoding::ASCII_8BIT, looked up on first use (lib-topaz/encoding.rb
+        # defines it).
+        self.encoding_cache = EncodingCache()
         self.w_ArgumentError = self.getclassfor(W_ArgumentError)
         self.w_LocalJumpError = self.getclassfor(W_LocalJumpError)
         self.w_NameError = self.getclassfor(W_NameError)
@@ -821,6 +832,15 @@ class ObjectSpace(object):
                 args_w = [self.newsymbol(name)] + args_w
                 return method_missing.call(self, w_receiver, args_w, block)
         return raw_method.call(self, w_receiver, args_w, block)
+
+    def encoding_binary(self):
+        cache = self.encoding_cache
+        w_enc = cache.w_binary
+        if w_enc is None:
+            w_encoding = self.find_const(self.w_object, "Encoding")
+            w_enc = self.find_const(w_encoding, "ASCII_8BIT")
+            cache.w_binary = w_enc
+        return w_enc
 
     def respond_to(self, w_receiver, name):
         w_cls = self.getclass(w_receiver)

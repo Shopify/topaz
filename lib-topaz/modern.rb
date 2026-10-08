@@ -808,24 +808,6 @@ module Kernel
   private :Pathname
 end
 
-class String
-  alias __topaz_initialize initialize
-  private :__topaz_initialize
-
-  # String.new(str = "", encoding: nil, capacity: nil). With no string
-  # the new string is binary, as in CRuby.
-  def initialize(*args, encoding: nil, capacity: nil)
-    __topaz_initialize(*args)
-    if encoding
-      force_encoding(encoding)
-    elsif args.empty?
-      force_encoding(Encoding::ASCII_8BIT)
-    end
-    self
-  end
-  private :initialize
-end
-
 module Kernel
   # main.using: refinements are always on in topaz (see Module#refine).
   def using(mod)
