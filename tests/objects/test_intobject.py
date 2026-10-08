@@ -18,6 +18,23 @@ class TestFixnumObject(BaseTopazTest):
         with self.raises(space, "TypeError"):
             space.execute("3.gcd(1.5)")
 
+    def test_eqlp(self, space):
+        w_res = space.execute("""
+        class S < String; end
+        class K; def eql?(o); o == "k"; end; def hash; "k".hash; end; end
+        h = {1 => :a, "k" => :b, :s => :c, 2**70 => :d, 1.0 => :e}
+        return [
+          1.eql?(1), 1.eql?(1.0), 1.eql?(2), 1.eql?(2**70), 1.eql?(nil),
+          h[1], h[1.0], h["k"], h["k".dup], h[:s], h[2**70], h[S.new("k")],
+          h.key?(S.new("zz")), h[K.new], {S.new("k") => 1}["k"], {K.new => 1}["k"],
+        ]
+        """)
+        assert self.unwrap(space, w_res) == [
+            True, False, False, False, False,
+            "a", "e", "b", "b", "c", "d", "b",
+            False, "b", 1, None,
+        ]
+
     def test_step(self, space):
         w_res = space.execute("""
         r = []

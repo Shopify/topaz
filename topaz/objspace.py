@@ -7,7 +7,7 @@ import weakref
 
 from rpython.rlib import jit, rpath, types
 from rpython.rlib.cache import Cache
-from rpython.rlib.objectmodel import specialize, compute_unique_id
+from rpython.rlib.objectmodel import compute_identity_hash, specialize, compute_unique_id
 from rpython.rlib.signature import signature
 from rpython.rlib.rarithmetic import intmask
 from rpython.rlib.rbigint import rbigint
@@ -888,10 +888,36 @@ class ObjectSpace(object):
         assert isinstance(w_exc, W_ExceptionObject)
         return RubyError(w_exc)
 
+    # The hash and equality functions of a Hash's dictionary. As in MRI
+    # (rb_any_hash / rb_any_cmp), a Fixnum, a Symbol or a String whose
+    # class is exactly String is hashed and compared directly, without
+    # dispatching to `hash` / `eql?`: a redefinition of those methods on
+    # the core classes is not seen by Hash lookups. The direct values
+    # equal what the builtin methods return, so a user object whose eql?
+    # and hash mimic a string's still works as a key.
     def hash_w(self, w_obj):
+        if isinstance(w_obj, W_FixnumObject):
+            return w_obj.intvalue
+        if isinstance(w_obj, W_StringObject) and w_obj.klass is self.w_string:
+            return w_obj.strategy.hash(w_obj.str_storage)
+        if isinstance(w_obj, W_SymbolObject):
+            return compute_identity_hash(w_obj)
         return self.int_w(self.send(w_obj, "hash"))
 
     def eq_w(self, w_obj1, w_obj2):
+        if w_obj1 is w_obj2:
+            return True
+        if isinstance(w_obj1, W_FixnumObject):
+            if isinstance(w_obj2, W_FixnumObject):
+                return w_obj1.intvalue == w_obj2.intvalue
+        elif isinstance(w_obj1, W_StringObject):
+            if (isinstance(w_obj2, W_StringObject) and
+                    w_obj1.klass is self.w_string and
+                    w_obj2.klass is self.w_string):
+                return w_obj1.str_w(self) == w_obj2.str_w(self)
+        elif isinstance(w_obj1, W_SymbolObject):
+            if isinstance(w_obj2, W_SymbolObject):
+                return False
         return self.is_true(self.send(w_obj2, "eql?", [w_obj1]))
 
     def register_exit_handler(self, w_proc):
