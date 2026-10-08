@@ -87,6 +87,7 @@ uniq_block_driver = jit.JitDriver(
     get_printable_location=get_each_location)
 uniq_plain_driver = jit.JitDriver(greens=[], reds="auto", name="Array#uniq!")
 difference_driver = jit.JitDriver(greens=[], reds="auto", name="Array#-")
+flatten_driver = jit.JitDriver(greens=[], reds="auto", name="Array#flatten")
 
 HASH_SEED = 0x345678
 HASH_MULT = 1000003
@@ -835,6 +836,65 @@ class W_ArrayObject(W_Object):
                 result_w.append(w_item)
             i += 1
         return space.newarray(result_w)
+
+    def _flatten_into(self, space, out_w, level):
+        """Appends self's elements to out_w, flattening nested arrays (and
+        objects answering to_ary) up to level deep; -1 is unlimited.
+        Returns whether anything was flattened. An unlimited flatten of a
+        recursive array raises, as in MRI; with a level MRI does not check
+        (the depth is bounded anyway)."""
+        if level < 0:
+            ec = space.getexecutioncontext()
+            with ec.recursion_guard("array_flatten", self) as in_recursion:
+                if in_recursion:
+                    raise space.error(space.w_ArgumentError, "tried to flatten recursive array")
+                return self._flatten_items(space, out_w, level)
+        return self._flatten_items(space, out_w, level)
+
+    def _flatten_items(self, space, out_w, level):
+        modified = False
+        i = 0
+        while i < len(self.items_w):
+            flatten_driver.jit_merge_point()
+            w_item = self.items_w[i]
+            i += 1
+            if level == 0:
+                out_w.append(w_item)
+                continue
+            if isinstance(w_item, W_ArrayObject):
+                w_ary = w_item
+            else:
+                w_ary = space.convert_type(w_item, space.w_array, "to_ary", raise_error=False)
+                if w_ary is space.w_nil:
+                    out_w.append(w_item)
+                    continue
+                assert isinstance(w_ary, W_ArrayObject)
+            modified = True
+            w_ary._flatten_into(space, out_w, level - 1)
+        return modified
+
+    @staticmethod
+    def _flatten_level(space, w_level):
+        if w_level is None or w_level is space.w_nil:
+            return -1
+        return space.int_w(space.convert_type(w_level, space.w_integer, "to_int"))
+
+    @classdef.method("flatten")
+    def method_flatten(self, space, w_level=None):
+        level = self._flatten_level(space, w_level)
+        out_w = []
+        self._flatten_into(space, out_w, level)
+        return space.newarray(out_w)
+
+    @classdef.method("flatten!")
+    @check_frozen()
+    def method_flatten_bang(self, space, w_level=None):
+        level = self._flatten_level(space, w_level)
+        out_w = []
+        if not self._flatten_into(space, out_w, level):
+            return space.w_nil
+        self.items_w = out_w
+        return self
 
     @classdef.method("uniq!")
     @check_frozen()

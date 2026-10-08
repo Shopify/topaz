@@ -725,3 +725,32 @@ class TestArrayPack(BaseTopazTest):
     def test_each(self, space):
         w_res = space.execute("return [1, 2].each { }")
         assert self.unwrap(space, w_res) == [1, 2]
+
+    def test_flatten_levels(self, space):
+        w_res = space.execute("""
+        r = []
+        r << [1, [2, [3, [4]]]].flatten
+        r << [1, [2, [3, [4]]]].flatten(1)
+        r << [1, [2, [3, [4]]]].flatten(0)
+        r << [1, [2, [3, [4]]]].flatten(nil)
+        class FlatToAry; def to_ary; [:a, :b]; end; end
+        r << [1, FlatToAry.new, [FlatToAry.new]].flatten
+        r << [1, FlatToAry.new].flatten(0).map { |x| x.class.name }
+        a = [1, [2]]
+        r << a.flatten! << a
+        r << [1, 2].flatten!
+        r << Class.new(Array).new([1, [2]]).flatten.class.name
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 2, 3, 4], [1, 2, [3, [4]]], [1, [2, [3, [4]]]], [1, 2, 3, 4],
+            [1, "a", "b", "a", "b"], ["Integer", "FlatToAry"], [1, 2], [1, 2], None, "Array",
+        ]
+        with self.raises(space, "ArgumentError", "tried to flatten recursive array"):
+            space.execute("a = [1]; a << a; a.flatten")
+        w_res = space.execute("a = [1]; a << a; return a.flatten(1).size")
+        assert space.int_w(w_res) == 3
+        with self.raises(space, "TypeError"):
+            space.execute("[1].flatten('x')")
+        with self.raises(space, "FrozenError"):
+            space.execute("[1, [2]].freeze.flatten!")

@@ -194,9 +194,7 @@ class Hash
 
   def flatten(level = 1)
     level = Topaz.convert_type(level, Topaz::Fixnum, :to_int)
-    out = []
-    Topaz::Array.flatten(self, out, level)
-    out
+    to_a.flatten(level)
   end
 
   def self.try_convert(arg)

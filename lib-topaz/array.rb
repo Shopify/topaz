@@ -108,22 +108,6 @@ class Array
     end
   end
 
-  def flatten(level = -1)
-    level = Topaz.convert_type(level, Topaz::Fixnum, :to_int)
-    out = self.class.allocate
-    Topaz::Array.flatten(self, out, level)
-    out
-  end
-
-  def flatten!(level = -1)
-    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    level = Topaz.convert_type(level, Topaz::Fixnum, :to_int)
-    out = self.class.allocate
-    if Topaz::Array.flatten(self, out, level)
-      self.replace(out)
-    end
-  end
-
   def sort(&block)
     Array.new(self).sort!(&block)
   end
