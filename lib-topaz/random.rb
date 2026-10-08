@@ -7,6 +7,13 @@ class Random
     n = Topaz.convert_type(n, Integer, :to_int)
     raise ArgumentError, "negative string size (or size too big)" if n < 0
     return "" if n == 0
+    # One open file for the process: SecureRandom asks for a few bytes per
+    # request id, token and uuid, and opening the device each time cost
+    # more than reading it.
+    f = @__topaz_urandom ||= File.open("/dev/urandom", "rb")
+    f.read(n).force_encoding(Encoding::BINARY)
+  rescue IOError, SystemCallError
+    @__topaz_urandom = nil
     File.open("/dev/urandom", "rb") { |f| f.read(n) }
   end
 

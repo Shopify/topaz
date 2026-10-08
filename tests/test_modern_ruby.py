@@ -889,6 +889,16 @@ class TestSecureRandomSupport(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [8, 3, space.w_integer, space.w_integer, space.w_float, 3]
 
+    def test_urandom_reuses_its_file(self, space):
+        w_res = space.execute("""
+        a = Random.urandom(16)
+        b = Random.urandom(16)
+        return [a.bytesize, b.bytesize, a == b, Random.urandom(0), Random.urandom(1).encoding.to_s]
+        """)
+        assert self.unwrap(space, w_res) == [16, 16, False, "", "ASCII-8BIT"]
+        with self.raises(space, "ArgumentError"):
+            space.execute("Random.urandom(-1)")
+
 
 class TestERBEscape(BaseTopazTest):
     def test_html_escape(self, space):
