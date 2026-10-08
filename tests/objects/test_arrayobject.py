@@ -372,6 +372,8 @@ class TestArrayObject(BaseTopazTest):
         r << a.one? { |x| x > 2 } << a.one? { |x| x > 1 } << a.one?(1..2) << [nil, 1].one?
         r << a.detect { |x| x > 1 } << a.find { |x| x > 5 } << a.detect(-> { :none }) { |x| x > 5 } << a.detect(nil) { false }
         r << a.select(&:odd?) << a.filter(&:even?) << a.find_all { true } << a.reject(&:odd?)
+        r << a.map { |x| x * 2 } << a.collect(&:to_s) << [[1, 2], [3, 4]].map { |x, y| x + y } << a.map.class.name
+        r << a.map { |x| break x if x == 2 }
         r << a.each_with_index.to_a << a.select.class.name
         r << a.each_with_index { |x, i| break i if x == 2 }
         return r
@@ -385,6 +387,8 @@ class TestArrayObject(BaseTopazTest):
             True, False, False, True,
             2, None, "none", None,
             [1, 3], [2], [1, 2, 3], [2],
+            [2, 4, 6], ["1", "2", "3"], [3, 7], "Enumerator",
+            2,
             [[1, 0], [2, 1], [3, 2]], "Enumerator",
             1,
         ]

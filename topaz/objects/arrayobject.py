@@ -64,6 +64,7 @@ enum_scan_plain_driver = jit.JitDriver(
 )
 detect_driver = _enum_driver("detect")
 select_driver = _enum_driver("select")
+map_driver = _enum_driver("map")
 reject_driver = _enum_driver("reject")
 
 
@@ -605,6 +606,20 @@ class W_ArrayObject(W_Object):
             return space.w_nil
         # Like MRI, ifnone is called whatever it is.
         return space.send(w_ifnone, "call")
+
+    @classdef.method("map")
+    @classdef.method("collect")
+    def method_map(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("map")])
+        bytecode = block.bytecode
+        result_w = []
+        i = 0
+        while i < len(self.items_w):
+            map_driver.jit_merge_point(bytecode=bytecode)
+            result_w.append(space.invoke_block(block, [self.items_w[i]]))
+            i += 1
+        return space.newarray(result_w)
 
     @classdef.method("select")
     @classdef.method("filter")
