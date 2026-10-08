@@ -57,7 +57,7 @@ class Struct
 
   def instance_variables
     # Hide the ivars used to store the struct fields
-    self.singleton_class.instance_variables - self.class::STRUCT_IVARS
+    super - self.class::STRUCT_IVARS
   end
 
   # keyword_init: true takes only keywords, false only positional

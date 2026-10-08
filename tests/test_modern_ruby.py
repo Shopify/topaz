@@ -900,6 +900,31 @@ class TestSecureRandomSupport(BaseTopazTest):
             space.execute("Random.urandom(-1)")
 
 
+class TestStructFields(BaseTopazTest):
+    def test_fields_by_name_and_index(self, space):
+        w_res = space.execute("""
+        P = Struct.new(:x, :y)
+        K = Struct.new(:a, :b, keyword_init: true)
+        q = P.new(1, 2)
+        q[:x] = 9
+        q["y"] = 8
+        q[0] += 1
+        q[-1] -= 1
+        errors = [:zz, 2, -3].map { |k| begin; q[k]; rescue NameError, IndexError => e; e.class.name; end }
+        errors << (begin; q[:zz] = 1; rescue NameError; "set"; end)
+        q.instance_variable_set(:@extra, 1)
+        return [P.new(1).to_a, P[3, 4].x, K.new(a: 1, b: 2).to_a, q.to_a, q[:x], q["y"], q[1], q[-2],
+                errors, q.each_pair.to_a, q.to_h, q.values_at(1, 0),
+                q.hash == P.new(10, 7).hash, q.eql?(P.new(10, 7)), q == P.new(10, 7),
+                q.to_s, q.instance_variables, P.members]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, None], 3, [1, 2], [10, 7], 10, 7, 7, 10,
+            ["NameError", "IndexError", "IndexError", "set"], [["x", 10], ["y", 7]], {"x": 10, "y": 7}, [7, 10],
+            True, True, True,
+            "#<struct P x=10, y=7>", ["@extra"], ["x", "y"]]
+
+
 class TestERBEscape(BaseTopazTest):
     def test_html_escape(self, space):
         # lib-ruby/ext/erb/escape.rb stands in for CRuby's erb/escape.so.
