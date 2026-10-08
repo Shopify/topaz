@@ -48,7 +48,7 @@ class W_BindingObject(W_Object):
             name = bc.freevars[idx]
             for j in range(len(self.names)):
                 if self.names[j] == name:
-                    frame.cells[idx + len(bc.cellvars)] = self.cells[j]
+                    frame.set_cell(idx + len(bc.cellvars), self.cells[j])
                     break
         with space.getexecutioncontext().visit_frame(frame):
             return space.execute_frame(frame, bc)

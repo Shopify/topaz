@@ -562,9 +562,9 @@ class ObjectSpace(object):
     @jit.unroll_safe
     def newbinding_fromframe(self, frame):
         names = frame.bytecode.cellvars + frame.bytecode.freevars
-        cells = [None] * len(frame.cells)
-        for i in xrange(len(frame.cells)):
-            cells[i] = frame.cells[i].upgrade_to_closure(self, frame, i)
+        cells = [None] * len(names)
+        for i in xrange(len(names)):
+            cells[i] = frame.get_cell(i).upgrade_to_closure(self, frame, i)
         return W_BindingObject(
             self, names, cells, frame.w_self, frame.lexical_scope)
 
@@ -805,7 +805,7 @@ class ObjectSpace(object):
                 frame.handle_block_args(self, bc, args_w, block_arg)
         assert len(block.cells) == len(bc.freevars)
         for i in xrange(len(bc.freevars)):
-            frame.cells[len(bc.cellvars) + i] = block.cells[i]
+            frame.set_cell(len(bc.cellvars) + i, block.cells[i])
 
         with self.getexecutioncontext().visit_frame(frame):
             return self.execute_frame(frame, bc)

@@ -1,6 +1,6 @@
 from rpython.rlib import jit
 
-from topaz.closure import LOCAL_CELL
+from topaz.closure import BaseCell, LOCAL_CELL
 from topaz.objects.hashobject import W_HashObject
 from topaz.objects.functionobject import W_FunctionObject
 from topaz.objects.moduleobject import W_ModuleObject
@@ -17,7 +17,7 @@ class BaseFrame(object):
 class Frame(BaseFrame):
     _virtualizable_ = [
         "bytecode", "localsstack_w[*]", "stackpos", "w_self", "block",
-        "cells[*]", "lastblock", "lexical_scope", "last_instr",
+        "lastblock", "lexical_scope", "last_instr",
         "parent_interp", "top_parent_interp", "kwargs_given",
     ]
 
@@ -27,8 +27,15 @@ class Frame(BaseFrame):
         self = jit.hint(self, fresh_virtualizable=True, access_directly=True)
         BaseFrame.__init__(self)
         self.bytecode = bytecode
+        # Local values, operand stack, then local/free-variable cells.
+        # Keep the value and cell slots separate so local access still
+        # dispatches on the cell type, not the Ruby value's type.
+        num_locals = len(bytecode.cellvars)
+        cells_start = num_locals + bytecode.max_stackdepth
         self.localsstack_w = [None] * (
-            len(bytecode.cellvars) + bytecode.max_stackdepth)
+            cells_start + num_locals + len(bytecode.freevars))
+        for i in xrange(num_locals):
+            self.localsstack_w[cells_start + i] = LOCAL_CELL
         self.stackpos = len(bytecode.cellvars)
         self.last_instr = 0
         # Where the code starts: past the defaults of the optional
@@ -37,8 +44,6 @@ class Frame(BaseFrame):
         # the others' defaults.
         self.entry_pc = 0
         self.kwargs_given = 0
-        self.cells = ([LOCAL_CELL for _ in bytecode.cellvars] +
-                      [None] * len(bytecode.freevars))
         self.regexp_match_cell = regexp_match_cell
         self.w_self = w_self
         self.lexical_scope = lexical_scope
@@ -54,9 +59,21 @@ class Frame(BaseFrame):
         # was compiled inside some other method.
         self.super_name = None
 
+    def get_cell(self, pos):
+        assert pos >= 0
+        offset = len(self.bytecode.cellvars) + self.bytecode.max_stackdepth
+        cell = self.localsstack_w[offset + pos]
+        assert isinstance(cell, BaseCell)
+        return cell
+
+    def set_cell(self, pos, cell):
+        assert pos >= 0
+        offset = len(self.bytecode.cellvars) + self.bytecode.max_stackdepth
+        self.localsstack_w[offset + pos] = cell
+
     def _set_arg(self, space, pos, w_value):
         assert pos >= 0
-        self.cells[pos].set(space, self, pos, w_value)
+        self.get_cell(pos).set(space, self, pos, w_value)
 
     def handle_block_args(self, space, bytecode, args_w, block):
         # Keep keyword arguments out of the auto-splatting and trimming of

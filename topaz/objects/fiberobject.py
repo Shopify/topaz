@@ -105,7 +105,8 @@ class W_FiberObject(W_Object):
             regexp_match_cell=self.w_block.regexp_match_cell,
         )
         for idx, cell in enumerate(self.w_block.cells):
-            self.bottomframe.cells[len(self.w_block.bytecode.cellvars) + idx] = cell
+            self.bottomframe.set_cell(
+                len(self.w_block.bytecode.cellvars) + idx, cell)
 
     @classdef.method("resume")
     def method_resume(self, space, args_w):

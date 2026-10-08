@@ -20,9 +20,10 @@ class LocalCell(BaseCell):
     def upgrade_to_closure(self, space, frame, pos):
         w_obj = self.get(space, frame, pos)
         if isinstance(w_obj, W_FixnumObject):
-            frame.cells[pos] = result = IntCell(space.int_w(w_obj))
+            result = IntCell(space.int_w(w_obj))
         else:
-            frame.cells[pos] = result = ClosureCell(w_obj)
+            result = ClosureCell(w_obj)
+        frame.set_cell(pos, result)
         return result
 
 
