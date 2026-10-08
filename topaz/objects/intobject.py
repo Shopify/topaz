@@ -469,6 +469,14 @@ class W_FixnumObject(W_RootObject):
     def method_hash(self, space):
         return self
 
+    # Numeric#eql? (lib-topaz/numeric.rb) is Ruby: a class comparison and
+    # a ==. A fixnum is eql? only to a fixnum of the same value.
+    @classdef.method("eql?")
+    def method_eqlp(self, space, w_other):
+        if isinstance(w_other, W_FixnumObject):
+            return space.newbool(self.intvalue == w_other.intvalue)
+        return space.w_false
+
     if IS_WINDOWS:
         @classdef.method("size")
         def method_size(self, space):
