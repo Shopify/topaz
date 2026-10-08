@@ -426,7 +426,10 @@ module SQLite3
             pointer = LibSQLite.sqlite3_column_text(st, i)
             text = length == 0 ? +"" : pointer.get_bytes(0, length)
             text.force_encoding(Encoding::UTF_8)
-            text = text.encode(Encoding.default_internal) if Encoding.default_internal
+            # Rails sets default_internal to UTF-8, which would only copy
+            # the string here.
+            internal = Encoding.default_internal
+            text = text.encode(internal) if internal && !internal.equal?(Encoding::UTF_8)
             text.freeze
           when LibSQLite::BLOB
             length = LibSQLite.sqlite3_column_bytes(st, i)
