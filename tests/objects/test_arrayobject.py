@@ -359,6 +359,40 @@ class TestArrayObject(BaseTopazTest):
         w_res = space.execute("return {[1, 2, 3] => 5}[[1, 2]]")
         assert w_res is space.w_nil
 
+    def test_enumerable_builtins(self, space):
+        w_res = space.execute("""
+        a = [1, 2, 3]
+        r = []
+        a.each_with_index { |x, i| r << [x, i] }
+        r << a.each_with_object([]) { |x, m| m << x * 2 }
+        r << a.include?(2) << a.include?(5) << a.member?(3) << [1.0].include?(1)
+        r << a.any? { |x| x > 2 } << a.any? { |x| x > 3 } << a.any?(Integer) << [nil, false].any? << [].any?
+        r << a.all? { |x| x > 0 } << a.all?(String) << [1, nil].all? << [].all?
+        r << a.none? { |x| x > 3 } << a.none?(Integer) << [nil].none?
+        r << a.one? { |x| x > 2 } << a.one? { |x| x > 1 } << a.one?(1..2) << [nil, 1].one?
+        r << a.detect { |x| x > 1 } << a.find { |x| x > 5 } << a.detect(-> { :none }) { |x| x > 5 } << a.detect(nil) { false }
+        r << a.select(&:odd?) << a.filter(&:even?) << a.find_all { true } << a.reject(&:odd?)
+        r << a.each_with_index.to_a << a.select.class.name
+        r << a.each_with_index { |x, i| break i if x == 2 }
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, 0], [2, 1], [3, 2], [2, 4, 6],
+            True, False, True, True,
+            True, False, True, False, False,
+            True, False, False, True,
+            True, False, True,
+            True, False, False, True,
+            2, None, "none", None,
+            [1, 3], [2], [1, 2, 3], [2],
+            [[1, 0], [2, 1], [3, 2]], "Enumerator",
+            1,
+        ]
+        with self.raises(space, "ArgumentError"):
+            space.execute("[1].any?(1, 2)")
+        with self.raises(space, "NoMethodError"):
+            space.execute("[1].detect(7) { false }")
+
     def test_hash(self, space):
         w_res = space.execute("""
         a = [1, "two", :three, nil, 4.5, [6]]

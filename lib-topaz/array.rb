@@ -565,12 +565,6 @@ class Array
 end
 
 class Array
-  # (Defined with def rather than alias: Enumerable's methods are not loaded
-  # yet when this file is.)
-  def filter(&block)
-    select(&block)
-  end
-
   def filter!(&block)
     select!(&block)
   end

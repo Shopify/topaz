@@ -33,6 +33,40 @@ each_driver = jit.JitDriver(
 )
 
 
+# Enumerable's versions of these go through each_entry, which wraps every
+# element in a `|*e|` splat array and a second block frame. Rails calls
+# each_with_index / include? / any? on arrays tens of thousands of times per
+# request, so Array gets direct loops with their own JIT drivers.
+def _enum_driver(name):
+    return jit.JitDriver(
+        greens=["bytecode"], reds="auto", name="Array#" + name,
+        get_printable_location=get_each_location,
+    )
+
+
+each_with_index_driver = _enum_driver("each_with_index")
+each_with_object_driver = _enum_driver("each_with_object")
+include_driver = jit.JitDriver(greens=[], reds="auto", name="Array#include?")
+
+
+def get_enum_scan_location(want, limit, bytecode):
+    return "Array#any?/all?/none?/one? %s" % get_each_location(bytecode)
+
+
+# any?/all?/none?/one? share one scan; a green can't be None, so the
+# block-less (pattern or truthiness) form has its own driver.
+enum_scan_block_driver = jit.JitDriver(
+    greens=["want", "limit", "bytecode"], reds="auto", name="Array#enum_scan",
+    get_printable_location=get_enum_scan_location,
+)
+enum_scan_plain_driver = jit.JitDriver(
+    greens=["want", "limit"], reds="auto", name="Array#enum_scan_plain",
+)
+detect_driver = _enum_driver("detect")
+select_driver = _enum_driver("select")
+reject_driver = _enum_driver("reject")
+
+
 # Array#hash was Ruby code (Thread.current.recursion_guard around an each
 # with the running value in a closure cell): every element cost a block frame,
 # a cell write and boxed arithmetic, and Rails hashes arrays all the time
@@ -457,6 +491,152 @@ class W_ArrayObject(W_Object):
             space.invoke_block(block, [self.items_w[i]])
             i += 1
         return self
+
+    @classdef.method("each_with_index")
+    def method_each_with_index(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("each_with_index")])
+        bytecode = block.bytecode
+        i = 0
+        while i < len(self.items_w):
+            each_with_index_driver.jit_merge_point(bytecode=bytecode)
+            space.invoke_block(block, [self.items_w[i], space.newint(i)])
+            i += 1
+        return self
+
+    @classdef.method("each_with_object")
+    def method_each_with_object(self, space, w_memo, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("each_with_object"), w_memo])
+        bytecode = block.bytecode
+        i = 0
+        while i < len(self.items_w):
+            each_with_object_driver.jit_merge_point(bytecode=bytecode)
+            space.invoke_block(block, [self.items_w[i], w_memo])
+            i += 1
+        return w_memo
+
+    @classdef.method("include?")
+    @classdef.method("member?")
+    def method_includep(self, space, w_obj):
+        i = 0
+        while i < len(self.items_w):
+            include_driver.jit_merge_point()
+            w_item = self.items_w[i]
+            if w_item is w_obj or space.is_true(space.send(w_item, "==", [w_obj])):
+                return space.w_true
+            i += 1
+        return space.w_false
+
+    def _enum_scan(self, space, args_w, block, want, limit):
+        """Count the elements whose any?/all?/none?/one? test (`pattern === e`,
+        `yield e`, or `e` itself) has truthiness `want`, stopping at `limit`."""
+        if len(args_w) > 1:
+            raise space.error(space.w_ArgumentError,
+                "wrong number of arguments (given %d, expected 0..1)" % len(args_w))
+        # One jit_merge_point per function.
+        if block is not None and len(args_w) == 0:
+            return self._enum_scan_block(space, block, want, limit)
+        return self._enum_scan_plain(space, args_w, want, limit)
+
+    def _enum_scan_block(self, space, block, want, limit):
+        bytecode = block.bytecode
+        count = 0
+        i = 0
+        while i < len(self.items_w):
+            enum_scan_block_driver.jit_merge_point(want=want, limit=limit, bytecode=bytecode)
+            if space.is_true(space.invoke_block(block, [self.items_w[i]])) == want:
+                count += 1
+                if count >= limit:
+                    return count
+            i += 1
+        return count
+
+    def _enum_scan_plain(self, space, args_w, want, limit):
+        count = 0
+        i = 0
+        while i < len(self.items_w):
+            enum_scan_plain_driver.jit_merge_point(want=want, limit=limit)
+            w_item = self.items_w[i]
+            if len(args_w) > 0:
+                truth = space.is_true(space.send(args_w[0], "===", [w_item]))
+            else:
+                truth = space.is_true(w_item)
+            if truth == want:
+                count += 1
+                if count >= limit:
+                    return count
+            i += 1
+        return count
+
+    @classdef.method("any?")
+    def method_anyp(self, space, args_w, block):
+        return space.newbool(self._enum_scan(space, args_w, block, True, 1) > 0)
+
+    @classdef.method("all?")
+    def method_allp(self, space, args_w, block):
+        return space.newbool(self._enum_scan(space, args_w, block, False, 1) == 0)
+
+    @classdef.method("none?")
+    def method_nonep(self, space, args_w, block):
+        return space.newbool(self._enum_scan(space, args_w, block, True, 1) == 0)
+
+    @classdef.method("one?")
+    def method_onep(self, space, args_w, block):
+        return space.newbool(self._enum_scan(space, args_w, block, True, 2) == 1)
+
+    @classdef.method("detect")
+    @classdef.method("find")
+    def method_detect(self, space, w_ifnone=None, block=None):
+        if block is None:
+            args_w = [space.newsymbol("detect")]
+            if w_ifnone is not None:
+                args_w.append(w_ifnone)
+            return space.send(self, "enum_for", args_w)
+        bytecode = block.bytecode
+        i = 0
+        while i < len(self.items_w):
+            detect_driver.jit_merge_point(bytecode=bytecode)
+            w_item = self.items_w[i]
+            if space.is_true(space.invoke_block(block, [w_item])):
+                return w_item
+            i += 1
+        if w_ifnone is None or w_ifnone is space.w_nil:
+            return space.w_nil
+        # Like MRI, ifnone is called whatever it is.
+        return space.send(w_ifnone, "call")
+
+    @classdef.method("select")
+    @classdef.method("filter")
+    @classdef.method("find_all")
+    def method_select(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("select")])
+        bytecode = block.bytecode
+        result_w = []
+        i = 0
+        while i < len(self.items_w):
+            select_driver.jit_merge_point(bytecode=bytecode)
+            w_item = self.items_w[i]
+            if space.is_true(space.invoke_block(block, [w_item])):
+                result_w.append(w_item)
+            i += 1
+        return space.newarray(result_w)
+
+    @classdef.method("reject")
+    def method_reject(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("reject")])
+        bytecode = block.bytecode
+        result_w = []
+        i = 0
+        while i < len(self.items_w):
+            reject_driver.jit_merge_point(bytecode=bytecode)
+            w_item = self.items_w[i]
+            if not space.is_true(space.invoke_block(block, [w_item])):
+                result_w.append(w_item)
+            i += 1
+        return space.newarray(result_w)
 
     @classdef.method("sort_by!")
     @check_frozen()
