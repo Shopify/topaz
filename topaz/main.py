@@ -300,13 +300,6 @@ def _entry_point(space, argv):
             "<<",
             [space.newstr_fromstr(path_entry)]
         )
-    for required_lib in reqs:
-        space.send(
-            space.w_kernel,
-            "require",
-            [space.newstr_fromstr(required_lib)]
-        )
-
     space.set_const(space.w_object, "ARGV", space.newarray(argv_w))
     explicitly_verbose = space.is_true(flag_globals_w["$-v"])
     if explicitly_verbose:
@@ -392,6 +385,14 @@ def _entry_point(space, argv):
         if len(parts) > 0:
             jit.set_user_param(None, ",".join(parts))
     try:
+        # Inside the try: a -r library that is missing or raises reports
+        # the error like one raised by the script.
+        for required_lib in reqs:
+            space.send(
+                space.w_kernel,
+                "require",
+                [space.newstr_fromstr(required_lib)]
+            )
         if do_loop:
             print_after = space.is_true(flag_globals_w["$-p"])
             bc = space.compile(source, path)

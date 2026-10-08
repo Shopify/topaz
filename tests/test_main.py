@@ -193,6 +193,12 @@ class TestMain(object):
         out, _ = capfd.readouterr()
         assert out == "7\n"
 
+    def test_require_missing_lib(self, space, tmpdir, capfd):
+        self.run(space, tmpdir, "puts 1", status=1, ruby_args=["-rzyx_missing"])
+        out, err = capfd.readouterr()
+        assert out == ""
+        assert "cannot load such file -- zyx_missing (LoadError)" in err
+
     def test_search_path(self, space, tmpdir, capfd, monkeypatch):
         f = tmpdir.join("a")
         f.write("puts 17")
