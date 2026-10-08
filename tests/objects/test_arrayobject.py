@@ -754,3 +754,22 @@ class TestArrayPack(BaseTopazTest):
             space.execute("[1].flatten('x')")
         with self.raises(space, "FrozenError"):
             space.execute("[1, [2]].freeze.flatten!")
+
+    def test_bsearch(self, space):
+        w_res = space.execute("""
+        a = [0, 4, 7, 10, 12]
+        r = []
+        r << a.bsearch { |x| x >= 4 } << a.bsearch_index { |x| x >= 4 }
+        r << a.bsearch { |x| x >= 6 } << a.bsearch_index { |x| x >= 6 }
+        r << a.bsearch { |x| x >= 100 } << a.bsearch_index { |x| x >= 100 }
+        r << a.bsearch { |x| 1 - x / 4 } << a.bsearch_index { |x| 1 - x / 4 }
+        r << a.bsearch { |x| 4 <=> x } << a.bsearch { |x| 5 <=> x }
+        r << a.bsearch { |x| 4.0 <=> x }
+        r << [].bsearch { |x| true } << [].bsearch_index { |x| true }
+        r << a.bsearch { |x| nil }
+        r << a.bsearch.class.name
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [4, 1, 7, 2, None, None, 7, 2, 4, None, 4, None, None, None, "Enumerator"]
+        with self.raises(space, "TypeError", "wrong argument type Symbol (must be numeric, true, false or nil)"):
+            space.execute("[1, 2].bsearch { |x| :sym }")

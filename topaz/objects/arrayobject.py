@@ -88,6 +88,8 @@ uniq_block_driver = jit.JitDriver(
 uniq_plain_driver = jit.JitDriver(greens=[], reds="auto", name="Array#uniq!")
 difference_driver = jit.JitDriver(greens=[], reds="auto", name="Array#-")
 flatten_driver = jit.JitDriver(greens=[], reds="auto", name="Array#flatten")
+bsearch_driver = jit.JitDriver(
+    greens=["bytecode"], reds="auto", name="Array#bsearch_index")
 
 HASH_SEED = 0x345678
 HASH_MULT = 1000003
@@ -895,6 +897,65 @@ class W_ArrayObject(W_Object):
             return space.w_nil
         self.items_w = out_w
         return self
+
+    def _bsearch(self, space, block):
+        """The index of the leftmost element the block accepts (find-minimum
+        mode: true/false/nil) or of one the block rates 0 (find-any mode:
+        a number), -1 when there is none."""
+        bytecode = block.bytecode
+        low = 0
+        high = len(self.items_w)
+        found = -1
+        while low < high:
+            bsearch_driver.jit_merge_point(bytecode=bytecode)
+            mid = low + (high - low) // 2
+            if mid >= len(self.items_w):
+                break
+            w_res = space.invoke_block(block, [self.items_w[mid]])
+            if w_res is space.w_true:
+                found = mid
+                high = mid
+            elif w_res is space.w_false or w_res is space.w_nil:
+                low = mid + 1
+            elif isinstance(w_res, W_FixnumObject):
+                value = w_res.intvalue
+                if value == 0:
+                    return mid
+                elif value > 0:
+                    low = mid + 1
+                else:
+                    high = mid
+            elif space.is_kind_of(w_res, space.w_numeric):
+                w_zero = space.newint(0)
+                if space.is_true(space.send(w_res, "==", [w_zero])):
+                    return mid
+                elif space.is_true(space.send(w_res, ">", [w_zero])):
+                    low = mid + 1
+                else:
+                    high = mid
+            else:
+                raise space.error(space.w_TypeError,
+                    "wrong argument type %s (must be numeric, true, false or nil)"
+                    % space.getclass(w_res).name)
+        return found
+
+    @classdef.method("bsearch_index")
+    def method_bsearch_index(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("bsearch_index")])
+        idx = self._bsearch(space, block)
+        if idx < 0:
+            return space.w_nil
+        return space.newint(idx)
+
+    @classdef.method("bsearch")
+    def method_bsearch(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("bsearch")])
+        idx = self._bsearch(space, block)
+        if idx < 0 or idx >= len(self.items_w):
+            return space.w_nil
+        return self.items_w[idx]
 
     @classdef.method("uniq!")
     @check_frozen()

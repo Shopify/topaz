@@ -531,35 +531,6 @@ class Enumerator
   end
 end
 
-class Array
-  def bsearch_index(&block)
-    return enum_for(:bsearch_index) unless block
-    low = 0
-    high = size
-    found = nil
-    while low < high
-      mid = low + (high - low) / 2
-      r = block.call(self[mid])
-      if r == true
-        found = mid
-        high = mid
-      elsif r == false || r.nil?
-        low = mid + 1
-      elsif r.is_a?(Numeric)
-        return mid if r == 0
-        if r > 0
-          low = mid + 1
-        else
-          high = mid
-        end
-      else
-        raise TypeError, "wrong argument type #{r.class} (must be numeric, true, false or nil)"
-      end
-    end
-    found
-  end
-end
-
 class Range
   def bsearch(&block)
     return enum_for(:bsearch) unless block

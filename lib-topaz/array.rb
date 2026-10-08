@@ -468,32 +468,4 @@ class Array
     reverse_each { |value| return value if yield(value) }
     ifnone ? ifnone.call : nil
   end
-
-  def bsearch(&block)
-    return enum_for(:bsearch) unless block
-    low = 0
-    high = size
-    found = nil
-    while low < high
-      mid = low + (high - low) / 2
-      value = self[mid]
-      result = yield(value)
-      if result == true
-        found = value
-        high = mid
-      elsif result == false || result.nil?
-        low = mid + 1
-      elsif result.is_a?(Numeric)
-        return value if result == 0
-        if result < 0
-          high = mid
-        else
-          low = mid + 1
-        end
-      else
-        raise TypeError.new("wrong argument type #{result.class} (must be numeric, true, false or nil)")
-      end
-    end
-    found
-  end
 end
