@@ -618,7 +618,7 @@ class W_ModuleObject(W_RootObject):
 
     def set_default_visibility(self, space, visibility):
         frame = space.getexecutioncontext().gettoprubyframe()
-        frame.visibility = visibility
+        frame.set_visibility(visibility)
 
     def set_method_visibility(self, space, name, visibility):
         w_method = self.find_method(space, name)

@@ -2,16 +2,32 @@ from rpython.rlib import jit
 
 from topaz.closure import BaseCell, LOCAL_CELL
 from topaz.objects.hashobject import W_HashObject
-from topaz.objects.functionobject import W_FunctionObject
 from topaz.objects.moduleobject import W_ModuleObject
 
 
+# The remaining bits hold the entry PC. These flags are not virtualizable.
+VISIBILITY_MASK = 3
+ESCAPED_FLAG = 4
+ENTRY_PC_SHIFT = 3
+FRAME_FLAGS_MASK = (1 << ENTRY_PC_SHIFT) - 1
+
+
 class BaseFrame(object):
-    _attrs_ = ["backref", "escaped", "back_last_instr"]
+    _attrs_ = ["backref", "flags", "back_last_instr"]
 
     def __init__(self):
         self.backref = jit.vref_None
-        self.escaped = False
+        # Public visibility, not escaped, entry PC zero.
+        self.flags = 0
+
+    def is_escaped(self):
+        return bool(self.flags & ESCAPED_FLAG)
+
+    def set_escaped(self, escaped):
+        if escaped:
+            self.flags |= ESCAPED_FLAG
+        else:
+            self.flags &= ~ESCAPED_FLAG
 
 
 class Frame(BaseFrame):
@@ -38,11 +54,8 @@ class Frame(BaseFrame):
             self.localsstack_w[cells_start + i] = LOCAL_CELL
         self.stackpos = len(bytecode.cellvars)
         self.last_instr = 0
-        # Where the code starts: past the defaults of the optional
-        # positional arguments that were passed. And a bit per keyword
-        # argument with a default that was: the code's prologue computes
-        # the others' defaults.
-        self.entry_pc = 0
+        # One bit per keyword argument with a default that was passed:
+        # the code's prologue computes the others' defaults.
         self.kwargs_given = 0
         self.regexp_match_cell = regexp_match_cell
         self.w_self = w_self
@@ -50,7 +63,6 @@ class Frame(BaseFrame):
         self.block = block
         self.parent_interp = parent_interp
         self.top_parent_interp = top_parent_interp
-        self.visibility = W_FunctionObject.PUBLIC
         self.lastblock = None
         # The module that owns the running method, for `super`; None when
         # not known (then the lexical scope is used).
@@ -58,6 +70,20 @@ class Frame(BaseFrame):
         # The name `super` calls: set in define_method bodies, whose code
         # was compiled inside some other method.
         self.super_name = None
+
+    def get_entry_pc(self):
+        return self.flags >> ENTRY_PC_SHIFT
+
+    def set_entry_pc(self, pc):
+        assert pc >= 0
+        self.flags = (self.flags & FRAME_FLAGS_MASK) | (pc << ENTRY_PC_SHIFT)
+
+    def get_visibility(self):
+        return self.flags & VISIBILITY_MASK
+
+    def set_visibility(self, visibility):
+        assert 0 <= visibility <= VISIBILITY_MASK
+        self.flags = (self.flags & ~VISIBILITY_MASK) | visibility
 
     def get_cell(self, pos):
         assert pos >= 0
@@ -199,7 +225,7 @@ class Frame(BaseFrame):
         if bytecode.num_defaults > 0:
             if given_defaults < 0:
                 given_defaults = 0
-            self.entry_pc = bytecode.default_entry_pcs[given_defaults]
+            self.set_entry_pc(bytecode.default_entry_pcs[given_defaults])
 
         if bytecode.splat_arg_pos != -1:
             if pre >= post:

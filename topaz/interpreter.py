@@ -102,7 +102,7 @@ class Interpreter(object):
         try:
             # Past the defaults of the optional arguments that were passed:
             # the pc is an argument of the portal, so a green.
-            return self.interpret(space, frame, bytecode, frame.entry_pc)
+            return self.interpret(space, frame, bytecode, frame.get_entry_pc())
         finally:
             self.finished = True
 
@@ -430,7 +430,7 @@ class Interpreter(object):
         w_code = frame.pop()
         w_name = frame.pop()
         w_func = space.newfunction(
-            w_name, w_code, frame.lexical_scope, frame.visibility)
+            w_name, w_code, frame.lexical_scope, frame.get_visibility())
         frame.push(w_func)
 
     @jit.unroll_safe

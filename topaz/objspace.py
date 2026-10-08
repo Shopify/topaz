@@ -946,7 +946,7 @@ class ObjectSpace(object):
         return "no implicit conversion of %s into %s" % (src, w_cls_name)
 
     def mark_topframe_not_escaped(self):
-        self.getexecutioncontext().gettopframe().escaped = False
+        self.getexecutioncontext().gettopframe().set_escaped(False)
 
     def infect(self, w_dest, w_src, taint=True, untrust=True, freeze=False):
         """
