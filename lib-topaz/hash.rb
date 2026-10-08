@@ -223,24 +223,9 @@ class Hash
   end
 
   # Ruby 2.5; the hash argument is Ruby 3.0
-  def transform_keys(mapping = nil, &block)
-    return enum_for(:transform_keys) unless block || mapping
-    result = {}
-    each_pair do |key, value|
-      if mapping && mapping.key?(key)
-        result[mapping[key]] = value
-      elsif block
-        result[yield(key)] = value
-      else
-        result[key] = value
-      end
-    end
-    result
-  end
-
   def transform_keys!(mapping = nil, &block)
     return enum_for(:transform_keys!) unless block || mapping
-    replace(transform_keys(mapping, &block))
+    replace(mapping ? transform_keys(mapping, &block) : transform_keys(&block))
   end
 
   # Ruby 2.5

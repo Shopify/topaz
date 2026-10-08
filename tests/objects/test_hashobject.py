@@ -219,3 +219,21 @@ class TestHashObject(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [True, False, True, False, "Integer"]
 
+    def test_transform_keys(self, space):
+        w_res = space.execute("""
+        h = {"a" => 1, "b" => 2}
+        r = []
+        r << h.transform_keys(&:to_sym)
+        r << h.transform_keys("a" => :x)
+        r << h.transform_keys("a" => :x) { |k| k.upcase }
+        r << h.transform_keys.class.name
+        r << h.transform_keys { |k| "k" }
+        r << h
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            {"a": 1, "b": 2}, {"x": 1, "b": 2}, {"x": 1, "B": 2},
+            "Enumerator", {"k": 2}, {"a": 1, "b": 2},
+        ]
+        with self.raises(space, "TypeError"):
+            space.execute("{}.transform_keys(1)")

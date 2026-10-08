@@ -123,6 +123,10 @@ merge_driver = jit.JitDriver(
     greens=["bytecode"], reds="auto", name="Hash#merge!",
     get_printable_location=get_merge_location,
 )
+transform_keys_driver = jit.JitDriver(
+    greens=["bytecode"], reds="auto", name="Hash#transform_keys",
+    get_printable_location=get_each_location,
+)
 hash_driver = jit.JitDriver(greens=[], reds="auto", name="Hash#hash")
 
 
@@ -421,6 +425,49 @@ class W_HashObject(W_Object):
             pair = intmask(space.hash_w(w_key) * 1000003) ^ space.hash_w(w_value)
             result = intmask(result + pair)
         return space.newint(result)
+
+    @classdef.method("transform_keys")
+    def method_transform_keys(self, space, w_mapping=None, block=None):
+        if block is None and w_mapping is None:
+            return space.send(self, "enum_for", [space.newsymbol("transform_keys")])
+        if w_mapping is not None:
+            w_mapping = space.convert_type(w_mapping, space.w_hash, "to_hash")
+            assert isinstance(w_mapping, W_HashObject)
+        w_result = space.newhash()
+        if block is None:
+            self._transform_keys_mapping(space, w_mapping, w_result)
+        else:
+            self._transform_keys_block(space, w_mapping, block, w_result)
+        return w_result
+
+    def _transform_keys_mapping(self, space, w_mapping, w_result):
+        strategy = self.strategy
+        iterator = strategy.iteritems(self.dict_storage)
+        while True:
+            try:
+                w_key, w_value = strategy.iternext(iterator)
+            except StopIteration:
+                break
+            if w_mapping.strategy.contains(w_mapping.dict_storage, w_key):
+                w_key = w_mapping.getitem(w_key)
+            w_result.method_subscript_assign(space, w_key, w_value)
+
+    def _transform_keys_block(self, space, w_mapping, block, w_result):
+        bytecode = block.bytecode
+        strategy = self.strategy
+        iterator = strategy.iteritems(self.dict_storage)
+        while True:
+            transform_keys_driver.jit_merge_point(bytecode=bytecode)
+            try:
+                w_key, w_value = strategy.iternext(iterator)
+            except StopIteration:
+                break
+            if (w_mapping is not None and
+                    w_mapping.strategy.contains(w_mapping.dict_storage, w_key)):
+                w_key = w_mapping.getitem(w_key)
+            else:
+                w_key = space.invoke_block(block, [w_key])
+            w_result.method_subscript_assign(space, w_key, w_value)
 
     @classdef.method("merge")
     def method_merge(self, space, w_other, block):
