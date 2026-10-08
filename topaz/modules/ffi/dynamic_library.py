@@ -36,12 +36,16 @@ class W_DynamicLibraryObject(W_Object):
         except clibffi.DLOpenError:
             raise space.error(space.w_LoadError,
                               "Could not open library %s" % namestr)
-        self.set_instance_var(space, '@name', space.newsymbol(namestr))
+        self.set_instance_var(space, '@name', space.newstr_fromstr(namestr))
 
     def getpointer(self, name, ffi_arg_types, ffi_ret_types):
         return self.cdll.getpointer(name,
                                     ffi_arg_types,
                                     ffi_ret_types)
+
+    @classdef.method('name')
+    def method_name(self, space):
+        return space.find_instance_var(self, '@name')
 
     @classdef.singleton_method('new', flags='int')
     def singleton_method_new(self, space, w_name, flags=0):

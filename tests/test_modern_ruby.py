@@ -1791,6 +1791,41 @@ class TestInheritedHook(BaseTopazTest):
 
 
 class TestSQLite3Native(BaseTopazTest):
+    def test_without_column_metadata(self, space):
+        w_res = space.execute("""
+        require "ffi"
+        class FFI::DynamicLibrary
+          alias_method :original_find_function, :find_function
+          def find_function(name)
+            return nil if name.to_s == "sqlite3_column_database_name"
+            original_find_function(name)
+          end
+        end
+        begin
+          require "sqlite3/sqlite3_native"
+        rescue LoadError
+          return :no_libsqlite3
+        end
+        db = SQLite3::Database.allocate
+        db.__send__(:open_v2, ":memory:", 6, nil)
+        st = SQLite3::Statement.allocate
+        st.__send__(:prepare, db, "select 42")
+        result = [st.step]
+        begin
+          st.database_name(0)
+        rescue NotImplementedError => e
+          result << e.message
+        ensure
+          st.close
+          db.close
+        end
+        return result
+        """)
+        res = self.unwrap(space, w_res)
+        if res == "no_libsqlite3":
+            pytest.skip("libsqlite3 is not available")
+        assert res == [[42], "SQLite was built without column metadata support"]
+
     def test_native_layer(self, space):
         w_res = space.execute("""
         begin

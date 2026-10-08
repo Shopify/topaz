@@ -49,7 +49,14 @@ module SQLite3
     attach_function :sqlite3_column_bytes, [:pointer, :int], :int
     attach_function :sqlite3_column_name, [:pointer, :int], :string
     attach_function :sqlite3_column_decltype, [:pointer, :int], :pointer
-    attach_function :sqlite3_column_database_name, [:pointer, :int], :pointer
+    begin
+      attach_function :sqlite3_column_database_name, [:pointer, :int], :pointer
+    rescue FFI::NotFoundError
+      # SQLite only exports this API with SQLITE_ENABLE_COLUMN_METADATA.
+      def self.sqlite3_column_database_name(statement, index)
+        raise NotImplementedError, "SQLite was built without column metadata support"
+      end
+    end
     attach_function :sqlite3_bind_parameter_count, [:pointer], :int
     attach_function :sqlite3_bind_parameter_index, [:pointer, :string], :int
     attach_function :sqlite3_bind_int64, [:pointer, :int, :int64], :int

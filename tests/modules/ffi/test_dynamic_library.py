@@ -32,12 +32,14 @@ class TestDynamicLibrary__new(BaseFFITest):
         w_res = space.execute("FFI::DynamicLibrary.new('%s', 1)" % libm)
         w_name = space.find_instance_var(w_res, '@name')
         assert self.unwrap(space, w_name) == libm
+        assert space.str_w(space.send(w_res, 'name')) == libm
 
     def test_it_accepts_nil_as_library_name(self, space):
         w_res = space.execute("FFI::DynamicLibrary.new(nil, 2)")
         assert w_res.cdll.lib == clibffi.dlopen(None, 2)
         w_name = space.find_instance_var(w_res, '@name')
         assert self.unwrap(space, w_name) == '[current process]'
+        assert space.str_w(space.send(w_res, 'name')) == '[current process]'
 
     def test_it_does_not_accept_anything_else_as_lib_name(self, space):
         with self.raises(
@@ -70,6 +72,17 @@ class TestDynamicLibrary__Symbol(BaseFFITest):
 
 
 class TestDynamicLibrary_find_variable(BaseFFITest):
+    def test_attach_missing_function_reports_library_name(self, space):
+        with self.raises(space, "FFI::NotFoundError",
+                         "Function 'no_such_function_in_libm' not found in [%s]" % libm):
+            space.execute("""
+            require "ffi"
+            mod = Module.new
+            mod.extend(FFI::Library)
+            mod.ffi_lib('%s')
+            mod.attach_function(:no_such_function_in_libm, [], :void)
+            """ % libm)
+
     def test_it_returns_a_DynamicLibrary__Symbol(self, space):
         w_dl_sym = space.execute("FFI::DynamicLibrary::Symbol")
         w_res = space.execute("""
