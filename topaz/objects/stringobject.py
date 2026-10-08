@@ -8,7 +8,7 @@ from rpython.rlib.rarithmetic import intmask, ovfcheck
 from rpython.rlib.rbigint import rbigint
 from rpython.rlib.rerased import new_static_erasing_pair
 from rpython.rlib.rsre import rsre_core
-from rpython.rlib.rstring import split
+from rpython.rlib.rstring import split, StringBuilder
 
 from topaz.coerce import Coerce
 from topaz.module import ClassDef, check_frozen
@@ -680,6 +680,40 @@ class W_StringObject(W_Object):
     @classdef.method("hash")
     def method_hash(self, space):
         return space.newint(self.strategy.hash(self.str_storage))
+
+    @classdef.method("__topaz_escape_html")
+    def method_escape_html(self, space):
+        """The loop behind CGI.escapeHTML and ERB::Escape.html_escape
+        (lib-ruby/ext/erb/escape.rb): self when nothing needs escaping,
+        otherwise a new String with ' & " < > replaced."""
+        s = space.str_w(self)
+        n = len(s)
+        i = 0
+        while i < n:
+            c = s[i]
+            if c == "&" or c == "<" or c == ">" or c == '"' or c == "'":
+                break
+            i += 1
+        if i == n:
+            return self
+        builder = StringBuilder(n + 16)
+        builder.append_slice(s, 0, i)
+        while i < n:
+            c = s[i]
+            if c == "&":
+                builder.append("&amp;")
+            elif c == "<":
+                builder.append("&lt;")
+            elif c == ">":
+                builder.append("&gt;")
+            elif c == '"':
+                builder.append("&quot;")
+            elif c == "'":
+                builder.append("&#39;")
+            else:
+                builder.append(c)
+            i += 1
+        return space.newstr_fromstr(builder.build())
 
     @classdef.method("[]")
     @classdef.method("slice")

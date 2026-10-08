@@ -11,6 +11,17 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute("return String.new")
         assert space.str_w(w_res) == ""
 
+    def test_escape_html(self, space):
+        w_res = space.execute("""
+        plain = "nothing to do"
+        return [plain.__topaz_escape_html.equal?(plain), "".__topaz_escape_html,
+                %q{<a href="x">Tom & Jerry's</a>}.__topaz_escape_html,
+                "&amp;".__topaz_escape_html, "\\xff<".b.__topaz_escape_html.bytesize]
+        """)
+        assert self.unwrap(space, w_res) == [
+            True, "", "&lt;a href=&quot;x&quot;&gt;Tom &amp; Jerry&#39;s&lt;/a&gt;",
+            "&amp;amp;", 5]
+
     def test_lshift(self, space):
         w_res = space.execute('return "abc" << "def" << "ghi"')
         assert space.str_w(w_res) == "abcdefghi"

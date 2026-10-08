@@ -890,6 +890,28 @@ class TestSecureRandomSupport(BaseTopazTest):
         assert self.unwrap(space, w_res) == [8, 3, space.w_integer, space.w_integer, space.w_float, 3]
 
 
+class TestERBEscape(BaseTopazTest):
+    def test_html_escape(self, space):
+        # lib-ruby/ext/erb/escape.rb stands in for CRuby's erb/escape.so.
+        w_res = space.execute("""
+        class ERB; end
+        require "erb/escape"
+        plain = "nothing"
+        frozen = "a<b".freeze
+        bin = "a<\\xff".b
+        esc = ERB::Escape.html_escape(bin)
+        return [$LOADED_FEATURES.any? { |f| f.end_with?("ext/erb/escape.rb") },
+                ERB::Escape.html_escape(plain).equal?(plain),
+                ERB::Escape.html_escape(frozen), ERB::Escape.html_escape(frozen).frozen?,
+                ERB::Escape.html_escape(nil), ERB::Escape.html_escape(12),
+                ERB::Escape.html_escape(%q{"Tom" & 'Jerry' <3}),
+                esc.encoding.to_s, esc.bytesize, ERB::Escape.html_escape("x").encoding.to_s]
+        """)
+        assert self.unwrap(space, w_res) == [
+            True, True, "a&lt;b", False, "", "12",
+            "&quot;Tom&quot; &amp; &#39;Jerry&#39; &lt;3", "ASCII-8BIT", 6, "UTF-8"]
+
+
 class TestRegexpFlags(BaseTopazTest):
     def test_inline_flags_and_case_folding(self, space):
         w_res = space.execute("""
