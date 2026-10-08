@@ -1,4 +1,6 @@
+import gc
 import struct
+import weakref
 
 from topaz.objects.intobject import W_FixnumObject
 from topaz.objects.methodobject import W_MethodObject
@@ -149,6 +151,30 @@ class TestBaseObject(BaseTopazTest):
 
 
 class TestObjectObject(BaseTopazTest):
+    def test_copied_singleton_ancestor_cache_after_original_collected(self, space):
+        w_mixin = space.execute("""
+        module CopyCacheMixin; def f; 1; end; end
+        return CopyCacheMixin
+        """)
+        w_obj = space.send(space.w_object, "new")
+
+        def copy_singleton():
+            # Avoid installing the original singleton in the map cache,
+            # which would retain it and hide the missing dependency.
+            w_original = space.newclass(None, space.w_object, is_singleton=True)
+            w_original.include_module(space, w_mixin)
+            w_obj.copy_singletonclass(space, w_original)
+            return weakref.ref(w_original)
+
+        original_ref = copy_singleton()
+        gc.collect()
+        gc.collect()
+        assert original_ref() is None
+        w_mixin.descendants_w()
+        assert space.int_w(space.send(w_obj, "f")) == 1
+        space.execute("module CopyCacheMixin; def f; 2; end; end")
+        assert space.int_w(space.send(w_obj, "f")) == 2
+
     def test_class(self, space):
         w_res = space.execute("return 1.class")
         assert w_res is space.w_integer

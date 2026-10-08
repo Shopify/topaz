@@ -197,6 +197,8 @@ class W_Object(W_RootObject):
         w_copy.methods_w.update(w_other.methods_w)
         w_copy.constants_w.update(w_other.constants_w)
         w_copy.included_modules = w_copy.included_modules + w_other.included_modules
+        for w_mod in w_copy.included_modules:
+            w_mod.add_descendant(w_copy)
         w_copy.mutated()
 
         self.map = self.map.change_class(space, w_copy)

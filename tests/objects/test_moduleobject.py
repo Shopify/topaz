@@ -1,11 +1,41 @@
 # coding=utf-8
 
+import gc
+import weakref
+
 from ..base import BaseTopazTest
 
 import pytest
 
 
 class TestModuleObject(BaseTopazTest):
+    @pytest.mark.parametrize("copy_method", ["dup", "clone"])
+    @pytest.mark.parametrize("ancestor_method", ["include", "prepend"])
+    def test_copied_ancestor_cache_after_original_collected(self, space, copy_method, ancestor_method):
+        w_mixin = space.execute("""
+        module CopyCacheMixin; def f; 1; end; end
+        return CopyCacheMixin
+        """)
+
+        def make_copy():
+            w_original = space.newmodule(None)
+            space.send(w_original, ancestor_method, [w_mixin])
+            return space.send(w_original, copy_method), weakref.ref(w_original)
+
+        w_copy, original_ref = make_copy()
+        gc.collect()
+        gc.collect()
+        assert original_ref() is None
+        # Pruning the original's weak reference must not erase the copy's
+        # dependency and turn future changes into local-only invalidations.
+        w_mixin.descendants_w()
+        before = w_copy.find_method(space, "f")
+        assert before is w_mixin.find_local_method(space, "f")
+        space.execute("module CopyCacheMixin; def f; 2; end; end")
+        after = w_copy.find_method(space, "f")
+        assert after is w_mixin.find_local_method(space, "f")
+        assert after is not before
+
     def test_name(self, space):
         space.execute("Module")
 

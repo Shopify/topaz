@@ -687,6 +687,10 @@ class W_ModuleObject(W_RootObject):
                 self.class_variables.set(space, name, w_value)
         self.included_modules = w_other.included_modules[:]
         self.prepended_modules = w_other.prepended_modules[:]
+        # The copy must remain dependent on its ancestors after the
+        # original module has been collected.
+        for w_mod in self.included_modules + self.prepended_modules:
+            w_mod.add_descendant(self)
         self.mutated()
         return self
 
