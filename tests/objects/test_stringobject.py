@@ -458,6 +458,31 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute("return 'x'.tr('x', '-')")
         assert space.str_w(w_res) == "-"
 
+    def test_squeeze(self, space):
+        w_res = space.execute("""
+        def t; yield; rescue => e; e.class.name; end
+        class S2 < String; end
+        s = "a  b"; r = s.squeeze!(" ")
+        return [
+          "aaa".squeeze, "aa  bb".squeeze(" "), "aabbcc".squeeze("a-b"),
+          "aabbcc".squeeze("^a"), "aabb".squeeze("ab", "a"), "ab".squeeze("-"),
+          "aa".squeeze(""), "aa".squeeze("^"), "a^^b".squeeze("^"), "a--b".squeeze("\\\\-"),
+          "a--b".squeeze!("-"), "ab".squeeze!("-"), t { "ab".freeze.squeeze!("a") },
+          t { "aa".squeeze(1) }, t { "aa".squeeze("b-a") },
+          S2.new("aab").squeeze.class.name, S2.new("aab").squeeze!.class.name,
+          r.equal?(s), s,
+        ]
+        """)
+        assert self.unwrap(space, w_res) == [
+            "a", "aa bb", "abcc",
+            "aabc", "abb", "ab",
+            "aa", "aa", "a^b", "a-b",
+            "a-b", None, "FrozenError",
+            "TypeError", "ArgumentError",
+            "String", "S2",
+            True, "a b",
+        ]
+
     def test_tr_s(self, space):
         w_res = space.execute("return 'hello'.tr_s('l', 'r')")
         assert space.str_w(w_res) == "hero"

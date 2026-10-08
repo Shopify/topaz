@@ -1373,6 +1373,51 @@ class W_StringObject(W_Object):
         self.replace(space, new_string)
         return self
 
+    def squeeze_chars(self, space, args_w):
+        """String#squeeze: the squeezed characters, or None when nothing
+        changes. A run of a byte that is in every given set (any byte,
+        with no sets) becomes one byte. Sets are tr sets: ranges, a
+        leading ^ for negation, backslash escapes."""
+        squeezable = [True] * 256
+        for w_set in args_w:
+            w_set = space.convert_type(w_set, space.w_string, "to_str")
+            chars, negate = expand_tr_set(space, space.str_w(w_set), True)
+            present = [negate] * 256
+            for c in chars:
+                present[ord(c)] = not negate
+            for i in range(256):
+                if not present[i]:
+                    squeezable[i] = False
+        string = space.str_w(self)
+        new_string = []
+        changed = False
+        has_last = False
+        last = "\0"
+        for char in string:
+            if has_last and char == last and squeezable[ord(char)]:
+                changed = True
+                continue
+            new_string.append(char)
+            has_last = True
+            last = char
+        return new_string if changed else None
+
+    @classdef.method("squeeze")
+    def method_squeeze(self, space, args_w):
+        new_string = self.squeeze_chars(space, args_w)
+        if new_string is None:
+            return self.copy(space)
+        return space.newstr_fromchars(new_string)
+
+    @classdef.method("squeeze!")
+    @check_frozen()
+    def method_squeeze_i(self, space, args_w):
+        new_string = self.squeeze_chars(space, args_w)
+        if new_string is None:
+            return space.w_nil
+        self.replace(space, new_string)
+        return self
+
     @classdef.method("=~")
     def method_match_operator(self, space, w_obj):
         if space.is_kind_of(w_obj, space.w_string):

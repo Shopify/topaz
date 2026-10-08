@@ -285,22 +285,6 @@ class String
     downcase == other.downcase
   end
 
-  def squeeze(*sets)
-    result = ""
-    previous = nil
-    each_char do |char|
-      squeezable = sets.empty? || sets.all? { |set| set.include?(char) }
-      result << char unless char == previous && squeezable
-      previous = char
-    end
-    result
-  end
-
-  def squeeze!(*sets)
-    squeezed = squeeze(*sets)
-    squeezed == self ? nil : __topaz_replace(squeezed)
-  end
-
   def lines(separator = $/)
     each_line(separator).to_a
   end
