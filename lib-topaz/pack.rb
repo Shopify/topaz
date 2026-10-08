@@ -20,8 +20,20 @@ module Topaz
 
     # Parses a template into [directive, count, modifiers] triples. count is
     # an Integer, :star, or nil when the template gives none.
+    # Templates are nearly always literals, so the parsed triples are kept
+    # per template string; callers only read them.
+    PARSED = {}
+
     def self.parse(template)
       template = Topaz.convert_type(template, String, :to_str)
+      parsed = PARSED[template]
+      return parsed if parsed
+      parsed = parse_uncached(template)
+      PARSED[template.dup.freeze] = parsed if PARSED.size < 256
+      parsed
+    end
+
+    def self.parse_uncached(template)
       directives = []
       i = 0
       size = template.bytesize
