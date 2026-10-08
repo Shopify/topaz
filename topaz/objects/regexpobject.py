@@ -254,6 +254,28 @@ class W_RegexpObject(W_Object):
         matched = self.rsre_search(ctx)
         return self.get_match_result(space, ctx, s, matched)
 
+    @classdef.method("match?")
+    def method_matchp(self, space, w_s, w_offset=None):
+        """Whether the pattern matches, without building a MatchData or
+        touching $~ (in Ruby this was match() plus saving and restoring
+        $~, for every String#match? and Regexp#match?)."""
+        self._check_initialized(space)
+        if w_s is space.w_nil:
+            return space.w_false
+        if space.is_kind_of(w_s, space.w_symbol):
+            w_s = space.send(w_s, "to_s")
+        s = Coerce.str(space, w_s)
+        if w_offset is not None:
+            offset = Coerce.int(space, w_offset)
+            if offset < 0:
+                offset += len(s)
+            if offset < 0 or offset > len(s):
+                return space.w_false
+        else:
+            offset = 0
+        ctx = self.make_ctx(s, offset)
+        return space.newbool(self.rsre_search(ctx))
+
     @classdef.singleton_method("last_match")
     def singleton_method_last_match(self, space, w_n=None):
         # In RPython, so that it reads the calling Ruby frame's $~.

@@ -290,3 +290,20 @@ class TestRegexpObject(BaseTopazTest):
     def test_ignore_whitespace(self, space):
         w_res = space.execute("return /\d \d/x =~ '12'")
         assert space.int_w(w_res) == 0
+
+    def test_matchp(self, space):
+        w_res = space.execute("""
+        "xx" =~ /x/
+        before = $~[0]
+        r = [/b+/.match?("abbc"), /z/.match?("abc"), /b/.match?("abc", 1), /b/.match?("abc", 2),
+             /c/.match?("abc", -1), /a/.match?("abc", -1), /a/.match?("abc", -9), /a/.match?("abc", 3),
+             /a/.match?("abc", 4), /b/.match?(:abc), /b/.match?(nil), "abc".match?(/c/), "abc".match?("b"),
+             "a.c".match?("."), "abc".match?(".")]
+        r << $~[0] << (before == $~[0])
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            True, False, True, False, True, False, False, False, False, True, False, True, True,
+            True, False, "x", True]
+        with self.raises(space, "TypeError"):
+            space.execute("/a/.match?(1)")

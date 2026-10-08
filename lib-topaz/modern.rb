@@ -414,15 +414,7 @@ class Symbol
 end
 
 class Regexp
-  def match?(str, pos = 0)
-    return false if str.nil?
-    saved = $~
-    result = !match(str.is_a?(Symbol) ? str.to_s : str, pos).nil?
-    $~ = saved
-    result
-  end
-
-  # names and named_captures are in RPython (regexpobject.py).
+  # match?, names and named_captures are in RPython (regexpobject.py).
 
 
   def timeout
