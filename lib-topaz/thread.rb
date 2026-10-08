@@ -207,54 +207,7 @@ class Thread
     end
   end
 
-  class Mutex
-    def initialize
-      @locked = false
-    end
-
-    def lock
-      Kernel.raise ThreadError, "deadlock; recursive locking" if @locked
-      @locked = true
-      self
-    end
-
-    def try_lock
-      return false if @locked
-      @locked = true
-    end
-
-    def unlock
-      Kernel.raise ThreadError, "Attempt to unlock a mutex which is not locked" unless @locked
-      @locked = false
-      self
-    end
-
-    def locked?
-      @locked
-    end
-
-    def owned?
-      @locked
-    end
-
-    def synchronize
-      lock
-      begin
-        yield
-      ensure
-        unlock
-      end
-    end
-
-    def sleep(timeout = nil)
-      unlock
-      begin
-        timeout ? Kernel.sleep(timeout) : Kernel.raise(ThreadError, "No live threads left. Deadlock?")
-      ensure
-        lock
-      end
-    end
-  end
+  # Thread::Mutex is implemented in RPython (topaz/objects/mutexobject.py).
 
   class ConditionVariable
     def wait(mutex, timeout = nil)

@@ -1,6 +1,7 @@
 import copy
 
 from topaz.module import ClassDef
+from topaz.objects.mutexobject import W_MutexObject
 from topaz.objects.objectobject import W_Object
 
 
@@ -16,6 +17,10 @@ class W_ThreadObject(W_Object):
         obj = super(W_ThreadObject, self).__deepcopy__(memo)
         obj.local_storage = copy.deepcopy(self.local_storage, memo)
         return obj
+
+    @classdef.setup_class
+    def setup_class(cls, space, w_cls):
+        space.set_const(w_cls, "Mutex", space.getclassfor(W_MutexObject))
 
     @classdef.singleton_method("allocate")
     def method_allocate(self, space):
