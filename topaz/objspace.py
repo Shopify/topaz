@@ -62,6 +62,7 @@ from topaz.objects.intobject import W_FixnumObject
 from topaz.objects.ioobject import W_IOObject
 from topaz.objects.methodobject import W_MethodObject, W_UnboundMethodObject
 from topaz.objects.moduleobject import UndefMethod, W_ModuleObject
+from topaz.objects.mutexobject import W_MonitorObject
 from topaz.objects.nilobject import W_NilObject
 from topaz.objects.numericobject import W_NumericObject
 from topaz.objects.objectobject import W_Object, W_BaseObject, W_Root
@@ -215,6 +216,7 @@ class ObjectSpace(object):
             self.getclassfor(W_IntegerObject),
             self.getclassfor(W_RandomObject),
             self.getclassfor(W_ThreadObject),
+            self.getclassfor(W_MonitorObject),
             self.getclassfor(W_TimeObject),
             self.getclassfor(W_MethodObject),
             self.getclassfor(W_UnboundMethodObject),
