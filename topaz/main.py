@@ -11,6 +11,7 @@ from topaz.error import RubyError, print_traceback
 from topaz.objects.exceptionobject import W_SystemExit
 from topaz.objspace import ObjectSpace
 from topaz.system import IS_WINDOWS, RUBY_DESCRIPTION
+from topaz.utils.vmprof import NATIVE_SUPPORTED, write_native_symbols
 
 
 USAGE = "\n".join([
@@ -87,12 +88,12 @@ def _run_with_vmprof(space, argv):
             os.write(2, "topaz: vmprof requires a translated build on a supported platform\n")
             return 1
         try:
-            fd = os.open(profile_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0666)
+            fd = os.open(profile_path, os.O_RDWR | os.O_CREAT | os.O_TRUNC, 0666)
         except OSError as e:
             os.write(2, "topaz: cannot open vmprof output: %s\n" % os.strerror(e.errno))
             return 1
         try:
-            rvmprof.enable(fd, 0.001)
+            rvmprof.enable(fd, 0.001, native=int(NATIVE_SUPPORTED))
         except rvmprof.VMProfError as e:
             os.close(fd)
             os.write(2, "topaz: cannot enable vmprof: %s\n" % e.msg)
@@ -108,8 +109,14 @@ def _run_with_vmprof(space, argv):
             # through this call, including after Ruby exceptions and exit.
             try:
                 rvmprof.disable()
+                if NATIVE_SUPPORTED:
+                    write_native_symbols(fd)
             except rvmprof.VMProfError as e:
                 os.write(2, "topaz: cannot finish vmprof profile: %s\n" % e.msg)
+                if status == 0:
+                    status = 1
+            except OSError as e:
+                os.write(2, "topaz: cannot write vmprof native symbols: %s\n" % os.strerror(e.errno))
                 if status == 0:
                     status = 1
             finally:

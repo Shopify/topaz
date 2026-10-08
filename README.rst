@@ -79,7 +79,15 @@ the recording::
     $ /tmp/vmprof-viewer/bin/vmprofshow /tmp/topaz.prof tree
 
 Ruby frames contain the method or block name, source filename, and starting
-line. Per-line sampling and native C frames are not enabled. RPython
+line. Native frames are enabled automatically on platforms where RPython
+supports them (currently x86 Unix); on Linux this needs the system's
+``libunwind`` at runtime. After sampling stops, Topaz resolves native
+addresses while the process is still alive and saves the symbols in the
+profile. On Linux, ELF symbol tables supply local C function names even
+without debug information; keep debug information for source lines as well.
+Addresses without symbols are shown as
+``<native symbol 0x...>``. Symbol resolution adds time at shutdown, outside
+the recorded interval. Per-line Ruby sampling is not enabled. RPython
 currently labels the interpreter in the file header as ``pypy``; the Ruby
 frames themselves use ``rb``. Recording requires a translated executable on
 a platform supported by RPython's vmprof; running ``pypy -m topaz`` is not
@@ -94,6 +102,9 @@ yield/resume and completion, exception unwinding, and exit handlers. Run it
 with the viewer environment::
 
     $ /tmp/vmprof-viewer/bin/python tools/check_vmprof.py bin/topaz
+
+Add ``--native`` to also require native samples, resolved symbols, and mixed
+Ruby/native stacks in the smoke test.
 
 .. _`PyPy`: https://github.com/pypy/pypy
 .. _`Prism`: https://github.com/ruby/prism

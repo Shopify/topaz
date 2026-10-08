@@ -15,8 +15,9 @@ def prepare(monkeypatch, tmpdir):
     events = []
     fds = []
 
-    def enable(fd, interval):
+    def enable(fd, interval, native):
         assert interval == 0.001
+        assert native == 1
         fds.append(fd)
         events.append("enable")
         os.write(fd, "header")
@@ -28,6 +29,8 @@ def prepare(monkeypatch, tmpdir):
     monkeypatch.setenv("TOPAZ_VMPROF", path)
     monkeypatch.setattr(main, "we_are_translated", lambda: True)
     monkeypatch.setattr(main, "VMPROF_SUPPORTED", True)
+    monkeypatch.setattr(main, "NATIVE_SUPPORTED", True)
+    monkeypatch.setattr(main, "write_native_symbols", lambda fd: None)
     monkeypatch.setattr(main.rvmprof, "enable", enable)
     monkeypatch.setattr(main.rvmprof, "disable", disable)
     return path, events, fds
@@ -59,6 +62,25 @@ def test_disabled(monkeypatch, tmpdir):
     assert not os.path.exists(path)
 
 
+def test_native_unsupported(monkeypatch, tmpdir):
+    path, events, fds = prepare(monkeypatch, tmpdir)
+
+    def enable(fd, interval, native):
+        assert native == 0
+        fds.append(fd)
+        events.append("enable")
+
+    def unexpected_symbols(fd):
+        pytest.fail("native resolution on an unsupported platform")
+
+    monkeypatch.setattr(main, "NATIVE_SUPPORTED", False)
+    monkeypatch.setattr(main.rvmprof, "enable", enable)
+    monkeypatch.setattr(main, "write_native_symbols", unexpected_symbols)
+    monkeypatch.setattr(main, "_entry_point", lambda space, argv: 0)
+    assert main._run_with_vmprof(FakeSpace(), ["topaz"]) == 0
+    assert events == ["enable", "disable"]
+
+
 @pytest.mark.parametrize("during_setup", [False, True])
 def test_cleanup_on_exception(monkeypatch, tmpdir, during_setup):
     path, events, fds = prepare(monkeypatch, tmpdir)
@@ -82,7 +104,7 @@ def test_cleanup_on_exception(monkeypatch, tmpdir, during_setup):
 def test_enable_error(monkeypatch, tmpdir, capfd):
     path, events, fds = prepare(monkeypatch, tmpdir)
 
-    def fail(fd, interval):
+    def fail(fd, interval, native):
         fds.append(fd)
         raise main.rvmprof.VMProfError("enable failed")
 
@@ -115,6 +137,21 @@ def test_open_error(monkeypatch, tmpdir, capfd):
     assert main._run_with_vmprof(FakeSpace(), ["topaz"]) == 1
     assert not events
     assert "cannot open vmprof output" in capfd.readouterr()[1]
+
+
+def test_symbol_error_closes_file(monkeypatch, tmpdir, capfd):
+    path, events, fds = prepare(monkeypatch, tmpdir)
+
+    def fail(fd):
+        raise main.rvmprof.VMProfError("bad profile")
+
+    monkeypatch.setattr(main, "write_native_symbols", fail)
+    monkeypatch.setattr(main, "_entry_point", lambda space, argv: 0)
+    assert main._run_with_vmprof(FakeSpace(), ["topaz"]) == 1
+    assert events == ["enable", "disable"]
+    assert "bad profile" in capfd.readouterr()[1]
+    with pytest.raises(OSError):
+        os.fstat(fds[0])
 
 
 @pytest.mark.parametrize("translated, supported", [(False, True), (True, False)])
