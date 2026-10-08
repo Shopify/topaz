@@ -86,6 +86,7 @@ uniq_block_driver = jit.JitDriver(
     greens=["bytecode"], reds="auto", name="Array#uniq!{}",
     get_printable_location=get_each_location)
 uniq_plain_driver = jit.JitDriver(greens=[], reds="auto", name="Array#uniq!")
+difference_driver = jit.JitDriver(greens=[], reds="auto", name="Array#-")
 
 HASH_SEED = 0x345678
 HASH_MULT = 1000003
@@ -814,6 +815,26 @@ class W_ArrayObject(W_Object):
                 w_seen.setitem(w_item, space.w_nil)
                 result_w.append(w_item)
             i += 1
+
+    @classdef.method("-")
+    def method_difference(self, space, w_other):
+        """Array#-: the elements not in w_other, by eql?/hash (a Hash of
+        w_other's elements, as the Ruby version built), keeping order and
+        duplicates. w_other is converted with to_ary."""
+        w_other = space.convert_type(w_other, space.w_array, "to_ary")
+        assert isinstance(w_other, W_ArrayObject)
+        w_seen = space.newhash()
+        for w_item in w_other.items_w:
+            w_seen.setitem(w_item, space.w_true)
+        result_w = []
+        i = 0
+        while i < len(self.items_w):
+            difference_driver.jit_merge_point()
+            w_item = self.items_w[i]
+            if not w_seen.strategy.contains(w_seen.dict_storage, w_item):
+                result_w.append(w_item)
+            i += 1
+        return space.newarray(result_w)
 
     @classdef.method("uniq!")
     @check_frozen()

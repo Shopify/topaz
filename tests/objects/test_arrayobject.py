@@ -6,6 +6,24 @@ from ..base import BaseTopazTest
 
 
 class TestArrayObject(BaseTopazTest):
+    def test_difference(self, space):
+        w_res = space.execute("""
+        class ToAry; def to_ary; [2]; end; end
+        class Sub < Array; end
+        a = [1, 2, 2, "a", :b, nil, 1.0, [1]]
+        return [
+          a - [2, "a", nil, [1]], a - [], [] - [1], a - [1.0], a - [1],
+          a - ToAry.new, (Sub[1, 2] - [1]).class.name, a,
+          begin; [1] - 2; rescue TypeError => e; e.message; end,
+        ]
+        """)
+        assert self.unwrap(space, w_res) == [
+            [1, "b", 1.0], [1, 2, 2, "a", "b", None, 1.0, [1]], [], [1, 2, 2, "a", "b", None, [1]],
+            [2, 2, "a", "b", None, 1.0, [1]],
+            [1, "a", "b", None, 1.0, [1]], "Array", [1, 2, 2, "a", "b", None, 1.0, [1]],
+            "no implicit conversion of Integer into Array",
+        ]
+
     def test_uniq(self, space):
         w_res = space.execute("""
         class ArraySub < Array; end

@@ -258,13 +258,6 @@ class Array
     h.keys
   end
 
-  def -(other)
-    other = Topaz.convert_type(other, Array, :to_ary)
-    h = {}
-    other.each { |e| h[e] = true }
-    self.reject { |e| h.has_key?(e) }
-  end
-
   def permutation(r = nil, &block)
     return self.enum_for(:permutation, r) unless block
     r = r ? Topaz.convert_type(r, Topaz::Fixnum, :to_int) : self.size
