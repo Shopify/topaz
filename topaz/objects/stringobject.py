@@ -455,6 +455,23 @@ class MutableStringStrategy(StringStrategy):
             return False
 
 
+
+@jit.unroll_safe
+def _string_new_keywords(space, w_kwargs):
+    """The encoding: value of String.new's keywords (None when absent;
+    nil when given as nil), checking the other keywords."""
+    w_encoding = None
+    for w_key in w_kwargs.strategy.keys(w_kwargs.dict_storage):
+        key = None
+        if space.is_kind_of(w_key, space.w_symbol):
+            key = space.symbol_w(w_key)
+        if key == "encoding":
+            w_encoding = w_kwargs.getitem(w_key)
+        elif key != "capacity":
+            raise space.error(space.w_ArgumentError,
+                "unknown keyword: %s" % space.str_w(space.send(w_key, "inspect")))
+    return w_encoding
+
 class W_StringObject(W_Object):
     classdef = ClassDef("String", W_Object.classdef)
     classdef.include_module(Comparable)
@@ -591,26 +608,19 @@ class W_StringObject(W_Object):
         """String.new(str = "", encoding: nil, capacity: nil). The copy of
         str keeps its encoding tag (the @__topaz_encoding ivar of
         lib-topaz/encoding.rb); with no str the string is binary, as in
-        CRuby. capacity is accepted and ignored."""
+        CRuby. capacity is accepted and ignored.
+
+        Kept free of loops so the JIT inlines it and a String.new whose
+        result does not escape stays virtual."""
         from topaz.objects.hashobject import W_HashObject
-        has_encoding = False
-        w_encoding = space.w_nil
+        w_encoding = None
         if args_w:
             w_last = args_w[-1]
             if isinstance(w_last, W_HashObject) and w_last.is_keywords:
                 end = len(args_w) - 1
                 assert end >= 0
                 args_w = args_w[:end]
-                for w_key in w_last.strategy.keys(w_last.dict_storage):
-                    key = None
-                    if space.is_kind_of(w_key, space.w_symbol):
-                        key = space.symbol_w(w_key)
-                    if key == "encoding":
-                        has_encoding = True
-                        w_encoding = w_last.getitem(w_key)
-                    elif key != "capacity":
-                        raise space.error(space.w_ArgumentError,
-                            "unknown keyword: %s" % space.str_w(space.send(w_key, "inspect")))
+                w_encoding = _string_new_keywords(space, w_last)
         if len(args_w) > 1:
             raise space.error(space.w_ArgumentError,
                 "wrong number of arguments (given %d, expected 0..1)" % len(args_w))
@@ -624,7 +634,7 @@ class W_StringObject(W_Object):
                 self.set_instance_var(space, "@__topaz_encoding", w_enc)
             elif self.find_instance_var(space, "@__topaz_encoding") is not None:
                 self.set_instance_var(space, "@__topaz_encoding", space.w_nil)
-        if has_encoding:
+        if w_encoding is not None:
             space.send(self, "force_encoding", [w_encoding])
         elif not args_w:
             self.set_instance_var(space, "@__topaz_encoding", space.encoding_binary())

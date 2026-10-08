@@ -150,30 +150,38 @@ class W_ArrayObject(W_Object):
     @check_frozen()
     def method_initialize(self, space, w_size=None, w_obj=None, block=None):
         """Array.new, Array.new(size, obj = nil), Array.new(array) and
-        Array.new(size) { |i| }; a block supersedes obj."""
-        del self.items_w[:]
+        Array.new(size) { |i| }; a block supersedes obj.
+
+        No loops here, so the JIT inlines it and an Array.new whose
+        result does not escape stays virtual; the block form's loop has
+        its own driver."""
+        if self.items_w:
+            del self.items_w[:]
         if w_size is None:
             return self
         if w_obj is None:
             w_ary = space.convert_type(w_size, space.w_array, "to_ary", raise_error=False)
             if w_ary is not space.w_nil:
-                self.items_w.extend(space.listview(w_ary))
+                self.items_w = space.listview(w_ary)[:]
                 return self
         length = space.int_w(space.convert_type(w_size, space.w_fixnum, "to_int"))
         if length < 0:
             raise space.error(space.w_ArgumentError, "negative array size")
         if block is not None:
-            bytecode = block.bytecode
-            i = 0
-            while i < length:
-                initialize_driver.jit_merge_point(bytecode=bytecode)
-                self.items_w.append(space.invoke_block(block, [space.newint(i)]))
-                i += 1
+            self._fill_with_block(space, length, block)
         else:
             if w_obj is None:
                 w_obj = space.w_nil
-            self.items_w.extend([w_obj] * length)
+            self.items_w = [w_obj] * length
         return self
+
+    def _fill_with_block(self, space, length, block):
+        bytecode = block.bytecode
+        i = 0
+        while i < length:
+            initialize_driver.jit_merge_point(bytecode=bytecode)
+            self.items_w.append(space.invoke_block(block, [space.newint(i)]))
+            i += 1
 
     @classdef.method("initialize_copy", other_w="array")
     @classdef.method("replace", other_w="array")
