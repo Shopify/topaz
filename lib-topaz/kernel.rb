@@ -51,6 +51,9 @@ module Kernel
   private :String
 
   def Integer(arg, base = nil, exception: true)
+    # Integer(n) on an Integer is the common call (FFI wrappers check their
+    # arguments with it); answer before the conversion protocol.
+    return arg if Integer === arg && base.nil?
     unless exception
       begin
         return Integer(arg, base)
