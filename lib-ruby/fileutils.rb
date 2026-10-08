@@ -203,16 +203,11 @@ module FileUtils
     return *list if options[:noop]
 
     list.map {|path| path.sub(%r</\z>, '') }.each do |path|
-      # optimize for the most common case
-      begin
-        fu_mkdir path, options[:mode]
-        next
-      rescue SystemCallError
-        next if File.directory?(path)
-      end
-
+      # Like current MRI: an existing directory (the common case, e.g. a
+      # cache directory written to on every request) is a stat, not a
+      # failed mkdir and a rescued Errno::EEXIST.
       stack = []
-      until path == stack.last   # dirname("/")=="/", dirname("C:/")=="C:/"
+      until File.directory?(path) || path == stack.last   # dirname("/")=="/", dirname("C:/")=="C:/"
         stack.push path
         path = File.dirname(path)
       end
