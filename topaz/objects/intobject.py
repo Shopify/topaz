@@ -2,7 +2,7 @@ import math
 import operator
 import sys
 
-from rpython.rlib import rfloat
+from rpython.rlib import jit, rfloat
 from rpython.rlib.debug import check_regular_int
 from rpython.rlib.objectmodel import specialize
 from rpython.rlib.rarithmetic import (r_uint, r_longlong, r_ulonglong,
@@ -22,6 +22,19 @@ from topaz.system import IS_WINDOWS
 
 
 INTEGER_DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
+
+
+def get_step_location(bytecode):
+    return "Integer#step %s:%d:in %s" % (
+        bytecode.filepath, bytecode.lineno, bytecode.name)
+
+
+# Integer#step's loop lives here so that the JIT traces it as its own loop
+# with the block inlined once, as with the Array iteration builtins; the
+# Ruby method in fixnum.rb handles arguments, floats and bignums.
+step_driver = jit.JitDriver(
+    greens=["bytecode"], reds="auto", name="Integer#step",
+    get_printable_location=get_step_location)
 
 
 def format_integer_base(space, bigint, base):
@@ -295,6 +308,30 @@ class W_FixnumObject(W_RootObject):
                     space.obj_to_s(space.getclass(w_other))
                 )
             )
+
+    @classdef.method("__topaz_int_step")
+    def method_int_step(self, space, w_limit, w_step, block):
+        """Yields self, self + step, ... while within limit. Returns false
+        (having done nothing) when limit or step is not a fixnum, so the
+        caller falls back to the generic loop."""
+        if (not isinstance(w_limit, W_FixnumObject) or
+            not isinstance(w_step, W_FixnumObject)):
+            return space.w_false
+        limit = w_limit.intvalue
+        step = w_step.intvalue
+        bytecode = block.bytecode
+        i = self.intvalue
+        # A single loop (one jit_merge_point per function) for both
+        # directions.
+        while (i <= limit) if step > 0 else (i >= limit):
+            step_driver.jit_merge_point(bytecode=bytecode)
+            space.invoke_block(block, [space.newint(i)])
+            try:
+                i = ovfcheck(i + step)
+            except OverflowError:
+                # The next value would be past any fixnum limit.
+                break
+        return space.w_true
 
     @classdef.method("gcd")
     def method_gcd(self, space, w_other):

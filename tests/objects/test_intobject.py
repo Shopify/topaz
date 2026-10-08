@@ -18,6 +18,47 @@ class TestFixnumObject(BaseTopazTest):
         with self.raises(space, "TypeError"):
             space.execute("3.gcd(1.5)")
 
+    def test_step(self, space):
+        w_res = space.execute("""
+        r = []
+        res = []
+        res << (1.step(10, 3) { |i| r << i }); res << r
+        r = []; 10.step(1, -3) { |i| r << i }; res << r
+        r = []; 1.step(3) { |i| r << i }; res << r
+        r = []; 1.step(2, 0.5) { |i| r << i }; res << r
+        r = []; 1.step(by: 2, to: 7) { |i| r << i }; res << r
+        r = []; 1.step(7, by: 2) { |i| r << i }; res << r
+        r = []; 1.step(3) { |i| r << i; break :brk if i == 2 }; res << r
+        res << 1.step(10, 3).to_a << 1.step(10, 3).size << 3.step(1).to_a << 1.step(1).to_a
+        res << 1.step(nil, 2).first(3) << 1.step(by: -1).first(3) << 1.step(3, 1.0).to_a
+        res << 1.step(2, 0.3).to_a << 1.step(10, 2.5).size << 1.step(0, 2).size << 1.step(10, -1).size
+        res << 1.step(1.0, 0.3).to_a << 1.step(-1.0, -0.5).to_a << 1.step(10, nil).to_a.size
+        res << 1.step(3, 2r).to_a.map(&:to_s) << (2**64).step(2**64 + 2).to_a.map(&:to_s)
+        res << (2**62).step(2**62 + 1, 1).to_a.map(&:to_s)
+        res << ((2**62 - 1).step(2**62 + 1, 2**61) { |i| r << i.to_s }; r[-2..])
+        return res
+        """)
+        assert self.unwrap(space, w_res) == [
+            1, [1, 4, 7, 10], [10, 7, 4, 1], [1, 2, 3], [1.0, 1.5, 2.0], [1, 3, 5, 7],
+            [1, 3, 5, 7], [1, 2], [1, 4, 7, 10], 4, [], [1], [1, 3, 5], [1, 0, -1],
+            [1.0, 2.0, 3.0], [1.0, 1.3, 1.6, 1.9], 4, 0, 0, [1.0],
+            [1.0, 0.5, 0.0, -0.5, -1.0], 10, ["1", "3/1"],
+            ["18446744073709551616", "18446744073709551617", "18446744073709551618"],
+            ["4611686018427387904", "4611686018427387905"],
+            ["4611686018427387903", "6917529027641081855"]]
+        with self.raises(space, "ArgumentError", "step can't be 0"):
+            space.execute("1.step(10, 0) { }")
+        with self.raises(space, "ArgumentError", "step can't be 0"):
+            space.execute("1.step(10, 0)")
+        with self.raises(space, "ArgumentError", "step is given twice"):
+            space.execute("1.step(10, 2, by: 3) { }")
+        with self.raises(space, "ArgumentError", "to is given twice"):
+            space.execute("1.step(10, to: 3) { }")
+        with self.raises(space, "ArgumentError"):
+            space.execute("1.step('a') { }")
+        with self.raises(space, "ArgumentError"):
+            space.execute("1.step(10, 'a') { }")
+
     def test_overflow_boundaries(self, space):
         from topaz.objects.intobject import W_FixnumObject
 
