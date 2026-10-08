@@ -237,3 +237,27 @@ class TestHashObject(BaseTopazTest):
         ]
         with self.raises(space, "TypeError"):
             space.execute("{}.transform_keys(1)")
+
+    def test_reject_bang_and_select_bang(self, space):
+        w_res = space.execute("""
+        r = []
+        r << {a: 1, b: 2}.reject! { |k, v| v == 1 } << {a: 1}.reject! { false }
+        r << {a: 1}.select! { true } << {a: 1}.select! { false } << {a: 1}.filter! { false }
+        r << {a: 1}.delete_if { false } << {a: 1}.keep_if { false }
+        h = {a: 1, b: 2}
+        r << h.reject! { |k, v| h.size == 2 } << h
+        seen = []
+        {a: 1}.reject! { |x| seen << x; false }
+        {a: 1}.reject! { |*x| seen << x; false }
+        r << seen
+        r << {a: 1}.freeze.reject!.class.name << {a: 1}.freeze.delete_if.class.name
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            {"b": 2}, None, None, {}, {}, {"a": 1}, {}, {"b": 2}, {"b": 2},
+            ["a", ["a", 1]], "Enumerator", "Enumerator",
+        ]
+        with self.raises(space, "FrozenError"):
+            space.execute("{a: 1}.freeze.reject! { true }")
+        with self.raises(space, "FrozenError"):
+            space.execute("{a: 1}.freeze.keep_if { true }")

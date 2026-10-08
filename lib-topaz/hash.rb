@@ -142,49 +142,11 @@ class Hash
 
   alias :to_s :inspect
 
-  def select!(&block)
-    return enum_for(:select!) unless block
-    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    modified = false
-    each_pair do |key, value|
-      unless yield key, value
-        delete key
-        modified = true
-      end
-    end
-    modified ? self : nil
-  end
-
-  def keep_if(&block)
-    return enum_for(:keep_if) unless block
-    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    select!(&block)
-    self
-  end
+  # select!/filter!/keep_if and reject!/delete_if are RPython (hashobject.py).
 
   def select(&block)
     return enum_for(:select) unless block
     dup.keep_if(&block)
-  end
-
-  def reject!(&block)
-    return enum_for(:reject!) unless block
-    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    modified = false
-    each_pair do |key, value|
-      if yield key, value
-        delete key
-        modified = true
-      end
-    end
-    modified ? self : nil
-  end
-
-  def delete_if(&block)
-    return enum_for(:delete_if) unless block
-    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    reject!(&block)
-    self
   end
 
   def reject(&block)

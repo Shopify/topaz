@@ -119,6 +119,17 @@ each_with_object_driver = jit.JitDriver(
     greens=["bytecode"], reds="auto", name="Hash#each_with_object",
     get_printable_location=get_each_location,
 )
+
+
+def get_reject_location(keep, bytecode):
+    return get_each_location(bytecode)
+
+
+# Greens must be ordered ints before refs.
+reject_bang_driver = jit.JitDriver(
+    greens=["keep", "bytecode"], reds="auto", name="Hash#reject!",
+    get_printable_location=get_reject_location,
+)
 merge_driver = jit.JitDriver(
     greens=["bytecode"], reds="auto", name="Hash#merge!",
     get_printable_location=get_merge_location,
@@ -370,6 +381,65 @@ class W_HashObject(W_Object):
                 break
             space.invoke_block(block, [space.newarray([w_key, w_value]), w_memo])
         return w_memo
+
+    def _reject_bang(self, space, block, keep):
+        """Deletes the pairs the block drops (keep False: block true means
+        delete, as reject!; keep True: block false means delete, as
+        select!) as they are visited, so the block sees earlier deletions
+        like MRI. Returns whether anything was deleted."""
+        bytecode = block.bytecode
+        strategy = self.strategy
+        iterator = strategy.iteritems(self.dict_storage)
+        deleted = False
+        while True:
+            reject_bang_driver.jit_merge_point(bytecode=bytecode, keep=keep)
+            try:
+                w_key, w_value = strategy.iternext(iterator)
+            except StopIteration:
+                break
+            if space.is_true(space.invoke_block(block, [w_key, w_value])) != keep:
+                self.delete(w_key)
+                deleted = True
+        return deleted
+
+    def _check_frozen(self, space):
+        if space.is_true(self.get_flag(space, "frozen?")):
+            raise space.frozen_error(self)
+
+    @classdef.method("reject!")
+    def method_reject_bang(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("reject!")])
+        self._check_frozen(space)
+        if self._reject_bang(space, block, False):
+            return self
+        return space.w_nil
+
+    @classdef.method("delete_if")
+    def method_delete_if(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("delete_if")])
+        self._check_frozen(space)
+        self._reject_bang(space, block, False)
+        return self
+
+    @classdef.method("select!")
+    @classdef.method("filter!")
+    def method_select_bang(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("select!")])
+        self._check_frozen(space)
+        if self._reject_bang(space, block, True):
+            return self
+        return space.w_nil
+
+    @classdef.method("keep_if")
+    def method_keep_if(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("keep_if")])
+        self._check_frozen(space)
+        self._reject_bang(space, block, True)
+        return self
 
     @classdef.method("update")
     @classdef.method("merge!")
