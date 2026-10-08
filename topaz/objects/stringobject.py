@@ -734,6 +734,10 @@ class W_StringObject(W_Object):
     def method_hash(self, space):
         return space.newint(self.strategy.hash(self.str_storage))
 
+    @classdef.method("empty?")
+    def method_emptyp(self, space):
+        return space.newbool(self.length() == 0)
+
     @classdef.method("__topaz_escape_html")
     def method_escape_html(self, space):
         """The loop behind CGI.escapeHTML and ERB::Escape.html_escape

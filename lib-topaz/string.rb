@@ -42,10 +42,6 @@ class String
     short ? -1 : (long ? 1 : 0)
   end
 
-  def empty?
-    self.length == 0
-  end
-
   def start_with?(*prefixes)
     prefixes.any? do |prefix|
       prefix = Topaz.try_convert_type(prefix, String, :to_str)
