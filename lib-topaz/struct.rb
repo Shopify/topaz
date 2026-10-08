@@ -36,6 +36,9 @@ class Struct
       end
 
       const_set(:STRUCT_ATTRS, attrs)
+      # The fields live in instance variables; their names are built once
+      # here rather than on every access.
+      const_set(:STRUCT_IVARS, attrs.map { |attr| :"@#{attr}" })
       const_set(:STRUCT_KEYWORD_INIT, keyword_init.nil? ? nil : !!keyword_init)
 
       def self.keyword_init?
@@ -54,8 +57,7 @@ class Struct
 
   def instance_variables
     # Hide the ivars used to store the struct fields
-    attr_syms = self.class::STRUCT_ATTRS.map { |a| "@#{a}".to_sym }
-    self.singleton_class.instance_variables - attr_syms
+    self.singleton_class.instance_variables - self.class::STRUCT_IVARS
   end
 
   # keyword_init: true takes only keywords, false only positional
@@ -70,7 +72,8 @@ class Struct
     if !kwargs.empty? && (keyword_init == true || (keyword_init.nil? && args.empty?))
       unknown = kwargs.keys.reject { |k| attrs.include?(k.to_sym) }
       raise ArgumentError.new("unknown keywords: #{unknown.join(", ")}") unless unknown.empty?
-      attrs.each { |attr| instance_variable_set(:"@#{attr}", kwargs[attr]) }
+      ivars = self.class::STRUCT_IVARS
+      attrs.each_with_index { |attr, i| instance_variable_set(ivars[i], kwargs[attr]) }
       return
     end
     args << kwargs unless kwargs.empty?
@@ -79,8 +82,11 @@ class Struct
       raise ArgumentError.new("struct size differs")
     end
 
-    attrs.each_with_index do |attr, i|
-      instance_variable_set(:"@#{attr}", args[i])
+    ivars = self.class::STRUCT_IVARS
+    i = 0
+    while i < ivars.length
+      instance_variable_set(ivars[i], args[i])
+      i += 1
     end
   end
 
@@ -100,9 +106,9 @@ class Struct
     return false if self.class != other.class
 
     Thread.current.recursion_guard(:eql?, self) do
-      self.class::STRUCT_ATTRS.each do |var|
-        mine = instance_variable_get(:"@#{var}")
-        theirs = other.instance_variable_get(:"@#{var}")
+      self.class::STRUCT_IVARS.each do |ivar|
+        mine = instance_variable_get(ivar)
+        theirs = other.instance_variable_get(ivar)
         return false unless mine.eql?(theirs)
       end
     end
@@ -112,9 +118,9 @@ class Struct
   def [](var)
     case var
     when Symbol, String
-      unless self.class::STRUCT_ATTRS.include?(var.to_sym)
-        raise NameError.new("no member '#{var}' in struct")
-      end
+      idx = self.class::STRUCT_ATTRS.index(var.to_sym)
+      raise NameError.new("no member '#{var}' in struct") unless idx
+      return instance_variable_get(self.class::STRUCT_IVARS[idx])
     else
       var = Topaz.convert_type(var, Topaz::Fixnum, :to_int)
       a_len = self.class::STRUCT_ATTRS.length
@@ -124,18 +130,16 @@ class Struct
       if var < -a_len
         raise IndexError.new("offset #{var + a_len} too small for struct(size:#{a_len})")
       end
-      var = self.class::STRUCT_ATTRS[var]
+      return instance_variable_get(self.class::STRUCT_IVARS[var])
     end
-
-    instance_variable_get(:"@#{var}")
   end
 
   def []=(var, obj)
     case var
     when Symbol, String
-      unless self.class::STRUCT_ATTRS.include?(var.to_sym)
-        raise NameError, "no member '#{var}' in struct"
-      end
+      idx = self.class::STRUCT_ATTRS.index(var.to_sym)
+      raise NameError, "no member '#{var}' in struct" unless idx
+      return instance_variable_set(self.class::STRUCT_IVARS[idx], obj)
     else
       var = Topaz.convert_type(var, Topaz::Fixnum, :to_int)
       a_len = self.class::STRUCT_ATTRS.length
@@ -145,10 +149,8 @@ class Struct
       if var < -a_len
         raise IndexError, "offset #{var + a_len} too small for struct(size:#{a_len})"
       end
-      var = self.class::STRUCT_ATTRS[var]
+      return instance_variable_set(self.class::STRUCT_IVARS[var], obj)
     end
-
-    instance_variable_set(:"@#{var}", obj)
   end
 
   def each(&block)
@@ -159,8 +161,9 @@ class Struct
 
   def each_pair(&block)
     return to_enum(:each_pair) unless block
-    self.class::STRUCT_ATTRS.each do |var|
-      yield var, instance_variable_get(:"@#{var}")
+    ivars = self.class::STRUCT_IVARS
+    self.class::STRUCT_ATTRS.each_with_index do |var, i|
+      yield var, instance_variable_get(ivars[i])
     end
     self
   end
@@ -169,8 +172,8 @@ class Struct
     hash_val = size
 
     recursion = Thread.current.recursion_guard(:hash, self) do
-      self.class::STRUCT_ATTRS.each do |var|
-        hash_val ^= instance_variable_get(:"@#{var}").hash
+      self.class::STRUCT_IVARS.each do |ivar|
+        hash_val ^= instance_variable_get(ivar).hash
       end
     end
 
@@ -203,7 +206,7 @@ class Struct
   end
 
   def to_a
-    self.class::STRUCT_ATTRS.map { |var| instance_variable_get :"@#{var}" }
+    self.class::STRUCT_IVARS.map { |ivar| instance_variable_get(ivar) }
   end
   alias values to_a
 
@@ -215,8 +218,9 @@ class Struct
     recursion = Thread.current.recursion_guard(:to_s, self) do
       values = []
 
-      self.class::STRUCT_ATTRS.each do |var|
-        val = instance_variable_get :"@#{var}"
+      ivars = self.class::STRUCT_IVARS
+      self.class::STRUCT_ATTRS.each_with_index do |var, i|
+        val = instance_variable_get(ivars[i])
         values << "#{var}=#{val.inspect}"
       end
 
