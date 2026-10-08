@@ -30,7 +30,7 @@ class Time
                  when :nsec, :nanosecond then 1
                  else raise ArgumentError, "unexpected unit: #{unit}"
                  end
-        ns += (subsec * factor).round
+        ns += __topaz_scaled_floor(subsec, factor)
       end
       t = __topaz_new(ns)
       if time.is_a?(Time)
@@ -39,6 +39,20 @@ class Time
       zone = opts[:in]
       zone ? t.localtime(zone) : t
     end
+
+    # value * factor truncated towards -Infinity, as MRI does for the
+    # sub-second argument of Time.at; Floats are converted exactly first.
+    def __topaz_scaled_floor(value, factor)
+      case value
+      when Integer then value * factor
+      when Rational then (value.numerator * factor).div(value.denominator)
+      when Numeric
+        r = value.to_r
+        (r.numerator * factor).div(r.denominator)
+      else raise TypeError, "can't convert #{value.class} into an exact number"
+      end
+    end
+    private :__topaz_scaled_floor
 
     def utc(*args)
       t = __topaz_new(__topaz_civil_ns(*args))
