@@ -2,6 +2,7 @@ import copy
 from collections import OrderedDict
 
 from rpython.rlib import jit
+from rpython.rlib.rarithmetic import intmask
 from rpython.rlib.objectmodel import r_ordereddict
 from rpython.rlib.rerased import new_static_erasing_pair
 
@@ -122,6 +123,7 @@ merge_driver = jit.JitDriver(
     greens=["bytecode"], reds="auto", name="Hash#merge!",
     get_printable_location=get_merge_location,
 )
+hash_driver = jit.JitDriver(greens=[], reds="auto", name="Hash#hash")
 
 
 class W_HashObject(W_Object):
@@ -401,6 +403,24 @@ class W_HashObject(W_Object):
                 w_value = space.invoke_block(
                     block, [w_key, self.getitem(w_key), w_value])
             self.method_subscript_assign(space, w_key, w_value)
+
+    @classdef.method("hash")
+    def method_hash(self, space):
+        # Equal hashes have equal hash values, whatever their insertion
+        # order, so the pair hashes are summed. In Ruby this built a
+        # [key, value] array per pair and hashed that.
+        strategy = self.strategy
+        result = strategy.len(self.dict_storage)
+        iterator = strategy.iteritems(self.dict_storage)
+        while True:
+            hash_driver.jit_merge_point()
+            try:
+                w_key, w_value = strategy.iternext(iterator)
+            except StopIteration:
+                break
+            pair = intmask(space.hash_w(w_key) * 1000003) ^ space.hash_w(w_value)
+            result = intmask(result + pair)
+        return space.newint(result)
 
     @classdef.method("merge")
     def method_merge(self, space, w_other, block):

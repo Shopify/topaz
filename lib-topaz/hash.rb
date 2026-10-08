@@ -273,11 +273,3 @@ class Hash
   end
 end
 
-class Hash
-  # Equal hashes have equal hash values, whatever their insertion order.
-  def hash
-    result = size
-    each_pair { |key, value| result = Topaz.intmask(result + [key, value].hash) }
-    result
-  end
-end

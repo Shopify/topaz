@@ -209,3 +209,13 @@ class TestHashObject(BaseTopazTest):
     def test_dup(self, space):
         w_res = space.execute("return {2 => 4}.dup.length")
         assert space.int_w(w_res) == 1
+
+    def test_hash(self, space):
+        w_res = space.execute("""
+        a = {1 => 2, :x => "y"}
+        b = {:x => "y", 1 => 2}
+        return [a.hash == b.hash, a.hash == {1 => 2}.hash, {}.hash == {}.hash,
+                {1 => 2}.hash == {2 => 1}.hash, a.hash.class.name]
+        """)
+        assert self.unwrap(space, w_res) == [True, False, True, False, "Integer"]
+
