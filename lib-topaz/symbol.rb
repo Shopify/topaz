@@ -8,8 +8,20 @@ class Symbol
     private
 
     def __topaz_proc_for(sym)
-      @__topaz_procs[sym] ||= lambda do |recv, *args, &blk|
-        recv.__send__(sym, *args, &blk)
+      @__topaz_procs[sym] ||= __topaz_build_proc(sym)
+    end
+
+    OPERATORS = %w[+ - * / % ** == != < <= > >= <=> << >> & | ^ ~ ! =~ !~ -@ +@ ===].freeze
+
+    # The lambda is compiled with the method name as a literal, so the
+    # call is an ordinary call site (inline cache per site) rather than a
+    # __send__ with a variable name. Keywords are not forwarded, as before.
+    def __topaz_build_proc(sym)
+      name = sym.to_s
+      if name =~ /\A[A-Za-z_][A-Za-z0-9_]*[?!]?\z/ || OPERATORS.include?(name)
+        eval("lambda { |recv, *args, &blk| recv.#{name}(*args, &blk) }")
+      else
+        lambda { |recv, *args, &blk| recv.__send__(sym, *args, &blk) }
       end
     end
   end
