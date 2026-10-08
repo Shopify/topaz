@@ -122,6 +122,47 @@ class TestKernel(BaseTopazTest):
         assert self.unwrap(space, w_res) == [["to_ary"], ["to_a"]]
         assert self.unwrap(space, space.execute("return Array(1)")) == [1]
 
+    def test_implicit_conversion_probes(self, space):
+        # rb_check_funcall: an object without the method is not asked (no
+        # method_missing call, no NoMethodError), one claiming it through
+        # respond_to_missing? or a method_missing of its own is, and an
+        # error from a method that exists propagates.
+        w_res = space.execute("""
+        $log = []
+        class Plain
+          def method_missing(name, *args)
+            $log << name
+            super
+          end
+        end
+        class Claims
+          def respond_to_missing?(name, priv); name == :to_ary; end
+          def method_missing(name, *args); name == :to_ary ? [1, 2] : super; end
+        end
+        class Denies
+          def respond_to_missing?(name, priv); false; end
+          def method_missing(name, *args); $log << [:denies, name]; super; end
+        end
+        class Broken
+          def to_ary; raise "boom"; end
+        end
+        r = []
+        r << Array(Plain.new).class.name
+        r << $log.dup
+        r << Array(Claims.new)
+        r << Array(Denies.new).class.name
+        r << $log.dup
+        r << (begin; Array(Broken.new); rescue RuntimeError => e; e.message; end)
+        return r
+        """)
+        assert self.unwrap(space, w_res) == [
+            # Plain has its own method_missing: it is called and its
+            # NoMethodError swallowed, as in MRI (Kernel#Array asks
+            # respond_to?(:to_a) before to_a, so only to_ary is probed).
+            "Array", ["to_ary"], [1, 2], "Array", ["to_ary"],
+            "boom",
+        ]
+
     def test_String(self, space):
         w_res = space.execute("return [String('hello'), String(4)]")
         assert self.unwrap(space, w_res) == ["hello", "4"]

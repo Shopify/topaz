@@ -950,18 +950,14 @@ class ObjectSpace(object):
         if self.is_kind_of(w_obj, w_cls):
             return w_obj
 
-        try:
-            w_res = self.send(w_obj, method)
-        except RubyError as e:
-            if reraise_error:
-                raise e
-            self.mark_topframe_not_escaped()
+        w_res = self.check_funcall(w_obj, method, reraise_error)
+        if w_res is None:
             if not raise_error:
                 return self.w_nil
             raise self.error(
                 self.w_TypeError, self.implicit_conversion_message(w_obj, w_cls))
 
-        if not w_res or w_res is self.w_nil and not raise_error:
+        if w_res is self.w_nil and not raise_error:
             return self.w_nil
         elif not self.is_kind_of(w_res, w_cls):
             src_cls = self.obj_to_s(self.getclass(w_obj))
@@ -973,6 +969,43 @@ class ObjectSpace(object):
                     src_cls, w_cls_name, src_cls, method, res_cls))
         else:
             return w_res
+
+    def check_funcall(self, w_obj, method, reraise_error=False):
+        """MRI's rb_check_funcall: w_obj.method() if w_obj has the method,
+        else None. An object that lacks the method (and does not claim it
+        through respond_to_missing?, or has no method_missing of its own)
+        is not asked, so a failed conversion costs no NoMethodError: Rails
+        probes to_ary/to_str/to_hash tens of thousands of times a request.
+        Only a method_missing of the object's own gets called, and only its
+        NoMethodError for this very method is swallowed; other errors (and
+        errors from a method that exists) propagate, as in MRI."""
+        from topaz.objects.exceptionobject import W_NoMethodError
+        from topaz.objects.functionobject import W_BuiltinFunction
+        w_cls = self.getclass(w_obj)
+        raw_method = w_cls.find_method(self, method)
+        if raw_method is not None and not raw_method.is_undefined():
+            return raw_method.call(self, w_obj, [], None)
+        w_rtm = w_cls.find_method(self, "respond_to_missing?")
+        if w_rtm is not None and not isinstance(w_rtm, W_BuiltinFunction):
+            w_claims = w_rtm.call(
+                self, w_obj, [self.newsymbol(method), self.w_true], None)
+            if not self.is_true(w_claims):
+                return None
+        w_mm = w_cls.find_method(self, "method_missing")
+        if w_mm is None or isinstance(w_mm, W_BuiltinFunction):
+            return None
+        try:
+            return w_mm.call(self, w_obj, [self.newsymbol(method)], None)
+        except RubyError as e:
+            if reraise_error:
+                raise
+            w_exc = e.w_value
+            if (isinstance(w_exc, W_NoMethodError) and
+                    isinstance(w_exc.w_name, W_SymbolObject) and
+                    self.symbol_w(w_exc.w_name) == method):
+                self.mark_topframe_not_escaped()
+                return None
+            raise
 
     def implicit_conversion_message(self, w_obj, w_cls):
         """Ruby's TypeError message for an object that does not convert
