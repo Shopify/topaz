@@ -440,7 +440,7 @@ class Interpreter(object):
         assert isinstance(w_code, W_CodeObject)
         w_proc = space.newproc(
             w_code, frame.w_self, frame.lexical_scope, cells, frame.block,
-            self, frame.top_parent_interp or self, frame.regexp_match_cell
+            self, frame.top_parent_interp or self, frame.get_regexp_match_cell()
         )
         w_proc.w_owner = frame.w_owner
         w_proc.super_name = frame.super_name

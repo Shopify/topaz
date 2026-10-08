@@ -17,7 +17,6 @@ from rpython.rtyper.lltypesystem import llmemory, rffi
 from topaz import system
 from topaz.astcompiler import CompilerContext, SymbolTable, CompilerError
 from topaz.celldict import GlobalsDict
-from topaz.closure import ClosureCell
 from topaz.error import RubyError, print_traceback
 from topaz.executioncontext import ExecutionContext, ExecutionContextHolder
 from topaz.frame import Frame
@@ -428,8 +427,6 @@ class ObjectSpace(object):
 
         if w_self is None:
             w_self = self.w_top_self
-        if regexp_match_cell is None:
-            regexp_match_cell = ClosureCell(None)
         return Frame(
             jit.promote(bc), w_self, lexical_scope, block, parent_interp,
             top_parent_interp, regexp_match_cell

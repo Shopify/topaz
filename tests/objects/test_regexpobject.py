@@ -2,6 +2,50 @@ from ..base import BaseTopazTest
 
 
 class TestRegexpObject(BaseTopazTest):
+    def test_block_created_before_first_match(self, space):
+        w_res = space.execute("""
+        reader = proc { $1 }
+        before = reader.call
+        /(a)/ =~ 'a'
+        return before, reader.call, $1
+        """)
+        assert self.unwrap(space, w_res) == [None, "a", "a"]
+
+    def test_sibling_blocks_share_match_after_frame_returns(self, space):
+        w_res = space.execute("""
+        def make_blocks
+          reader = proc { $1 }
+          writer = proc { /(b)/ =~ 'b' }
+          return reader, writer
+        end
+        reader, writer = make_blocks
+        before = reader.call
+        writer.call
+        return before, reader.call, $1
+        """)
+        assert self.unwrap(space, w_res) == [None, "b", None]
+
+    def test_match_in_block_updates_enclosing_scope(self, space):
+        w_res = space.execute("""
+        writer = proc { /(c)/ =~ 'c' }
+        writer.call
+        return $1
+        """)
+        assert self.unwrap(space, w_res) == "c"
+
+    def test_method_match_state_is_independent(self, space):
+        w_res = space.execute("""
+        def match_in_method
+          before = $1
+          /(b)/ =~ 'b'
+          return before, $1
+        end
+        /(a)/ =~ 'a'
+        result = match_in_method
+        return result, $1
+        """)
+        assert self.unwrap(space, w_res) == [[None, "b"], "a"]
+
     def test_source(self, space):
         w_res = space.execute("return /abc/.source")
         assert space.str_w(w_res) == "abc"

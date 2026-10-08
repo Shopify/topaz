@@ -37,3 +37,12 @@ def test_builtin_frame_escape_flag():
     assert frame.is_escaped()
     frame.set_escaped(False)
     assert not frame.is_escaped()
+
+
+def test_unused_regexp_cell_is_not_allocated(space):
+    bc = space.compile("return 42", "test_frame.rb")
+    frame = space.create_frame(bc)
+    assert frame.regexp_match_cell is None
+    with space.getexecutioncontext().visit_frame(frame):
+        assert space.int_w(space.execute_frame(frame, bc)) == 42
+    assert frame.regexp_match_cell is None

@@ -96,7 +96,7 @@ class W_RegexpObject(W_Object):
 
     @staticmethod
     def _get_regexp_cell(space):
-        return space.getexecutioncontext().gettoprubyframe().regexp_match_cell
+        return space.getexecutioncontext().gettoprubyframe().get_regexp_match_cell()
 
     @staticmethod
     def _get_regexp_match(space):

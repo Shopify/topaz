@@ -1,6 +1,6 @@
 from rpython.rlib import jit
 
-from topaz.closure import BaseCell, LOCAL_CELL
+from topaz.closure import BaseCell, ClosureCell, LOCAL_CELL
 from topaz.objects.hashobject import W_HashObject
 from topaz.objects.moduleobject import W_ModuleObject
 
@@ -70,6 +70,14 @@ class Frame(BaseFrame):
         # The name `super` calls: set in define_method bodies, whose code
         # was compiled inside some other method.
         self.super_name = None
+
+    def get_regexp_match_cell(self):
+        # Blocks must capture the shared cell even if no match has happened
+        # yet, so later updates remain visible in the enclosing scope.
+        cell = self.regexp_match_cell
+        if cell is None:
+            cell = self.regexp_match_cell = ClosureCell(None)
+        return cell
 
     def get_entry_pc(self):
         return self.flags >> ENTRY_PC_SHIFT
