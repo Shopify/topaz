@@ -1190,6 +1190,31 @@ class TestInterpreter(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == [1, 2]
 
+    def test_super_sees_redefinition_through_singleton_class(self, space):
+        w_res = space.execute("""
+        class Foo; def m; 1; end; end
+        o = Foo.new
+        def o.m; super + 1; end
+        class A; def self.f; 1; end; end
+        class B < A; def self.f; super + 1; end; end
+        before = [o.m, B.f]
+        class Foo; def m; 100; end; end
+        class A; def self.f; 100; end; end
+        return before + [o.m, B.f]
+        """)
+        assert self.unwrap(space, w_res) == [2, 2, 101, 101]
+
+    def test_method_cache_sees_redefinition_through_singleton_class(self, space):
+        w_res = space.execute("""
+        class Foo; def x; 1; end; end
+        o = Foo.new
+        def o.other; end
+        before = o.x
+        class Foo; def x; 2; end; end
+        return [before, o.x]
+        """)
+        assert self.unwrap(space, w_res) == [1, 2]
+
     def test_super_block(self, space):
         w_res = space.execute("""
         class A
