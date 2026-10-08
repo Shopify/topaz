@@ -1,4 +1,5 @@
 from rpython.rlib import jit, longlong2float, rerased
+from rpython.rlib.debug import make_sure_not_resized
 from rpython.rlib.objectmodel import specialize
 from rpython.rlib.rarithmetic import intmask
 from rpython.rlib.unroll import unrolling_iterable
@@ -300,6 +301,7 @@ def prepare_storage(node, w_obj, prev):
         if node.object_size:
             storage = [None] * max(
                 node.object_size, node.size_estimate.object_size_estimate())
+            make_sure_not_resized(storage)
             if prev.object_size > 0:
                 storage[0] = w_first
             if prev.object_size > 1:
@@ -324,6 +326,7 @@ def update_storage(node, w_obj, storage_name, empty_value):
     elif storage is None or size > len(storage):
         new_storage = [empty_value] * max(size, getattr(
             node.size_estimate, storage_name + "_size_estimate")())
+        make_sure_not_resized(new_storage)
         if storage is not None:
             for i, value in enumerate(storage):
                 new_storage[i] = value
