@@ -67,6 +67,7 @@ detect_driver = _enum_driver("detect")
 select_driver = _enum_driver("select")
 map_driver = _enum_driver("map")
 reject_driver = _enum_driver("reject")
+delete_if_driver = _enum_driver("delete_if")
 
 
 # Array#hash was Ruby code (Thread.current.recursion_guard around an each
@@ -682,6 +683,26 @@ class W_ArrayObject(W_Object):
                 result_w.append(w_item)
             i += 1
         return space.newarray(result_w)
+
+    @classdef.method("delete_if")
+    @check_frozen()
+    def method_delete_if(self, space, block):
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("delete_if")])
+        bytecode = block.bytecode
+        kept = 0
+        i = 0
+        while i < len(self.items_w):
+            delete_if_driver.jit_merge_point(bytecode=bytecode)
+            w_item = self.items_w[i]
+            if not space.is_true(space.invoke_block(block, [w_item])):
+                if kept < len(self.items_w):
+                    self.items_w[kept] = w_item
+                kept += 1
+            i += 1
+        if kept < len(self.items_w):
+            del self.items_w[kept:]
+        return self
 
     @classdef.method("sort_by!")
     @check_frozen()

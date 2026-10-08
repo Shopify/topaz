@@ -86,25 +86,6 @@ class Array
     detect { |arr| arr.is_a?(Array) && arr[1] == value }
   end
 
-  def delete_if(&block)
-    return self.enum_for(:delete_if) unless block
-    raise FrozenError.new("can't modify frozen #{self.class}: #{inspect}", receiver: self) if frozen?
-    i = 0
-    c = 0
-    sz = self.size
-    while i < sz - c
-      item = self[i + c]
-      if yield(item)
-        c += 1
-      else
-        self[i] = item
-        i += 1
-      end
-    end
-    self.pop(c)
-    self
-  end
-
   def delete(obj, &block)
     sz = self.size
     last_matched_element = nil

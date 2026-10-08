@@ -307,6 +307,12 @@ class TestArrayObject(BaseTopazTest):
         assert space.int_w(space.execute("return [1, 2, 3].last")) == 3
         assert space.execute("return [].last") == space.w_nil
 
+    def test_delete_if_frozen_and_enum(self, space):
+        w_res = space.execute("return [1, 2].delete_if.class.name")
+        assert space.str_w(w_res) == "Enumerator"
+        with self.raises(space, "FrozenError"):
+            space.execute("[1].freeze.delete_if { true }")
+
     def test_shift(self, space):
         w_res = space.execute("return [].shift")
         assert w_res is space.w_nil
