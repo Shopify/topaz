@@ -253,6 +253,38 @@ class TestFixnumObject(BaseTopazTest):
         w_res = space.execute("return 1 == '1'")
         assert w_res is space.w_false
 
+    def test_equal_fixnum_boundaries(self, space):
+        w_res = space.execute("""
+        lo = %d
+        hi = %d
+        return [lo == lo, hi == hi, lo == hi, hi == lo,
+                -1 == 0, 0 == -1, 0 == 0, 7 == 3, 3 == 7,
+                hi.equal?(hi), lo.equal?(hi),
+                hi == hi + 1, lo == lo - 1,
+                1 == 1.0, 1 == 1.5, 1 == Float::INFINITY,
+                1 == -Float::INFINITY, 1 == Float::NAN,
+                1 == nil, 1 == false]
+        """ % (-sys.maxint - 1, sys.maxint))
+        assert self.unwrap(space, w_res) == [
+            True, True, False, False, False, False, True, False, False,
+            True, False, False, False, True, False, False, False, False,
+            False, False]
+
+    def test_equal_delegates_to_other(self, space):
+        w_res = space.execute("""
+        class EqualityProbe
+          attr_reader :seen
+          def ==(other)
+            @seen = other
+            :delegated
+          end
+        end
+        probe = EqualityProbe.new
+        result = 42 == probe
+        return [result, probe.seen]
+        """)
+        assert self.unwrap(space, w_res) == ['delegated', 42]
+
     def test_not_equal(self, space):
         w_res = space.execute("return 1 != 1")
         assert w_res is space.w_false

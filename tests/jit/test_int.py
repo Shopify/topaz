@@ -4,6 +4,25 @@ from .base import BaseJITTest
 
 
 class TestInteger(BaseJITTest):
+    def test_equality_does_not_order_operands(self, topaz, tmpdir):
+        traces = self.run(topaz, tmpdir, """
+        values = [1, 7, 3, 7]
+        i = 0
+        matches = 0
+        while i < 20000
+          matches += 1 if values[i & 3] == 3
+          i += 1
+        end
+        raise 'wrong equality' unless matches == 5000
+        """)
+        loop = self.ruby_loop(traces)
+        # The loop bound may use int_lt; comparing an element with 3 must
+        # use equality directly, without comparator's less/greater branches.
+        assert any(op.name in ('int_eq', 'int_ne') and '3' in op.args
+                   for op in loop)
+        assert not any(op.name in ('int_lt', 'int_le', 'int_gt', 'int_ge')
+                       and '3' in op.args for op in loop)
+
     @pytest.mark.parametrize("start, limit, step", [
         (1, 20000, 2),
         (19999, 0, -2),

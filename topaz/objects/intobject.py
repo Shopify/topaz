@@ -431,7 +431,7 @@ class W_FixnumObject(W_RootObject):
     @classdef.method("equal?")
     def method_eq(self, space, w_other):
         if isinstance(w_other, W_FixnumObject):
-            return space.newbool(self.comparator(space, space.int_w(w_other)) == 0)
+            return space.newbool(self.intvalue == w_other.intvalue)
         elif isinstance(w_other, W_FloatObject):
             return space.newbool(self.comparator(space, space.float_w(w_other)) == 0)
         else:
