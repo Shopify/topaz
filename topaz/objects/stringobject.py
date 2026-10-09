@@ -177,6 +177,19 @@ def scan_integer_prefix(s, radix, is_radix):
     return neg, i, radix
 
 
+@jit.dont_look_inside
+def justify_string(value, pad_len, padstr, left):
+    chars = []
+    if left:
+        chars += value
+    for i in xrange(pad_len / len(padstr)):
+        chars += padstr
+    chars += padstr[:pad_len % len(padstr) + 1]
+    if not left:
+        chars += value
+    return chars
+
+
 def utf8_char_length(string, pos):
     """The number of bytes in the UTF-8 character at `pos`, or 1."""
     if pos >= len(string):
@@ -1250,11 +1263,7 @@ class W_StringObject(W_Object):
         else:
             pad_len = integer - self.length() - 1
             assert pad_len >= 0
-            chars = []
-            chars += space.str_w(self)
-            for i in xrange(pad_len / len(padstr)):
-                chars += padstr
-            chars += padstr[:pad_len % len(padstr) + 1]
+            chars = justify_string(space.str_w(self), pad_len, padstr, True)
             return space.newstr_fromchars(chars)
 
     @classdef.method("rjust", integer="int", padstr="str")
@@ -1266,11 +1275,7 @@ class W_StringObject(W_Object):
         else:
             pad_len = integer - self.length() - 1
             assert pad_len >= 0
-            chars = []
-            for i in xrange(pad_len / len(padstr)):
-                chars += padstr
-            chars += padstr[:pad_len % len(padstr) + 1]
-            chars += space.str_w(self)
+            chars = justify_string(space.str_w(self), pad_len, padstr, False)
             return space.newstr_fromchars(chars)
 
     def search_context(self, space, w_regexp, ctx):

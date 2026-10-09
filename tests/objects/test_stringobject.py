@@ -242,6 +242,21 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute("return ('a' << 'b').clear")
         assert self.unwrap(space, w_res) == ""
 
+    @pytest.mark.parametrize('method', ['ljust', 'rjust'])
+    def test_justify_boundaries(self, space, method):
+        w_res = space.execute('''
+        s = 'abc'
+        pad = 'xy'
+        first = s.%s(8, pad)
+        pad.replace('z')
+        return [first, s.%s(5, pad), s.%s(-1), s.%s(3).equal?(s)]
+        ''' % ((method,) * 4))
+        expected = ['abcxyxyx', 'abczz'] if method == 'ljust' else [
+            'xyxyxabc', 'zzabc']
+        assert self.unwrap(space, w_res) == expected + ['abc', False]
+        with self.raises(space, 'ArgumentError', 'zero width padding'):
+            space.execute("'abc'.%s(0, '')" % method)
+
     def test_ljust(self, space):
         w_res = space.execute("""
         a = 'hi'

@@ -1,7 +1,22 @@
+import pytest
+
 from .base import BaseJITTest
 
 
 class TestNonforcingHelpers(BaseJITTest):
+    @pytest.mark.parametrize('method', ['ljust', 'rjust'])
+    def test_justify(self, topaz, tmpdir, method):
+        traces = self.run(topaz, tmpdir, '''
+        i = 0
+        total = 0
+        while i < 20000
+          total += 'abc'.%s(8 + (i & 1), 'xy').length
+          i += 1
+        end
+        raise 'wrong padding' unless total == 170000
+        ''' % method)
+        self.assert_nonforcing_helper(traces, 'justify_string')
+
     def test_pow(self, topaz, tmpdir):
         traces = self.run(topaz, tmpdir, '''
         i = 0
