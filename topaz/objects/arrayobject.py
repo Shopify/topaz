@@ -75,6 +75,17 @@ reverse_each_driver = _enum_driver("reverse_each")
 flat_map_driver = _enum_driver("flat_map")
 
 
+def get_bsearch_location(bytecode):
+    return "Array#bsearch_index %s:%d:in %s" % (
+        bytecode.filepath, bytecode.lineno, bytecode.name)
+
+
+bsearch_driver = jit.JitDriver(
+    greens=["bytecode"], reds="auto", name="Array#bsearch_index",
+    get_printable_location=get_bsearch_location,
+)
+
+
 # Array#hash was Ruby code (Thread.current.recursion_guard around an each
 # with the running value in a closure cell): every element cost a block frame,
 # a cell write and boxed arithmetic, and Rails hashes arrays all the time
@@ -88,8 +99,6 @@ uniq_block_driver = jit.JitDriver(
 uniq_plain_driver = jit.JitDriver(greens=[], reds="auto", name="Array#uniq!")
 difference_driver = jit.JitDriver(greens=[], reds="auto", name="Array#-")
 flatten_driver = jit.JitDriver(greens=[], reds="auto", name="Array#flatten")
-bsearch_driver = jit.JitDriver(
-    greens=["bytecode"], reds="auto", name="Array#bsearch_index")
 
 HASH_SEED = 0x345678
 HASH_MULT = 1000003
@@ -909,9 +918,12 @@ class W_ArrayObject(W_Object):
         while low < high:
             bsearch_driver.jit_merge_point(bytecode=bytecode)
             mid = low + (high - low) // 2
-            if mid >= len(self.items_w):
-                break
-            w_res = space.invoke_block(block, [self.items_w[mid]])
+            # Keep the original bounds, but observe callback mutations.
+            # Array#[] yields nil for elements removed during the search.
+            w_item = space.w_nil
+            if mid < len(self.items_w):
+                w_item = self.items_w[mid]
+            w_res = space.invoke_block(block, [w_item])
             if w_res is space.w_true:
                 found = mid
                 high = mid

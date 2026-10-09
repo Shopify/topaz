@@ -773,3 +773,110 @@ class TestArrayPack(BaseTopazTest):
         assert self.unwrap(space, w_res) == [4, 1, 7, 2, None, None, 7, 2, 4, None, 4, None, None, None, "Enumerator"]
         with self.raises(space, "TypeError", "wrong argument type Symbol (must be numeric, true, false or nil)"):
             space.execute("[1, 2].bsearch { |x| :sym }")
+
+class TestArrayBsearchIndex(BaseTopazTest):
+    def test_removed_elements_can_satisfy_search(self, space):
+        w_res = space.execute('''
+        a = [0, 1, 2, 3, 4, 5, 6, 7]
+        seen = []
+        index = a.bsearch_index do |x|
+          seen << x
+          a.clear
+          x.nil?
+        end
+        a = [0, 1, 2, 3]
+        value = a.bsearch do |x|
+          a.replace([10, 11, 12, 13])
+          true
+        end
+        return [index, seen, value]
+        ''')
+        assert self.unwrap(space, w_res) == [5, [4, None, None], 10]
+
+    def test_boolean_and_numeric_modes(self, space):
+        w_res = space.execute('''
+        a = [1, 3, 3, 7, 9]
+        return [
+          [].bsearch_index { raise 'called on empty' },
+          a.bsearch_index { |x| x >= 3 },
+          a.bsearch_index { true }, a.bsearch_index { false },
+          a.bsearch_index { nil }, a.bsearch_index { |x| x >= 9 },
+          a.bsearch_index { |x| 7 <=> x },
+          a.bsearch_index { |x| 8 <=> x },
+          a.bsearch_index { |x| (7 - x).to_f },
+          a.bsearch_index { |x| (7 - x) * (2 ** 100) },
+          [5].bsearch_index { |x| x == 5 },
+          [5].bsearch_index { 0 }, [5].bsearch_index { 1 }
+        ]
+        ''')
+        assert self.unwrap(space, w_res) == [
+            None, 1, 0, None, None, 4, 3, None, 3, 3, 0, 0, None]
+
+    def test_enumerator_and_control_flow(self, space):
+        w_res = space.execute('''
+        a = [1, 3, 5, 7]
+        e = a.bsearch_index
+        return [e.class.name, e.each { |x| x >= 4 },
+                a.bsearch_index { break :stopped },
+                a.bsearch_index { |x| next x >= 4 }]
+        ''')
+        assert self.unwrap(space, w_res) == ['Enumerator', 2, 'stopped', 2]
+
+    def test_invalid_result(self, space):
+        w_res = space.execute('''
+        return [:symbol, 'string', [], Object.new].map do |result|
+          begin
+            [1].bsearch_index { result }
+          rescue TypeError => e
+            e.message
+          end
+        end
+        ''')
+        assert self.unwrap(space, w_res) == [
+            'wrong argument type %s (must be numeric, true, false or nil)' % name
+            for name in ['Symbol', 'String', 'Array', 'Object']]
+
+    def test_custom_numeric(self, space):
+        w_res = space.execute('''
+        class SearchResult < Numeric
+          def initialize(value); @value = value; end
+          def ==(other); @value == other; end
+          def >(other); @value > other; end
+        end
+        return [1, 3, 5, 7].bsearch_index { |x| SearchResult.new(5 - x) }
+        ''')
+        assert self.unwrap(space, w_res) == 2
+
+    def test_callback_mutation(self, space):
+        w_res = space.execute('''
+        cleared = [0, 1, 2, 3, 4, 5, 6, 7]
+        seen_clear = []
+        clear_result = cleared.bsearch_index do |x|
+          seen_clear << x
+          cleared.clear
+          false
+        end
+        replaced = [0, 1, 2, 3]
+        seen_replace = []
+        replace_result = replaced.bsearch_index do |x|
+          seen_replace << x
+          replaced.replace([10, 11, 12, 13])
+          true
+        end
+        grown = [0, 1, 2, 3]
+        seen_grow = []
+        grow_result = grown.bsearch_index do |x|
+          seen_grow << x
+          grown << 100
+          false
+        end
+        shrunk = [0, 1, 2, 3]
+        shrink_result = shrunk.bsearch_index do |x|
+          shrunk.clear
+          x == 2
+        end
+        return [clear_result, seen_clear, replace_result, seen_replace,
+                grow_result, seen_grow, shrink_result]
+        ''')
+        assert self.unwrap(space, w_res) == [
+            None, [4, None, None], 0, [2, 11, 10], None, [2, 3], 2]
