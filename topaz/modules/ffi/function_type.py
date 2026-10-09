@@ -24,7 +24,7 @@ def raise_TypeError_if_not_TypeObject(space, w_candidate):
 
 class W_FunctionTypeObject(W_TypeObject):
     classdef = ClassDef('FFI::FunctionType', W_TypeObject.classdef)
-    _immutable_fields_ = ['arg_types_w', 'w_ret_type', 'cif_descr']
+    _immutable_fields_ = ['arg_types_w[*]', 'w_ret_type', 'cif_descr']
 
     def __init__(self, space):
         W_TypeObject.__init__(self, space, ffitype.FUNCTION)
@@ -51,7 +51,8 @@ class W_FunctionTypeObject(W_TypeObject):
             raise_TypeError_if_not_TypeObject(space, w_arg_type)
 
         self.w_ret_type = w_ret_type
-        self.arg_types_w = arg_types_w
+        # The signature must not share storage with the caller's Ruby array.
+        self.arg_types_w = arg_types_w[:]
         self.cif_descr = self.build_cif_descr(space)
 
     @jit.dont_look_inside

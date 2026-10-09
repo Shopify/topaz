@@ -30,6 +30,17 @@ class TestFunctionType__new(BaseFFITest):
                          "Invalid parameter type (:float64)"):
             space.execute("FFI::FunctionType.new(FFI::Type::INT8, [:float64])")
 
+    def test_signature_owns_argument_types(self, space):
+        w_function_type = space.execute("""
+        args = [FFI::Type::INT32]
+        signature = FFI::FunctionType.new(FFI::Type::INT32, args)
+        args[0] = FFI::Type::FLOAT64
+        args << FFI::Type::POINTER
+        signature
+        """)
+        arg_indices = [w_t.typeindex for w_t in w_function_type.arg_types_w]
+        assert arg_indices == [ffitype.INT32]
+
     def test_it_has_a_Hash_as_optional_3rd_argument(self, space):
         w_function_type = space.execute("""
         FFI::FunctionType.new(FFI::Type::VOID, [], {convention: :default})

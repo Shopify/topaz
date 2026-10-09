@@ -160,6 +160,8 @@ def type_object(space, w_obj):
 
 
 class ReadWriteStrategy(object):
+    _immutable_fields_ = ['typesize']
+
     def __init__(self, typeindex):
         self.typesize = lltype_sizes[typeindex]
 
