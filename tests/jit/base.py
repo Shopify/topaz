@@ -27,6 +27,14 @@ class BaseJITTest(object):
         traces = storage.reconnect_loops(traces)
         return [Trace(t) for t in traces]
 
+    def ruby_loop(self, traces, name="<main>"):
+        # Startup regexp traces can precede the loop under test.
+        loops = [trace for trace in traces
+                 if ":in %s " % name in trace.trace.comment
+                 and "loop with" in trace.trace.comment]
+        assert len(loops) == 1, [trace.trace.comment for trace in traces]
+        return loops[0].loop
+
     def assert_matches(self, trace, expected):
         expected_lines = [
             line.strip()
