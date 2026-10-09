@@ -4,6 +4,109 @@ from .base import BaseJITTest
 
 
 class TestString(BaseJITTest):
+    @pytest.mark.parametrize('mutable', [False, True])
+    @pytest.mark.parametrize('expression', [
+        "s.unpack('U')[0]", "s.unpack1('U')", "s.unpack1('U*')",
+    ])
+    @pytest.mark.parametrize('values, expected', [
+        ("['a', 'b']", 975000),
+        ('["\\xc3\\xa9", "\\xc3\\xaa"]', 2335000),
+        ('["\\xf0\\x9d\\x84\\x9e", "\\xf0\\x9d\\x84\\x9f"]', 1190705000),
+    ])
+    def test_unpack_utf8_single(self, topaz, tmpdir, mutable, expression,
+                                values, expected):
+        traces = self.run(topaz, tmpdir, '''
+        def decode_single(values)
+          i = 0
+          total = 0
+          while i < 10000
+            s = values[i & 1]
+            total += %s
+            i += 1
+          end
+          total
+        end
+        values = %s
+        %s
+        raise 'wrong codepoint' unless decode_single(values) == %d
+        values[1].setbyte(values[1].bytesize - 1,
+                          values[1].getbyte(values[1].bytesize - 1) - 1)
+        raise 'stale codepoint' unless decode_single(values) == %d
+        ''' % (expression, values,
+               "values.each { |s| s << '' }" if mutable else '',
+               expected, expected - 5000))
+        loops = [trace.loop for trace in traces
+                 if 'in decode_single' in trace.trace.comment
+                 and 'loop with' in trace.trace.comment]
+        assert loops
+        for loop in loops:
+            assert any(op.name in ('strgetitem', 'getarrayitem_gc_i') for op in loop)
+            assert not [op for op in loop if 'call' in op.name]
+            assert not [op for op in loop if op.name.startswith('new')]
+            assert not [op for op in loop if op.name == 'guard_not_forced']
+        assert not [trace for trace in traces
+                    if 'String#unpack(U)' in trace.trace.comment]
+
+    def test_unpack_utf8_single_mixed_widths_and_errors(self, topaz, tmpdir):
+        self.run(topaz, tmpdir, '''
+        def first(s)
+          s.unpack('U')[0]
+        end
+        values = ['', 'a', "\\xc3\\xa9", "\\xe2\\x82\\xac", "\\xf0\\x9d\\x84\\x9e"]
+        expected = [nil, 97, 233, 8364, 119070]
+        i = 0
+        while i < 20000
+          j = i % 5
+          raise 'wrong width' unless first(values[j]) == expected[j]
+          i += 1
+        end
+        ['a', "\\xc3\\xa9"].each do |s|
+          10000.times { first(s) }
+          s.setbyte(0, 255)
+          begin
+            first(s)
+            raise 'accepted malformed input'
+          rescue ArgumentError => e
+            raise 'wrong error' unless e.message == 'malformed UTF-8 character'
+          end
+        end
+        ''')
+
+    @pytest.mark.parametrize('expression', [
+        "s.unpack('U')[0]", "s.unpack1('U')", "s.unpack('U*')[0]",
+    ])
+    def test_unpack_utf8_in_place_mutation(self, topaz, tmpdir, expression):
+        self.run(topaz, tmpdir, '''
+        s = "\\xc3\\xa9"
+        s << ''
+        total = 0
+        i = 0
+        while i < 10000
+          s.setbyte(1, 169 + (i & 1))
+          total += %s
+          i += 1
+        end
+        raise 'cached mutable codepoint' unless total == 2335000
+        ''' % expression)
+
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_unpack_utf8_bulk_errors_after_warmup(self, topaz, tmpdir, mutable):
+        self.run(topaz, tmpdir, '''
+        def decode_bulk(s)
+          s.unpack('U*')
+        end
+        s = "a\\xc3\\xa9" * 16
+        %s
+        10000.times { raise 'wrong length' unless decode_bulk(s).size == 32 }
+        s.setbyte(1, 255)
+        begin
+          decode_bulk(s)
+          raise 'accepted malformed input'
+        rescue ArgumentError => e
+          raise 'wrong error' unless e.message == 'malformed UTF-8 character'
+        end
+        ''' % ("s << ''" if mutable else ''))
+
     @pytest.mark.parametrize('method, arguments', [
         ('start_with?', 'affix'),
         ('end_with?', 'affix'),

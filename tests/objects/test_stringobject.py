@@ -135,6 +135,91 @@ class TestStringObject(BaseTopazTest):
             "malformed UTF-8 character", [55296],
         ]
 
+    @pytest.mark.parametrize('mutable', [False, True])
+    @pytest.mark.parametrize('value, codepoints', [
+        ('', []), ('\x00', [0]), ('a', [97]), ('\x7f', [127]),
+        ('\xc2\x80', [128]), ('\xdf\xbf', [2047]),
+        ('\xe0\xa0\x80', [2048]), ('\xef\xbf\xbf', [65535]),
+        ('\xf0\x90\x80\x80', [65536]), ('\xf4\x8f\xbf\xbf', [1114111]),
+        ('\xed\xa0\x80', [55296]), ('\xf7\xbf\xbf\xbf', [2097151]),
+        ('a\xc3\xa9\xe2\x82\xac\xf0\x9d\x84\x9e', [97, 233, 8364, 119070]),
+    ])
+    def test_unpack_utf8_storage(self, space, mutable, value, codepoints):
+        w_s = (space.newstr_fromchars(list(value)) if mutable else
+               space.newstr_fromstr(value))
+        for template in ['U', 'U*']:
+            args = [space.newstr_fromstr(template)]
+            expected = codepoints[:1] if template == 'U' else codepoints
+            assert self.unwrap(space, space.send(w_s, 'unpack', args)) == expected
+            first = codepoints[0] if codepoints else None
+            assert self.unwrap(space, space.send(w_s, 'unpack1', args)) == first
+
+    @pytest.mark.parametrize('mutable', [False, True])
+    @pytest.mark.parametrize('value, message', [
+        ('\x80', 'malformed UTF-8 character'),
+        ('\xff', 'malformed UTF-8 character'),
+        ('\xf8', 'malformed UTF-8 character'),
+        ('\xc3', 'malformed UTF-8 character (expected 2 bytes, given 1 bytes)'),
+        ('\xe2\x82', 'malformed UTF-8 character (expected 3 bytes, given 2 bytes)'),
+        ('\xf0\x90\x80', 'malformed UTF-8 character (expected 4 bytes, given 3 bytes)'),
+        ('\xe2A', 'malformed UTF-8 character (expected 3 bytes, given 2 bytes)'),
+        ('\xc3A', 'malformed UTF-8 character'),
+        ('\xe2A\xac', 'malformed UTF-8 character'),
+        ('\xf0\x90A\x80', 'malformed UTF-8 character'),
+        ('\xc0\x80', 'redundant UTF-8 sequence'),
+        ('\xe0\x80\x80', 'redundant UTF-8 sequence'),
+        ('\xf0\x80\x80\x80', 'redundant UTF-8 sequence'),
+        ('\xc0', 'malformed UTF-8 character (expected 2 bytes, given 1 bytes)'),
+    ])
+    def test_unpack_utf8_errors(self, space, mutable, value, message):
+        w_s = (space.newstr_fromchars(list(value)) if mutable else
+               space.newstr_fromstr(value))
+        for method in ['unpack', 'unpack1']:
+            for template in ['U', 'U*']:
+                with self.raises(space, 'ArgumentError', message):
+                    space.send(w_s, method, [space.newstr_fromstr(template)])
+
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_unpack_utf8_trailing_error_and_mutation(self, space, mutable):
+        w_res = space.execute('''
+        s = "a\\xff"
+        %s
+        result = [s.unpack('U'), s.unpack1('U'), s.unpack1('U*')]
+        begin
+          s.unpack('U*')
+        rescue ArgumentError => e
+          result << e.message
+        end
+        s.setbyte(1, 98)
+        result << s.unpack('U*')
+        s.setbyte(0, 99)
+        result << s.unpack('U') << s.unpack1('U*')
+        s.setbyte(0, 255)
+        begin
+          s.unpack1('U')
+        rescue ArgumentError => e
+          result << e.message
+        end
+        return result
+        ''' % ("s << ''" if mutable else ''))
+        assert self.unwrap(space, w_res) == [
+            [97], 97, 97, 'malformed UTF-8 character', [97, 98],
+            [99], 99, 'malformed UTF-8 character']
+
+    def test_unpack_utf8_blocks_counts_and_offset(self, space):
+        w_res = space.execute('''
+        s = "a\\xc3\\xa9"
+        seen = []
+        a = s.unpack('U') { |cp| seen << cp }
+        b = s.unpack('U*') { |cp| seen << cp }
+        c = ''.unpack('U') { raise 'yielded for empty input' }
+        return [a, b, c, seen, s.__topaz_unpack_utf8(0),
+                s.__topaz_unpack_utf8(2), s.__topaz_unpack_utf8(-2),
+                s.unpack('U', offset: 1), s.unpack1('U*', offset: 1)]
+        ''')
+        assert self.unwrap(space, w_res) == [
+            None, None, None, [97, 97, 233], [], [97, 233], [97, 233], [233], 233]
+
     def test_emptyp(self, space):
         w_res = space.execute("return ''.empty?")
         assert w_res is space.w_true

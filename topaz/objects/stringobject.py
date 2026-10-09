@@ -133,7 +133,63 @@ def wrap_split_result(space, parts):
     return space.newarray([space.newstr_fromstr(part) for part in parts])
 
 
-unpack_utf8_driver = jit.JitDriver(greens=[], reds="auto", name="String#unpack(U)")
+class UnpackUTF8Error(Exception):
+    def __init__(self, message):
+        self.message = message
+
+
+@specialize.argtype(0)
+@jit.unroll_safe
+def unpack_utf8_one(value, pos):
+    # Unlike the strict UTF-8 validator, unpack accepts surrogates and
+    # four-byte values above U+10FFFF. Keep its existing error precedence.
+    b = ord(value[pos])
+    if b < 0x80:
+        return b, pos + 1
+    elif b & 0xe0 == 0xc0:
+        n = 1
+        cp = b & 0x1f
+        minimum = 0x80
+    elif b & 0xf0 == 0xe0:
+        n = 2
+        cp = b & 0x0f
+        minimum = 0x800
+    elif b & 0xf8 == 0xf0:
+        n = 3
+        cp = b & 0x07
+        minimum = 0x10000
+    else:
+        raise UnpackUTF8Error("malformed UTF-8 character")
+    if pos + n >= len(value):
+        raise UnpackUTF8Error(
+            "malformed UTF-8 character (expected %d bytes, given %d bytes)"
+            % (n + 1, len(value) - pos))
+    for k in range(1, n + 1):
+        c = ord(value[pos + k])
+        if c & 0xc0 != 0x80:
+            raise UnpackUTF8Error("malformed UTF-8 character")
+        cp = (cp << 6) | (c & 0x3f)
+    if cp < minimum:
+        raise UnpackUTF8Error("redundant UTF-8 sequence")
+    return cp, pos + n + 1
+
+
+unpack_utf8_driver = jit.JitDriver(
+    greens=["strategy"], reds="auto", name="String#unpack(U*)")
+
+
+def unpack_utf8(space, strategy, storage, count):
+    # Bulk decoding only. Keep Ruby error construction in the caller so
+    # neither this portal nor the storage decoder can dispatch to Ruby.
+    pos = 0
+    result_w = []
+    length = strategy.length(storage)
+    while pos < length and count != 0:
+        unpack_utf8_driver.jit_merge_point(strategy=strategy)
+        cp, pos = strategy.unpack_utf8_one(storage, pos)
+        result_w.append(space.newint(cp))
+        count -= 1
+    return result_w
 
 
 def _utf8_sequence_length(s, i):
@@ -501,6 +557,12 @@ class ConstantStringStrategy(StringStrategy):
     def unpack_integer(self, storage, pos, size, big):
         return unpack_integer(self.unerase(storage), pos, size, big)
 
+    def unpack_utf8_one(self, storage, pos):
+        return unpack_utf8_one(self.unerase(storage), pos)
+
+    def unpack_utf8(self, space, storage, count):
+        return unpack_utf8(space, self, storage, count)
+
     def base64_encode(self, storage, pos, length):
         return base64_encode(self.unerase(storage), pos, length)
 
@@ -562,6 +624,12 @@ class MutableStringStrategy(StringStrategy):
 
     def unpack_integer(self, storage, pos, size, big):
         return unpack_integer(self.unerase(storage), pos, size, big)
+
+    def unpack_utf8_one(self, storage, pos):
+        return unpack_utf8_one(self.unerase(storage), pos)
+
+    def unpack_utf8(self, space, storage, count):
+        return unpack_utf8(space, self, storage, count)
 
     def base64_encode(self, storage, pos, length):
         return base64_encode(self.unerase(storage), pos, length)
@@ -1146,53 +1214,30 @@ class W_StringObject(W_Object):
             self.str_storage, pos, digits, space.is_true(w_high_first))
         return space.newstr_fromstr(value)
 
+    @classdef.method("__topaz_unpack_utf8_one")
+    def method_unpack_utf8_one(self, space):
+        if self.length() == 0:
+            return space.w_nil
+        try:
+            cp, pos = self.strategy.unpack_utf8_one(self.str_storage, 0)
+        except UnpackUTF8Error as e:
+            raise space.error(space.w_ArgumentError, e.message)
+        return space.newint(cp)
+
     @classdef.method("__topaz_unpack_utf8", count="int")
     def method_unpack_utf8(self, space, count):
-        """unpack("U") / unpack("U*") from byte 0: the codepoints of up to
-        `count` UTF-8 characters (all of them when count < 0), with
-        MRI's errors for malformed input (lib-topaz/pack.rb's Ruby
-        decoder handles the other templates)."""
-        storage = self.str_storage
-        strategy = self.strategy
-        length = strategy.length(storage)
-        pos = 0
-        result_w = []
-        while pos < length and count != 0:
-            unpack_utf8_driver.jit_merge_point()
-            b = ord(strategy.getitem(storage, pos))
-            if b < 0x80:
-                result_w.append(space.newint(b))
-                pos += 1
-                count -= 1
-                continue
-            elif b & 0xe0 == 0xc0:
-                n = 1
-                cp = b & 0x1f
-                minimum = 0x80
-            elif b & 0xf0 == 0xe0:
-                n = 2
-                cp = b & 0x0f
-                minimum = 0x800
-            elif b & 0xf8 == 0xf0:
-                n = 3
-                cp = b & 0x07
-                minimum = 0x10000
-            else:
-                raise space.error(space.w_ArgumentError, "malformed UTF-8 character")
-            if pos + n >= length:
-                raise space.error(space.w_ArgumentError,
-                    "malformed UTF-8 character (expected %d bytes, given %d bytes)"
-                    % (n + 1, length - pos))
-            for k in range(1, n + 1):
-                c = ord(strategy.getitem(storage, pos + k))
-                if c & 0xc0 != 0x80:
-                    raise space.error(space.w_ArgumentError, "malformed UTF-8 character")
-                cp = (cp << 6) | (c & 0x3f)
-            if cp < minimum:
-                raise space.error(space.w_ArgumentError, "redundant UTF-8 sequence")
-            result_w.append(space.newint(cp))
-            pos += n + 1
-            count -= 1
+        """Decode up to count codepoints, or all of them when count < 0."""
+        if count == 1:
+            # No decoding portal: callers such as unpack("U")[0] can keep
+            # the array and boxed codepoint virtual.
+            w_value = self.method_unpack_utf8_one(space)
+            if w_value is space.w_nil:
+                return space.newarray([])
+            return space.newarray([w_value])
+        try:
+            result_w = self.strategy.unpack_utf8(space, self.str_storage, count)
+        except UnpackUTF8Error as e:
+            raise space.error(space.w_ArgumentError, e.message)
         return space.newarray(result_w)
 
     @classdef.method("__topaz_escape_html")

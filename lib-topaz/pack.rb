@@ -649,7 +649,7 @@ class String
 
   def unpack1(template, offset: 0)
     if offset == 0 && (template == "U" || template == "U*")
-      return __topaz_unpack_utf8(1)[0]
+      return __topaz_unpack_utf8_one
     end
     Topaz::Pack.unpack(self, template, offset, true)
   end
