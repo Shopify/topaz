@@ -2,6 +2,18 @@ from .base import BaseJITTest
 
 
 class TestNonforcingHelpers(BaseJITTest):
+    def test_pow(self, topaz, tmpdir):
+        traces = self.run(topaz, tmpdir, '''
+        i = 0
+        total = 0
+        while i < 20000
+          total += 2 ** ((i & 3) + 1)
+          i += 1
+        end
+        raise 'wrong power' unless total == 150000
+        ''')
+        self.assert_nonforcing_helper(traces, 'pow_positive')
+
     def test_to_i(self, topaz, tmpdir):
         traces = self.run(topaz, tmpdir, '''
         values = ['  +123tail', ' -456tail']

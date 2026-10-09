@@ -32,6 +32,19 @@ def gcd_positive(a, b):
     return a
 
 
+@jit.dont_look_inside
+def pow_positive(base, exp):
+    result = 1
+    while exp > 0:
+        if exp & 1:
+            result = ovfcheck(result * base)
+        exp >>= 1
+        if exp == 0:
+            break
+        base = ovfcheck(base * base)
+    return result
+
+
 def get_step_location(bytecode):
     return "Integer#step %s:%d:in %s" % (
         bytecode.filepath, bytecode.lineno, bytecode.name)
@@ -267,23 +280,15 @@ class W_FixnumObject(W_RootObject):
 
     def method_pow_int_impl(self, space, w_other):
         exp = space.int_w(w_other)
-        temp = self.intvalue
         if exp > 0:
-            ix = 1
             try:
-                while exp > 0:
-                    if exp & 1:
-                        ix = ovfcheck(ix * temp)
-                    exp >>= 1
-                    if exp == 0:
-                        break
-                    temp = ovfcheck(temp * temp)
+                result = pow_positive(self.intvalue, exp)
             except OverflowError:
                 return space.send(
                     space.newbigint_fromint(self.intvalue), "**",
                     [w_other]
                 )
-            return space.newint(ix)
+            return space.newint(result)
         elif exp == 0:
             return space.newint(1)
         else:

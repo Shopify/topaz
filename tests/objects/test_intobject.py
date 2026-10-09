@@ -429,6 +429,15 @@ class TestFixnumObject(BaseTopazTest):
         with self.raises(space, "TypeError", "String can't be coerced into Integer"):
             space.execute("2 ** 'hallo'")
 
+    def test_pow_integer_boundaries(self, space):
+        w_res = space.execute('''
+        return [0 ** 0, 0 ** 5, (-2) ** 5, (-2) ** 6,
+                2 ** 100, (-2) ** 101, (2 ** -3) == Rational(1, 8)]
+        ''')
+        assert self.unwrap(space, w_res) == [
+            1, 0, -32, 64, rbigint.fromlong(2 ** 100),
+            rbigint.fromlong(-(2 ** 101)), True]
+
     def test_step(self, space):
         w_res = space.execute("""
         res = []
