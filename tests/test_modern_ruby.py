@@ -2795,19 +2795,25 @@ class TestWeakDescendants(BaseTopazTest):
 class TestInstanceExecSingletonLazily(BaseTopazTest):
     def test_instance_exec_makes_singleton_class_only_for_def(self, space):
         w_res = space.execute("""
-        def classes = ObjectSpace.each_object(Class) { }
         class IEFoo; def bar; :bar; end; end
         os = Array.new(20) { IEFoo.new }
-        b = classes
         r = os.map { |o| o.instance_exec(2) { |n| bar.to_s * n } }
-        c = classes
         o = IEFoo.new
         o.instance_exec { def only_me = :me }
-        d = classes
         IEFoo.instance_exec { def cm = :cm }
-        return [c - b, d - c, r.first, o.only_me, IEFoo.new.respond_to?(:only_me), IEFoo.cm]
+        return [os, o, r.first, o.only_me, IEFoo.new.respond_to?(:only_me), IEFoo.cm]
         """)
-        assert self.unwrap(space, w_res) == [0, 1, "barbar", "me", False, "cm"]
+        values_w = space.listview(w_res)
+        w_cls = self.find_const(space, "IEFoo")
+        # Inspect the actual classes without creating singleton classes or
+        # traversing the host heap with ObjectSpace.each_object.
+        for w_obj in space.listview(values_w[0]):
+            assert space.getclass(w_obj) is w_cls
+        w_singleton = space.getclass(values_w[1])
+        assert w_singleton.is_singleton
+        assert w_singleton.superclass is w_cls
+        assert [self.unwrap(space, w_value) for w_value in values_w[2:]] == [
+            "barbar", "me", False, "cm"]
 
 
 class TestCloneWithoutSingleton(BaseTopazTest):
