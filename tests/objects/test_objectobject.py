@@ -31,6 +31,70 @@ class TestBaseObject(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == ["dummy", 123]
 
+    def test_instance_eval_string_defines_singleton_method(self, space):
+        version = space.w_object.version
+        w_res = space.execute("""
+        o = Object.new
+        o.instance_eval("def only_here; 123; end")
+        return [o.only_here, Object.new.respond_to?(:only_here),
+                Object.instance_methods(false).include?(:only_here)]
+        """)
+        assert self.unwrap(space, w_res) == [123, False, False]
+        assert space.w_object.version is version
+
+    def test_instance_eval_string_constants(self, space):
+        w_res = space.execute("""
+        class Parent
+          INHERITED = 10
+        end
+        class Receiver < Parent
+          OWN = 20
+        end
+        module Caller
+          LEXICAL = 30
+          def self.evaluate(o)
+            o.instance_eval('def values; [INHERITED, OWN, LEXICAL]; end')
+          end
+        end
+        o = Receiver.new
+        Caller.evaluate(o)
+        before = o.values
+        o.singleton_class.const_set(:OWN, 40)
+        return [before, o.values, o.instance_eval('OWN')]
+        """)
+        assert self.unwrap(space, w_res) == [[10, 20, 30], [10, 40, 30], 40]
+
+    def test_instance_eval_string_constant_assignment(self, space):
+        w_res = space.execute("""
+        class Receiver; end
+        o = Receiver.new
+        o.instance_eval('LOCAL = 123')
+        return [o.singleton_class.const_get(:LOCAL),
+                Receiver.const_defined?(:LOCAL, false)]
+        """)
+        assert self.unwrap(space, w_res) == [123, False]
+
+    def test_instance_eval_string_class_and_module_constants(self, space):
+        w_res = space.execute("""
+        class Receiver
+          VALUE = 10
+        end
+        module ReceiverModule
+          VALUE = 20
+        end
+        module Caller
+          VALUE = 30
+          def self.evaluate(o)
+            o.instance_eval('def value; VALUE; end')
+            o.value
+          end
+        end
+        return [Caller.evaluate(Receiver), Caller.evaluate(ReceiverModule),
+                Receiver.instance_methods(false).include?(:value),
+                ReceiverModule.instance_methods(false).include?(:value)]
+        """)
+        assert self.unwrap(space, w_res) == [30, 30, False, False]
+
     def test_instance_eval_scope(self, space):
         w_res = space.execute("""
         module M

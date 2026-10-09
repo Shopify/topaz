@@ -101,7 +101,13 @@ class W_BaseObject(W_Root):
                 lineno = space.int_w(w_lineno)
             else:
                 lineno = 1
-            return space.execute(string, self, StaticScope(space.getclass(self), None), filename, lineno)
+            # Both definitions and constants belong to the singleton scope.
+            # Its ancestors provide the receiver's class constants; the
+            # caller's lexical scope supplies the enclosing constants.
+            frame = space.getexecutioncontext().gettoprubyframe()
+            backscope = frame.lexical_scope if frame is not None else None
+            scope = StaticScope(space.getsingletonclass(self), backscope)
+            return space.execute(string, self, scope, filename, lineno)
         else:
             if block is not None:
                 return space.invoke_block(block.copy(space, w_self=self), [])
