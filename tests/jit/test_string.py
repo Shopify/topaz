@@ -188,3 +188,47 @@ class TestString(BaseJITTest):
             assert not [op for op in loop if op.name in
                         ('strgetitem', 'getarrayitem_gc_i', 'int_rshift', 'int_and')]
             assert not [op for op in loop if op.name == 'newstr']
+
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_unpack_integer(self, topaz, tmpdir, mutable):
+        traces = self.run(topaz, tmpdir, '''
+        def integer_loop(values)
+          i = 0
+          sum = 0
+          while i < 10000
+            sum += values[i & 1].__topaz_unpack_integer(0, 4, true, false)
+            i += 1
+          end
+          sum
+        end
+        values = ["\\x01\\x02\\x03\\x04", "\\x05\\x06\\x07\\x08"]
+        %s
+        raise 'wrong integers' unless integer_loop(values) == (16909060 + 84281096) * 5000
+        values[0].setbyte(3, 5)
+        raise 'stale integer' unless integer_loop(values) == (16909061 + 84281096) * 5000
+        ''' % ("values.each { |s| s << '' }" if mutable else ''))
+        matches = [trace for trace in traces
+                   if 'in integer_loop' in trace.trace.comment
+                   and 'loop with' in trace.trace.comment]
+        assert matches
+        for trace in matches:
+            loop = trace.loop
+            # A known-width read is straight-line byte loads/arithmetic, with
+            # no decoder call and no intermediate boxed shift/or results.
+            assert any(op.name in ('strgetitem', 'getarrayitem_gc_i') for op in loop)
+            assert not [op for op in loop if 'call' in op.name]
+            assert not [op for op in loop if op.name.startswith('new')]
+
+    def test_unpack_integer_in_place_mutation(self, topaz, tmpdir):
+        self.run(topaz, tmpdir, '''
+        s = "\\x01\\x02"
+        s << ''
+        i = 0
+        sum = 0
+        while i < 10000
+          s.setbyte(1, i & 1)
+          sum += s.__topaz_unpack_integer(0, 2, true, false)
+          i += 1
+        end
+        raise 'cached integer' unless sum == (256 + 257) * 5000
+        ''')

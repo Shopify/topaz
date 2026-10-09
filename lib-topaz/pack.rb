@@ -363,21 +363,7 @@ module Topaz
               result << nil
               next
             end
-            v = 0
-            if big
-              k = 0
-              while k < size
-                v = (v << 8) | str.getbyte(pos + k)
-                k += 1
-              end
-            else
-              k = size - 1
-              while k >= 0
-                v = (v << 8) | str.getbyte(pos + k)
-                k -= 1
-              end
-            end
-            v -= 1 << (size * 8) if signed && v >= (1 << (size * 8 - 1))
+            v = str.__topaz_unpack_integer(pos, size, big, signed)
             pos += size
             result << v
           end

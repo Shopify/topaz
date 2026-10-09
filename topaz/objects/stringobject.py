@@ -4,7 +4,7 @@ import math
 
 from rpython.rlib import jit
 from rpython.rlib.objectmodel import newlist_hint, compute_hash, specialize
-from rpython.rlib.rarithmetic import intmask, ovfcheck
+from rpython.rlib.rarithmetic import intmask, ovfcheck, r_ulonglong, longlongmask
 from rpython.rlib.rbigint import rbigint
 from rpython.rlib.rerased import new_static_erasing_pair
 from rpython.rlib.rsre import rsre_core
@@ -220,6 +220,23 @@ def unpack_hex(value, pos, digits, high_first):
     return builder.build()
 
 
+@specialize.argtype(0)
+@jit.look_inside_iff(lambda value, pos, size, big:
+                     jit.isconstant(size) and jit.isconstant(big))
+def unpack_integer(value, pos, size, big):
+    # Only fixed-width reads (1/2/4/8 bytes) may expand in a caller trace.
+    # Dynamic format reads stay outside it; repetition counts are handled
+    # separately by the Ruby dispatcher.
+    result = r_ulonglong(0)
+    if big:
+        for i in range(size):
+            result = (result << 8) | r_ulonglong(ord(value[pos + i]))
+    else:
+        for i in range(size - 1, -1, -1):
+            result = (result << 8) | r_ulonglong(ord(value[pos + i]))
+    return result
+
+
 class StringStrategy(object):
     def __init__(self, space):
         pass
@@ -247,6 +264,9 @@ class ConstantStringStrategy(StringStrategy):
 
     def unpack_hex(self, storage, pos, digits, high_first):
         return unpack_hex(self.unerase(storage), pos, digits, high_first)
+
+    def unpack_integer(self, storage, pos, size, big):
+        return unpack_integer(self.unerase(storage), pos, size, big)
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
@@ -303,6 +323,9 @@ class MutableStringStrategy(StringStrategy):
 
     def unpack_hex(self, storage, pos, digits, high_first):
         return unpack_hex(self.unerase(storage), pos, digits, high_first)
+
+    def unpack_integer(self, storage, pos, size, big):
+        return unpack_integer(self.unerase(storage), pos, size, big)
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
@@ -894,6 +917,22 @@ class W_StringObject(W_Object):
     @classdef.method("ascii_only?")
     def method_ascii_only(self, space):
         return space.newbool(self.strategy.ascii_only(self.str_storage))
+
+    @classdef.method("__topaz_unpack_integer", pos="int", size="int")
+    def method_unpack_integer(self, space, pos, size, w_big, w_signed):
+        if size != 1 and size != 2 and size != 4 and size != 8:
+            raise space.error(space.w_ArgumentError, "invalid integer width")
+        if pos < 0 or pos > self.length():
+            raise space.error(space.w_ArgumentError, "invalid integer offset")
+        if size > self.length() - pos:
+            return space.w_nil
+        value = self.strategy.unpack_integer(
+            self.str_storage, pos, size, space.is_true(w_big))
+        if space.is_true(w_signed):
+            shift = (8 - size) * 8
+            signed = longlongmask(value << shift) >> shift
+            return space.newint_or_bigint(signed)
+        return space.newint_or_bigint_fromunsigned(value)
 
     @classdef.method("__topaz_unpack_hex", pos="int", digits="int")
     def method_unpack_hex(self, space, pos, digits, w_high_first):

@@ -925,3 +925,69 @@ class TestStringUnpackHex(BaseTopazTest):
             with self.raises(space, 'ArgumentError', 'invalid hexadecimal slice'):
                 space.send(space.newstr_fromstr('a'), '__topaz_unpack_hex', [
                     space.newint(pos), space.newint(digits), space.w_true])
+
+
+class TestStringUnpackInteger(BaseTopazTest):
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_integer_storage(self, space, mutable):
+        for size in [1, 2, 4, 8]:
+            bits = size * 8
+            for value in [0, 1, (1 << (bits - 1)) - 1,
+                          1 << (bits - 1), (1 << bits) - 1,
+                          0x123456789abcdef & ((1 << bits) - 1)]:
+                for big in [False, True]:
+                    data = ''.join(chr((value >> (8 * i)) & 255)
+                                   for i in range(size))
+                    if big:
+                        data = data[::-1]
+                    data = 'x' + data + 'z'
+                    w_str = (space.newstr_fromchars(list(data)) if mutable
+                             else space.newstr_fromstr(data))
+                    for signed in [False, True]:
+                        w_result = space.send(w_str, '__topaz_unpack_integer', [
+                            space.newint(1), space.newint(size),
+                            space.newbool(big), space.newbool(signed)])
+                        expected = value
+                        if signed and value >= 1 << (bits - 1):
+                            expected -= 1 << bits
+                        assert space.bigint_w(w_result).tolong() == expected
+
+    def test_integer_formats_and_short_input(self, space):
+        w_res = space.execute('''
+        s = "\\x01\\x02\\x03\\x04\\xff\\xfe"
+        seen = []
+        result = s.unpack('n2C2') { |v| seen << v }
+        return [s.unpack('Nn'), s.unpack('Vv'), s.unpack('n*'),
+                s.unpack('C0N'), s.unpack('N2C*'), ''.unpack('N2'),
+                s.unpack('S>2'), s.unpack('s<', offset: 4),
+                s.unpack1('N'), s.unpack1('N', offset: 4),
+                result, seen]
+        ''')
+        assert self.unwrap(space, w_res) == [
+            [16909060, 65534], [67305985, 65279], [258, 772, 65534],
+            [16909060], [16909060, None, 255, 254], [None, None],
+            [258, 772], [-257], 16909060, None, None, [258, 772, 255, 254]]
+
+    def test_integer_mutation(self, space):
+        w_res = space.execute('''
+        s = "\\x01\\x02"
+        a = s.unpack1('n')
+        s.setbyte(1, 255)
+        b = s.unpack1('n')
+        s.replace("\\xff\\xff")
+        c = s.unpack1('s>')
+        s.clear
+        return [a, b, c, s.unpack1('n')]
+        ''')
+        assert self.unwrap(space, w_res) == [258, 511, -1, None]
+
+    def test_integer_helper_bounds(self, space):
+        w_str = space.newstr_fromstr('a')
+        for pos, size, message in [
+                (0, 0, 'invalid integer width'), (0, 3, 'invalid integer width'),
+                (-1, 1, 'invalid integer offset'), (2, 1, 'invalid integer offset')]:
+            with self.raises(space, 'ArgumentError', message):
+                space.send(w_str, '__topaz_unpack_integer', [
+                    space.newint(pos), space.newint(size), space.w_true, space.w_false])
+        assert space.send(w_str, '__topaz_unpack_integer', [
+            space.newint(0), space.newint(2), space.w_true, space.w_false]) is space.w_nil
