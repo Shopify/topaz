@@ -1,7 +1,148 @@
+import pytest
+
 from ..base import BaseTopazTest
 
 
 class TestHashObject(BaseTopazTest):
+    @pytest.mark.parametrize('stored_mutable', [False, True])
+    @pytest.mark.parametrize('lookup_mutable', [False, True])
+    def test_string_storage_callbacks(self, space, monkeypatch,
+                                      stored_mutable, lookup_mutable):
+        from topaz.objects.hashobject import StringDictStrategy, string_hash, string_eq
+
+        def unexpected(*args):
+            raise AssertionError('generic Hash callback')
+
+        monkeypatch.setattr(space, 'hash_w', unexpected)
+        monkeypatch.setattr(space, 'eq_w', unexpected)
+        w_hash = space.newhash()
+        keys = []
+        for value in ['', 'abc', 'abd', '\x00\xff']:
+            stored = space.newstr_fromstr(value)
+            lookup = space.newstr_fromstr(value)
+            if stored_mutable:
+                stored.strategy.to_mutable(space, stored)
+            if lookup_mutable:
+                lookup.strategy.to_mutable(space, lookup)
+            assert string_hash(stored) == string_hash(lookup)
+            assert string_eq(stored, lookup)
+            w_hash.method_subscript_assign(space, stored, space.newint(7))
+            assert w_hash.strategy is space.fromcache(StringDictStrategy)
+            assert space.int_w(w_hash.getitem(lookup)) == 7
+            assert w_hash.contains(lookup)
+            keys.append(lookup)
+        assert not string_eq(keys[1], keys[2])
+        assert not w_hash.contains(space.newstr_fromstr('missing'))
+        assert space.int_w(w_hash.delete(keys[1])) == 7
+        assert not w_hash.contains(keys[1])
+
+    def test_string_storage_keys_and_mutation(self, space):
+        from topaz.objects.hashobject import StringDictStrategy
+        w_res = space.execute('''
+        source = 'a'
+        source << 'b'
+        frozen = 'second'.freeze
+        h = {source => 1, frozen => 2}
+        stored = h.keys[0]
+        result = [stored.equal?(source), stored.frozen?, h.keys[1].equal?(frozen)]
+        source << 'c'
+        result << h['ab'] << h[source]
+        probe = 'a'
+        probe << 'b'
+        result << h[probe]
+        probe[1] = 'c'
+        result << h[probe]
+        probe[1] = 'b'
+        h[probe] = 3
+        result << h.keys[0].equal?(stored) << h.keys << h.values
+        return [result, h]
+        ''')
+        result, w_hash = space.listview(w_res)
+        assert self.unwrap(space, result) == [False, True, True, 1, None, 1,
+                                              None, True, ['ab', 'second'], [3, 2]]
+        assert w_hash.strategy is space.fromcache(StringDictStrategy)
+
+    def test_string_storage_custom_key_fallback(self, space):
+        w_res = space.execute('''
+        class StringAlias
+          def hash; 'a'.hash; end
+          def eql?(other); other == 'a'; end
+        end
+        class StringSubclass < String
+          def hash; 'a'.hash; end
+          def eql?(other); other == 'a'; end
+        end
+        result = []
+        [StringAlias.new, StringSubclass.new('different')].each do |key|
+          result << {'a' => 7}[key]
+          result << {'a' => 7}.key?(key)
+          result << {'a' => 7}.delete(key)
+          h = {'a' => 7, 'b' => 8}
+          original = h.keys[0]
+          h[key] = 9
+          result << h.keys << h.values << h.keys[0].equal?(original)
+          result << {'a' => 7}.freeze[key]
+        end
+        return result
+        ''')
+        assert self.unwrap(space, w_res) == [7, True, 7, ['a', 'b'], [9, 8], True, 7] * 2
+
+    def test_string_storage_subclass_starts_generic(self, space):
+        from topaz.objects.hashobject import ObjectDictStrategy
+        w_hash = space.execute('''
+        class StringSubclass < String; end
+        return {StringSubclass.new('a') => 1}
+        ''')
+        assert w_hash.strategy is space.fromcache(ObjectDictStrategy)
+
+    def test_string_storage_mixed_insertion(self, space):
+        from topaz.objects.hashobject import ObjectDictStrategy
+        w_hash = space.execute("return {'a' => 1, 'b' => 2}")
+        keys = w_hash.strategy.keys(w_hash.dict_storage)
+        w_hash.setitem(space.newint(42), space.newint(3))
+        assert w_hash.strategy is space.fromcache(ObjectDictStrategy)
+        assert w_hash.strategy.keys(w_hash.dict_storage)[:2] == keys
+        assert self.unwrap(space, space.send(w_hash, 'keys')) == ['a', 'b', 42]
+        assert space.int_w(w_hash.getitem(space.newstr_fromstr('a'))) == 1
+
+    def test_string_storage_copy_and_identity(self, space):
+        from topaz.objects.hashobject import StringDictStrategy, IdentityDictStrategy
+        w_hash = space.execute("return {'a' => 1, 'b' => 2}.dup.rehash")
+        assert w_hash.strategy is space.fromcache(StringDictStrategy)
+        w_copy = w_hash.copy_keywords(space)
+        w_copy.delete(space.newstr_fromstr('a'))
+        assert w_copy.size() == 1
+        assert w_hash.size() == 2
+        keys = w_hash.strategy.keys(w_hash.dict_storage)
+        space.send(w_hash, 'compare_by_identity')
+        assert w_hash.strategy is space.fromcache(IdentityDictStrategy)
+        assert w_hash.strategy.keys(w_hash.dict_storage) == keys
+        assert not w_hash.contains(space.newstr_fromstr('a'))
+        assert w_hash.contains(keys[0])
+
+    def test_string_storage_transition_during_iteration(self, space):
+        w_res = space.execute('''
+        h = {'a' => 1, 'b' => 2, 'c' => 3}
+        seen = []
+        h.each do |key, value|
+          seen << [key, value]
+          if key == 'a'
+            h[Object.new]
+            h['b'] = 20
+            h.delete('c')
+          end
+        end
+        h = {'a' => 1, 'b' => 2}
+        stored = h.keys[1]
+        iter = Topaz::HashIterator.new(h)
+        first = iter.next
+        h[:missing]
+        h['b'] = 20
+        last = iter.next
+        return [seen, first, last, last[0].equal?(stored)]
+        ''')
+        assert self.unwrap(space, w_res) == [[['a', 1], ['b', 20]], ['a', 1], ['b', 20], True]
+
     def test_name(self, space):
         space.execute("Hash")
 

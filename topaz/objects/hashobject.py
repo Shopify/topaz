@@ -11,6 +11,7 @@ from topaz.modules.enumerable import Enumerable
 from topaz.objects.objectobject import W_Object
 from topaz.objects.procobject import W_ProcObject
 from topaz.objects.symbolobject import W_SymbolObject
+from topaz.objects.stringobject import W_StringObject
 
 
 def untranslated_dict_items(storage, keys):
@@ -39,7 +40,7 @@ class BaseDictStrategy(object):
         return self.next_entry_after_transition(iterator, w_hash)
 
     def next_entry_after_transition(self, iterator, w_hash):
-        # A non-symbol lookup can change storage without changing the
+        # An incompatible lookup can change storage without changing the
         # Ruby hash. Iterators created before that must see later updates.
         while True:
             w_key, w_value = self.iternext(iterator)
@@ -52,6 +53,14 @@ class BaseDictStrategy(object):
 
 class TypedDictStrategyMixin(object):
     _mixin_ = True
+
+    def switch_to_object_strategy(self, w_hash):
+        strategy = self.space.fromcache(ObjectDictStrategy)
+        storage = strategy.get_empty_storage(self.space)
+        for w_key, w_value in self.unerase(w_hash.dict_storage).iteritems():
+            strategy.setitem(storage, w_key, w_value)
+        w_hash.strategy = strategy
+        w_hash.dict_storage = storage
 
     def getitem(self, storage, w_key):
         return self.wrap(self.unerase(storage)[w_key])
@@ -136,8 +145,9 @@ class IdentityDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
 class SymbolDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
     """Interned symbols need no Ruby hash/eql? callbacks.
 
-    Start empty hashes here too. Any non-symbol key, including a lookup,
-    falls back to the generic strategy: custom objects can equal a symbol.
+    Start empty hashes here too, selecting string storage for a first string.
+    A non-symbol key in a nonempty hash, including a lookup, falls back to
+    the generic strategy: custom objects can equal a symbol.
     This is an implementation detail, not Ruby's compare_by_identity mode.
     """
     erase, unerase = new_static_erasing_pair("SymbolDictStrategy")
@@ -155,15 +165,59 @@ class SymbolDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
     def prepare_key(self, w_hash, w_key):
         if isinstance(w_key, W_SymbolObject):
             return
+        if (not self.bool(w_hash.dict_storage) and
+                is_builtin_string(self.space, w_key)):
+            strategy = self.space.fromcache(StringDictStrategy)
+            w_hash.strategy = strategy
+            w_hash.dict_storage = strategy.get_empty_storage(self.space)
+            return
         self.switch_to_object_strategy(w_hash)
 
-    def switch_to_object_strategy(self, w_hash):
-        strategy = self.space.fromcache(ObjectDictStrategy)
-        storage = strategy.get_empty_storage(self.space)
-        for w_symbol, w_value in self.unerase(w_hash.dict_storage).iteritems():
-            strategy.setitem(storage, w_symbol, w_value)
-        w_hash.strategy = strategy
-        w_hash.dict_storage = storage
+
+def is_builtin_string(space, w_key):
+    return isinstance(w_key, W_StringObject) and w_key.klass is space.w_string
+
+
+def string_hash(w_key):
+    # Keep these callbacks independent of ObjectSpace.hash_w/eq_w: even an
+    # unreachable Ruby-dispatch fallback would make the lookup forcing.
+    assert isinstance(w_key, W_StringObject)
+    return w_key.strategy.hash(w_key.str_storage)
+
+
+def string_eq(w_left, w_right):
+    assert isinstance(w_left, W_StringObject)
+    assert isinstance(w_right, W_StringObject)
+    if w_left is w_right:
+        return True
+    if (w_left.strategy.length(w_left.str_storage) !=
+            w_right.strategy.length(w_right.str_storage)):
+        return False
+    # Compare str/list storage directly, without joining mutable strings.
+    return w_left.strategy.compare_affix(w_left.str_storage, w_right, 0)
+
+
+class StringDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
+    """Wrapped builtin strings, compared by their current storage contents.
+
+    Retain the actual frozen Ruby keys for iteration. Subclasses and custom
+    lookup keys need the generic callbacks, including their Ruby eql? calls.
+    """
+    erase, unerase = new_static_erasing_pair("StringDictStrategy")
+    iter_erase, iter_unerase = new_static_erasing_pair("StringDictStrategyIterator")
+
+    def get_empty_storage(self, space):
+        return self.erase(r_ordereddict(string_eq, string_hash))
+
+    def wrap(self, w_key):
+        return w_key
+
+    def unwrap(self, w_key):
+        return w_key
+
+    def prepare_key(self, w_hash, w_key):
+        if not is_builtin_string(self.space, w_key):
+            self.switch_to_object_strategy(w_hash)
 
 
 def get_each_location(bytecode):
