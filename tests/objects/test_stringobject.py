@@ -692,6 +692,22 @@ class TestStringObject(BaseTopazTest):
         """)
         assert space.str_w(w_res) == "he21oo"
 
+    def test_gsub_literal_boundaries(self, space):
+        w_res = space.execute("""
+        s = 'aba'
+        results = [s.gsub('a', ''), s.sub('a', ''), s.gsub('z', 'x'),
+                   s.gsub('', '-'), s.sub('', '-'), ''.gsub('', '-'),
+                   'aaaa'.gsub('aa', 'b')]
+        s << 'ba'
+        results << s.gsub('a', 'x')
+        results << s.gsub('a') { |m| m + '!' }
+        results << s.gsub('a', {'a' => 'y'})
+        return results
+        """)
+        assert self.unwrap(space, w_res) == [
+            'b', 'ba', 'aba', '-a-b-a-', '-aba', '-', 'bb',
+            'xbxbx', 'a!ba!ba!', 'ybyby']
+
     def test_sub(self, space):
         w_res = space.execute("""
         return 'hello hello'.sub("he", "ha")

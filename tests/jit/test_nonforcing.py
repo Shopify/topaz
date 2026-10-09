@@ -127,3 +127,16 @@ class TestNonforcingHelpers(BaseJITTest):
         self.assert_nonforcing_helper(traces, helper)
         if separator:
             self.assert_nonforcing_helper(traces, 'wrap_split_result')
+
+    def test_gsub_literal(self, topaz, tmpdir):
+        traces = self.run(topaz, tmpdir, """
+        values = ['abcabc', 'xbcxbc']
+        i = 0
+        total = 0
+        while i < 20000
+          total += values[i & 1].gsub('bc', '!').length
+          i += 1
+        end
+        raise 'wrong gsub' unless total == 80000
+        """)
+        self.assert_nonforcing_helper(traces, 'replace_string')

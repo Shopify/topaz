@@ -40,6 +40,33 @@ INSPECT_ESCAPES = {
 HEX_DIGITS = "0123456789ABCDEF"
 
 @jit.dont_look_inside
+def replace_string(string, pattern, replacement, first_only):
+    result = []
+    pos = 0
+    search_from = 0
+    while search_from <= len(string):
+        idx = string.find(pattern, search_from)
+        if idx < 0:
+            break
+        result += string[pos:idx]
+        result += replacement
+        end = idx + len(pattern)
+        pos = end
+        if not pattern:
+            n = utf8_char_length(string, end)
+            if end < len(string):
+                result += string[end:end + n]
+                pos = end + n
+            search_from = end + n
+        else:
+            search_from = end
+        if first_only:
+            break
+    result += string[pos:]
+    return result
+
+
+@jit.dont_look_inside
 def split_whitespace(space, string, limit):
     result = []
     i = 0
@@ -2011,6 +2038,13 @@ class W_StringObject(W_Object):
         return self.gsub_lookup_hash(space, w_hash, w_arg)
 
     def gsub_string(self, space, w_pattern, replacement, w_hash, block, first_only):
+        if replacement is not None:
+            result = replace_string(space.str_w(self), space.str_w(w_pattern),
+                                    replacement, first_only)
+            return space.newstr_fromchars(result)
+        return self.gsub_string_dynamic(space, w_pattern, w_hash, block, first_only)
+
+    def gsub_string_dynamic(self, space, w_pattern, w_hash, block, first_only):
         result = []
         pos = 0
         string = space.str_w(self)
@@ -2021,9 +2055,7 @@ class W_StringObject(W_Object):
             if idx < 0:
                 break
             result += string[pos:idx]
-            if replacement is not None:
-                result += replacement
-            elif block:
+            if block:
                 result += self.gsub_yield_block(space, block, w_pattern)
             elif w_hash:
                 result += self.gsub_lookup_hash(space, w_hash, w_pattern)
