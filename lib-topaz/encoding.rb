@@ -302,8 +302,7 @@ module Topaz
     end
 
     def self.ascii_only?(str)
-      str.each_byte { |b| return false if b >= 0x80 }
-      true
+      str.ascii_only?
     end
 
     def self.valid_utf8?(str)
@@ -439,10 +438,6 @@ end
 class String
   # encoding and force_encoding are RPython (topaz/objects/stringobject.py);
   # the tag is a field of the string, copied by dup, replace, * and String.new.
-
-  def ascii_only?
-    Topaz::EncodingSupport.ascii_only?(self)
-  end
 
   def valid_encoding?
     enc = encoding

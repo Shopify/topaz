@@ -828,3 +828,39 @@ class TestStringAffixes(BaseTopazTest):
                 long.end_with?('a' * 999), long.end_with?('a' * 999 + 'b')]
         ''')
         assert self.unwrap(space, w_res) == [True, True, False, True, True, False]
+
+
+class TestStringAsciiOnly(BaseTopazTest):
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_ascii_only_storage(self, space, mutable):
+        def make(value):
+            if mutable:
+                return space.newstr_fromchars(list(value))
+            return space.newstr_fromstr(value)
+        cases = [('', True), ('\x00\x7fabc', True), ('a' * 1000, True),
+                 ('\x80' + 'a' * 1000, False), ('a' * 1000 + '\xff', False),
+                 ('\xc3\xa9', False)]
+        cases += [('a' + chr(byte) + 'z', byte < 128) for byte in range(256)]
+        for value, expected in cases:
+            assert space.send(make(value), 'ascii_only?') is space.newbool(expected)
+
+    def test_ascii_only_mutation(self, space):
+        w_res = space.execute('''
+        s = 'abc'
+        result = [s.ascii_only?]
+        s.setbyte(1, 128)
+        result << s.ascii_only?
+        s.setbyte(1, 127)
+        result << s.ascii_only?
+        s << "\\xff".b
+        result << s.ascii_only?
+        s.clear
+        result << s.ascii_only?
+        s.replace("\\xc3\\xa9")
+        result << s.ascii_only?
+        s.replace('ASCII')
+        result << s.ascii_only?
+        result << Topaz::EncodingSupport.ascii_only?(s)
+        return result
+        ''')
+        assert self.unwrap(space, w_res) == [True, False, True, False, True, False, True, True]

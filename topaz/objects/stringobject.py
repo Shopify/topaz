@@ -181,6 +181,24 @@ def compare_affix(value, affix, offset):
     return True
 
 
+@jit.elidable
+@jit.dont_look_inside
+def ascii_only_str(value):
+    for char in value:
+        if ord(char) >= 0x80:
+            return False
+    return True
+
+
+@jit.dont_look_inside
+def ascii_only_list(value):
+    # The same list can be modified between calls: this is not elidable.
+    for char in value:
+        if ord(char) >= 0x80:
+            return False
+    return True
+
+
 class StringStrategy(object):
     def __init__(self, space):
         pass
@@ -202,6 +220,9 @@ class ConstantStringStrategy(StringStrategy):
 
     def length(self, storage):
         return len(self.unerase(storage))
+
+    def ascii_only(self, storage):
+        return ascii_only_str(self.unerase(storage))
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
@@ -252,6 +273,9 @@ class MutableStringStrategy(StringStrategy):
 
     def length(self, storage):
         return len(self.unerase(storage))
+
+    def ascii_only(self, storage):
+        return ascii_only_list(self.unerase(storage))
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
@@ -839,6 +863,10 @@ class W_StringObject(W_Object):
     @classdef.method("empty?")
     def method_emptyp(self, space):
         return space.newbool(self.length() == 0)
+
+    @classdef.method("ascii_only?")
+    def method_ascii_only(self, space):
+        return space.newbool(self.strategy.ascii_only(self.str_storage))
 
     @classdef.method("__topaz_unpack_utf8", count="int")
     def method_unpack_utf8(self, space, count):

@@ -108,3 +108,53 @@ class TestString(BaseJITTest):
             assert not [op for op in loop if op.name == 'newstr']
             assert not [op for op in loop if 'call' in op.name and
                         any('ll_extend_with_str' in arg for arg in op.args)]
+
+    @pytest.mark.parametrize('mutable', [False, True])
+    @pytest.mark.parametrize('length', [1, 128])
+    def test_ascii_only(self, topaz, tmpdir, mutable, length):
+        traces = self.run(topaz, tmpdir, '''
+        def check_ascii(s)
+          i = 0
+          count = 0
+          while i < 10000
+            count += 1 if s.ascii_only?
+            i += 1
+          end
+          count
+        end
+        s = 'a' * %d
+        %s
+        raise 'wrong ASCII result' unless check_ascii(s) == 10000
+        s.setbyte(0, 128)
+        raise 'stale ASCII result' unless check_ascii(s) == 0
+        s.setbyte(0, 97)
+        raise 'stale non-ASCII result' unless check_ascii(s) == 10000
+        ''' % (length, "s << ''" if mutable else ''))
+        matches = [trace for trace in traces
+                   if 'in check_ascii' in trace.trace.comment
+                   and 'loop with' in trace.trace.comment]
+        assert matches
+        for trace in matches:
+            assert any('call' in op.name and 'ascii_only_' in op.args[0]
+                       for op in trace.trace.operations)
+            loop = trace.loop
+            calls = [op for op in loop if 'call' in op.name]
+            assert all(op.name in ('call_i', 'call_pure_i') and
+                       'ascii_only_' in op.args[0] for op in calls)
+            assert not [op for op in loop if op.name.startswith('new')]
+            assert not [op for op in loop if op.name in
+                        ('strgetitem', 'getarrayitem_gc_i', 'enter_portal_frame')]
+
+    def test_ascii_only_in_place_mutation(self, topaz, tmpdir):
+        self.run(topaz, tmpdir, '''
+        s = 'aaaa'
+        s << ''
+        i = 0
+        count = 0
+        while i < 20000
+          s.setbyte(3, 127 + (i & 1))
+          count += 1 if s.ascii_only?
+          i += 1
+        end
+        raise 'cached mutable scan' unless count == 10000
+        ''')
