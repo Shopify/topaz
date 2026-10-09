@@ -24,6 +24,14 @@ from topaz.system import IS_WINDOWS
 INTEGER_DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz"
 
 
+@jit.elidable
+@jit.dont_look_inside
+def gcd_positive(a, b):
+    while b != 0:
+        a, b = b, a % b
+    return a
+
+
 def get_step_location(bytecode):
     return "Integer#step %s:%d:in %s" % (
         bytecode.filepath, bytecode.lineno, bytecode.name)
@@ -341,9 +349,7 @@ class W_FixnumObject(W_RootObject):
             if a != -sys.maxint - 1 and b != -sys.maxint - 1:
                 a = abs(a)
                 b = abs(b)
-                while b != 0:
-                    a, b = b, a % b
-                return space.newint(a)
+                return space.newint(gcd_positive(a, b))
         elif not space.is_kind_of(w_other, space.w_bignum):
             raise space.error(space.w_TypeError, "not an integer")
         return space.send(space.newbigint_fromint(self.intvalue), "gcd", [w_other])

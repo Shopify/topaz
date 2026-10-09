@@ -27,3 +27,15 @@ class TestNonforcingHelpers(BaseJITTest):
         raise 'stale class variable' unless Counter.run == 40000
         ''')
         self.assert_nonforcing_helper(traces, '_class_var_base')
+
+    def test_gcd(self, topaz, tmpdir):
+        traces = self.run(topaz, tmpdir, '''
+        i = 1
+        total = 0
+        while i <= 20000
+          total += (i * 6).gcd(18)
+          i += 1
+        end
+        raise 'wrong gcd' unless total == 199992
+        ''')
+        self.assert_nonforcing_helper(traces, 'gcd_positive')
