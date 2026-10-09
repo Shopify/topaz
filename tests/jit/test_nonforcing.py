@@ -110,3 +110,20 @@ class TestNonforcingHelpers(BaseJITTest):
         assert not any('method_rindex' in op.args[0]
                        for trace in traces for op in trace.trace.operations
                        if 'call' in op.name and op.args)
+
+    @pytest.mark.parametrize('separator,helper', [
+        ('', 'split_whitespace'), ("','", 'split_string')])
+    def test_split(self, topaz, tmpdir, separator, helper):
+        traces = self.run(topaz, tmpdir, """
+        values = ['a b,c', 'd e,f']
+        i = 0
+        total = 0
+        while i < 20000
+          total += values[i & 1].split(%s).length
+          i += 1
+        end
+        raise 'wrong split' unless total == 40000
+        """ % separator)
+        self.assert_nonforcing_helper(traces, helper)
+        if separator:
+            self.assert_nonforcing_helper(traces, 'wrap_split_result')

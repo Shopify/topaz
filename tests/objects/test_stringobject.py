@@ -350,6 +350,23 @@ class TestStringObject(BaseTopazTest):
         with self.raises(space, "TypeError", "wrong argument type Integer (expected Regexp)"):
             space.execute("'a b c'.split(12)")
 
+    def test_split_limits_and_mutable_storage(self, space):
+        w_res = space.execute("""
+        s = '  a b  '
+        results = [s.split, s.split(' ', 2), ''.split, '  '.split,
+                   'abc'.split(''), 'a,,b,'.split(','), 'a,b'.split(',', 1)]
+        s << 'c'
+        results << s.split
+        results << s.split(' ')
+        return results
+        """)
+        assert self.unwrap(space, w_res) == [
+            ['a', 'b'], ['', ' a b  '], [], [], ['a', 'b', 'c'],
+            ['a', '', 'b', ''], ['a,b'], ['a', 'b', 'c'],
+            ['', '', 'a', 'b', '', 'c']]
+        with self.raises(space, "NotImplementedError", "String#split with empty string and limit"):
+            space.execute("'abc'.split('', 2)")
+
     def test_split_regexp(self, space):
         w_res = space.execute("return \"now's  the time\".split(/ /)")
         assert self.unwrap(space, w_res) == ["now's", "", "the", "time"]

@@ -39,6 +39,42 @@ INSPECT_ESCAPES = {
 
 HEX_DIGITS = "0123456789ABCDEF"
 
+@jit.dont_look_inside
+def split_whitespace(space, string, limit):
+    result = []
+    i = 0
+    limit -= 1
+    while True:
+        while i < len(string):
+            if not string[i].isspace():
+                break
+            i += 1
+        else:
+            break
+        if limit == 0:
+            j = len(string)
+        else:
+            j = i + 1
+            while j < len(string) and not string[j].isspace():
+                j += 1
+            limit -= 1
+        result.append(space.newstr_fromstr(string[i:j]))
+        i = j + 1
+    return space.newarray(result)
+
+
+@jit.dont_look_inside
+def split_string(string, sep, limit):
+    if sep:
+        return split(string, sep, limit - 1)
+    return [string[i] for i in xrange(len(string))]
+
+
+@jit.dont_look_inside
+def wrap_split_result(space, parts):
+    return space.newarray([space.newstr_fromstr(part) for part in parts])
+
+
 unpack_utf8_driver = jit.JitDriver(greens=[], reds="auto", name="String#unpack(U)")
 
 
@@ -1382,96 +1418,14 @@ class W_StringObject(W_Object):
     @classdef.method("split", limit="int")
     def method_split(self, space, w_sep=None, limit=0):
         if w_sep is None:
-            res_w = []
-            i = 0
-            limit -= 1
-            s = space.str_w(self)
-            while True:
-                while i < len(s):
-                    if not s[i].isspace():
-                        break
-                    i += 1
-                else:
-                    break
-                if limit == 0:
-                    j = len(s)
-                else:
-                    j = i + 1
-                    while j < len(s) and not s[j].isspace():
-                        j += 1
-                    limit -= 1
-                res_w.append(space.newstr_fromstr(s[i:j]))
-                i = j + 1
-            return space.newarray(res_w)
+            return split_whitespace(space, space.str_w(self), limit)
         elif space.is_kind_of(w_sep, space.w_string):
             sep = space.str_w(w_sep)
-            if sep:
-                return space.newarray([
-                    space.newstr_fromstr(s) for s in split(space.str_w(self), sep, limit - 1)
-                ])
-            else:
-                if limit:
-                    raise space.error(space.w_NotImplementedError, "String#split with empty string and limit")
-                return space.newarray([
-                    space.newstr_fromstr(self.strategy.getitem(self.str_storage, i))
-                    for i in xrange(self.length())
-                ])
+            if not sep and limit:
+                raise space.error(space.w_NotImplementedError, "String#split with empty string and limit")
+            return wrap_split_result(space, split_string(space.str_w(self), sep, limit))
         elif space.is_kind_of(w_sep, space.w_regexp):
-            # This follows rb_str_split_m in CRuby's string.c.
-            string = space.str_w(self)
-            if limit == 1:
-                if not string:
-                    return space.newarray([])
-                return space.newarray([space.newstr_fromstr(string)])
-            results_w = []
-            beg = 0
-            start = 0
-            last_null = False
-            i = 1
-            ctx = w_sep.make_ctx(string)
-            while start <= len(string):
-                ctx.reset(start)
-                if not self.search_context(space, w_sep, ctx):
-                    break
-                w_match = w_sep.get_match_result(space, ctx, string, found=True)
-                assert isinstance(w_match, W_MatchDataObject)
-                end = ctx.match_start
-                if start == end and ctx.match_start == ctx.match_end:
-                    if not string:
-                        results_w.append(space.newstr_fromstr(""))
-                        break
-                    elif last_null:
-                        assert beg >= 0 and start >= beg
-                        results_w.append(space.newstr_fromstr(string[beg:start]))
-                        beg = start
-                    else:
-                        if start == len(string):
-                            start += 1
-                        else:
-                            start += utf8_char_length(string, start)
-                        last_null = True
-                        continue
-                else:
-                    assert beg >= 0 and end >= beg
-                    results_w.append(space.newstr_fromstr(string[beg:end]))
-                    beg = start = ctx.match_end
-                last_null = False
-                for num in xrange(1, w_match.size(), 1):
-                    begin, stop = w_match.get_span(num)
-                    if begin < 0 or stop < 0:
-                        continue
-                    results_w.append(space.newstr_fromstr(string[begin:stop]))
-                if limit > 0:
-                    i += 1
-                    if limit <= i:
-                        break
-            if len(string) > 0 and (limit > 0 or len(string) > beg or limit < 0):
-                assert beg >= 0
-                results_w.append(space.newstr_fromstr(string[beg:]))
-            if limit == 0:
-                while results_w and not space.str_w(results_w[-1]):
-                    results_w.pop()
-            return space.newarray(results_w)
+            return self.split_regexp(space, w_sep, limit)
 
         else:
             raise space.error(
@@ -1480,6 +1434,64 @@ class W_StringObject(W_Object):
                     space.obj_to_s(space.getclass(w_sep))
                 )
             )
+
+    def split_regexp(self, space, w_sep, limit):
+        # This follows rb_str_split_m in CRuby's string.c.
+        string = space.str_w(self)
+        if limit == 1:
+            if not string:
+                return space.newarray([])
+            return space.newarray([space.newstr_fromstr(string)])
+        results_w = []
+        beg = 0
+        start = 0
+        last_null = False
+        i = 1
+        ctx = w_sep.make_ctx(string)
+        while start <= len(string):
+            ctx.reset(start)
+            if not self.search_context(space, w_sep, ctx):
+                break
+            w_match = w_sep.get_match_result(space, ctx, string, found=True)
+            assert isinstance(w_match, W_MatchDataObject)
+            end = ctx.match_start
+            if start == end and ctx.match_start == ctx.match_end:
+                if not string:
+                    results_w.append(space.newstr_fromstr(""))
+                    break
+                elif last_null:
+                    assert beg >= 0 and start >= beg
+                    results_w.append(space.newstr_fromstr(string[beg:start]))
+                    beg = start
+                else:
+                    if start == len(string):
+                        start += 1
+                    else:
+                        start += utf8_char_length(string, start)
+                    last_null = True
+                    continue
+            else:
+                assert beg >= 0 and end >= beg
+                results_w.append(space.newstr_fromstr(string[beg:end]))
+                beg = start = ctx.match_end
+            last_null = False
+            for num in xrange(1, w_match.size(), 1):
+                begin, stop = w_match.get_span(num)
+                if begin < 0 or stop < 0:
+                    continue
+                results_w.append(space.newstr_fromstr(string[begin:stop]))
+            if limit > 0:
+                i += 1
+                if limit <= i:
+                    break
+        if len(string) > 0 and (limit > 0 or len(string) > beg or limit < 0):
+            assert beg >= 0
+            results_w.append(space.newstr_fromstr(string[beg:]))
+        if limit == 0:
+            while results_w and not space.str_w(results_w[-1]):
+                results_w.pop()
+        return space.newarray(results_w)
+
 
     @classdef.method("swapcase!")
     @check_frozen()
