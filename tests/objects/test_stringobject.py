@@ -60,6 +60,29 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute('return "abc" + "def" + "ghi"')
         assert space.str_w(w_res) == "abcdefghi"
 
+    def test_append_single_bytes(self, space):
+        from topaz.objects.stringobject import ConstantStringStrategy
+        w_out = space.newstr_fromstr('prefix')
+        for byte in range(256):
+            w_byte = space.newstr_fromstr(chr(byte))
+            assert w_byte.strategy is space.fromcache(ConstantStringStrategy)
+            w_out.extend(space, w_byte)
+            assert space.str_w(w_byte) == chr(byte)
+        assert space.str_w(w_out) == 'prefix' + ''.join(chr(i) for i in range(256))
+
+    def test_append_aliasing_and_encoding(self, space):
+        w_res = space.execute('''
+        s = 'a'
+        s << s
+        s << '' << 'bc'
+        s << s
+        binary = "\\xff".b
+        byte = "\\x00".b
+        binary << byte
+        return [s, binary.bytes, byte.bytes, binary.encoding.name]
+        ''')
+        assert self.unwrap(space, w_res) == ['aabcaabc', [255, 0], [0], 'ASCII-8BIT']
+
     def test_mul(self, space):
         w_res = space.execute("return 'abc' * 2")
         assert space.str_w(w_res) == "abcabc"

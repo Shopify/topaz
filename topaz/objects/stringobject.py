@@ -230,7 +230,12 @@ class ConstantStringStrategy(StringStrategy):
         s.str_storage = strategy.erase(self.liststr_w(s.str_storage))
 
     def extend_into(self, src_storage, dst_storage):
-        dst_storage += self.unerase(src_storage)
+        value = self.unerase(src_storage)
+        if len(value) == 1:
+            # Let the JIT keep table[index]'s one-byte string virtual.
+            dst_storage.append(value[0])
+        else:
+            dst_storage += value
 
     def mul(self, space, storage, times):
         return space.newstr_fromstr(self.unerase(storage) * times)

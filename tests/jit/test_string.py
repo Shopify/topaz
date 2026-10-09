@@ -72,3 +72,39 @@ class TestString(BaseJITTest):
         raise 'cached mutable comparison' unless changing_affix(s, affix) == 10000
         ''' % ('affix' if mutate_affix else 's',
                (index // 2) if mutate_affix else index, method))
+
+    def test_append_indexed_character(self, topaz, tmpdir):
+        traces = self.run(topaz, tmpdir, '''
+        def append_characters(table)
+          out = ''
+          i = 0
+          while i < 20000
+            out << table[i & 3]
+            i += 1
+          end
+          out
+        end
+        raise 'wrong output' unless append_characters('abcd') == 'abcd' * 5000
+        ''')
+        self.assert_no_temporary_character_strings(traces, 'in append_characters')
+
+    def test_base64_character_appends(self, topaz, tmpdir):
+        traces = self.run(topaz, tmpdir, '''
+        source = 'foobar' * 3000
+        encoded = [source].pack('m0')
+        raise 'wrong base64' unless encoded == 'Zm9vYmFy' * 3000
+        raise 'wrong padding' unless ['f'].pack('m0') == 'Zg=='
+        raise 'wrong padding' unless ['fo'].pack('m0') == 'Zm8='
+        ''')
+        self.assert_no_temporary_character_strings(traces, 'in base64_encode')
+
+    def assert_no_temporary_character_strings(self, traces, location):
+        loops = [trace.loop for trace in traces
+                 if location in trace.trace.comment
+                 and 'loop with' in trace.trace.comment]
+        assert loops
+        for loop in loops:
+            assert any(op.name == 'strgetitem' for op in loop)
+            assert not [op for op in loop if op.name == 'newstr']
+            assert not [op for op in loop if 'call' in op.name and
+                        any('ll_extend_with_str' in arg for arg in op.args)]
