@@ -4,6 +4,20 @@ from .base import BaseJITTest
 
 
 class TestNonforcingHelpers(BaseJITTest):
+    @pytest.mark.parametrize('method', ['tr', 'tr_s'])
+    def test_tr(self, topaz, tmpdir, method):
+        traces = self.run(topaz, tmpdir, '''
+        values = ['hello', 'yellow']
+        i = 0
+        total = 0
+        while i < 20000
+          total += values[i & 1].%s('a-z', 'A-Z').length
+          i += 1
+        end
+        raise 'wrong transliteration' unless total == %d
+        ''' % (method, 90000 if method == 'tr_s' else 110000))
+        self.assert_nonforcing_helper(traces, 'translate_string')
+
     @pytest.mark.parametrize('method', ['ljust', 'rjust'])
     def test_justify(self, topaz, tmpdir, method):
         traces = self.run(topaz, tmpdir, '''

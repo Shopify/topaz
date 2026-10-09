@@ -476,6 +476,20 @@ class TestStringObject(BaseTopazTest):
         w_res = space.execute("return '123'.capitalize!")
         assert w_res is space.w_nil
 
+    @pytest.mark.parametrize('method', ['tr', 'tr!', 'tr_s', 'tr_s!'])
+    @pytest.mark.parametrize('source,replacement', [('z-a', 'x'), ('a', 'z-a')])
+    def test_tr_invalid_range(self, space, method, source, replacement):
+        w_res = space.execute('''
+        s = 'abba'
+        begin
+          s.%s('%s', '%s')
+        rescue ArgumentError => error
+          return [s, error.message]
+        end
+        ''' % (method, source, replacement))
+        assert self.unwrap(space, w_res) == [
+            'abba', 'invalid range "z-a" in string transliteration']
+
     def test_tr(self, space):
         w_res = space.execute("return 'hello'.tr('el', 'ip')")
         assert space.str_w(w_res) == "hippo"

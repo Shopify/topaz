@@ -117,7 +117,26 @@ TR_REPLACE = 1
 TR_DELETE = 2
 
 
+class InvalidTrRange(Exception):
+    def __init__(self, start, end):
+        self.start = start
+        self.end = end
+
+
+def tr_range_error(space, error):
+    return space.error(space.w_ArgumentError,
+        'invalid range "%s-%s" in string transliteration' %
+        (error.start, error.end))
+
+
 def expand_tr_set(space, source, allow_negate):
+    try:
+        return expand_tr_set_raw(source, allow_negate)
+    except InvalidTrRange as error:
+        raise tr_range_error(space, error)
+
+
+def expand_tr_set_raw(source, allow_negate):
     """A tr character set as a list of characters, and whether it is
     negated (a leading ^ with more after it)."""
     negate = False
@@ -137,8 +156,7 @@ def expand_tr_set(space, source, allow_negate):
             lo = ord(c)
             hi = ord(source[i + 2])
             if lo > hi:
-                raise space.error(space.w_ArgumentError,
-                    'invalid range "%s-%s" in string transliteration' % (c, source[i + 2]))
+                raise InvalidTrRange(c, source[i + 2])
             for x in range(lo, hi + 1):
                 chars.append(chr(x))
             i += 3
@@ -146,6 +164,59 @@ def expand_tr_set(space, source, allow_negate):
             chars.append(c)
             i += 1
     return chars, negate
+
+
+@jit.dont_look_inside
+def translate_string(string, source, replacement, squeeze):
+    """String#tr and #tr_s: the translated characters, or None when
+    nothing changes."""
+    src, negate = expand_tr_set_raw(source, True)
+    repl, _ = expand_tr_set_raw(replacement, False)
+    # kinds[c] is KEEP, REPLACE (with chars[c]) or DELETE.
+    kinds = [TR_KEEP] * 256
+    chars = ["\0"] * 256
+    if negate:
+        present = [False] * 256
+        for c in src:
+            present[ord(c)] = True
+        for i in range(256):
+            if not present[i]:
+                if repl:
+                    kinds[i] = TR_REPLACE
+                    chars[i] = repl[len(repl) - 1]
+                else:
+                    kinds[i] = TR_DELETE
+    else:
+        for i in range(len(src)):
+            c = ord(src[i])
+            if not repl:
+                kinds[c] = TR_DELETE
+            else:
+                kinds[c] = TR_REPLACE
+                chars[c] = repl[i] if i < len(repl) else repl[len(repl) - 1]
+    new_string = []
+    changed = False
+    has_last = False
+    last = "\0"
+    for char in string:
+        kind = kinds[ord(char)]
+        if kind == TR_KEEP:
+            new_string.append(char)
+            has_last = False
+            continue
+        if kind == TR_DELETE:
+            changed = True
+            continue
+        repl_char = chars[ord(char)]
+        if squeeze and has_last and repl_char == last:
+            changed = True
+            continue
+        if repl_char != char:
+            changed = True
+        new_string.append(repl_char)
+        has_last = True
+        last = repl_char
+    return new_string if changed else None
 
 
 @jit.dont_look_inside
@@ -744,56 +815,10 @@ class W_StringObject(W_Object):
         self.strategy.clear(self)
 
     def tr_trans(self, space, source, replacement, squeeze):
-        """String#tr and #tr_s: the translated characters, or None when
-        nothing changes."""
-        src, negate = expand_tr_set(space, source, True)
-        repl, _ = expand_tr_set(space, replacement, False)
-        # kinds[c] is KEEP, REPLACE (with chars[c]) or DELETE.
-        kinds = [TR_KEEP] * 256
-        chars = ["\0"] * 256
-        if negate:
-            present = [False] * 256
-            for c in src:
-                present[ord(c)] = True
-            for i in range(256):
-                if not present[i]:
-                    if repl:
-                        kinds[i] = TR_REPLACE
-                        chars[i] = repl[len(repl) - 1]
-                    else:
-                        kinds[i] = TR_DELETE
-        else:
-            for i in range(len(src)):
-                c = ord(src[i])
-                if not repl:
-                    kinds[c] = TR_DELETE
-                else:
-                    kinds[c] = TR_REPLACE
-                    chars[c] = repl[i] if i < len(repl) else repl[len(repl) - 1]
-        string = space.str_w(self)
-        new_string = []
-        changed = False
-        has_last = False
-        last = "\0"
-        for char in string:
-            kind = kinds[ord(char)]
-            if kind == TR_KEEP:
-                new_string.append(char)
-                has_last = False
-                continue
-            if kind == TR_DELETE:
-                changed = True
-                continue
-            repl_char = chars[ord(char)]
-            if squeeze and has_last and repl_char == last:
-                changed = True
-                continue
-            if repl_char != char:
-                changed = True
-            new_string.append(repl_char)
-            has_last = True
-            last = repl_char
-        return new_string if changed else None
+        try:
+            return translate_string(space.str_w(self), source, replacement, squeeze)
+        except InvalidTrRange as error:
+            raise tr_range_error(space, error)
 
     @classdef.singleton_method("allocate")
     def singleton_method_allocate(self, space):
