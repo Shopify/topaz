@@ -2,6 +2,19 @@ from .base import BaseJITTest
 
 
 class TestNonforcingHelpers(BaseJITTest):
+    def test_to_i(self, topaz, tmpdir):
+        traces = self.run(topaz, tmpdir, '''
+        values = ['  +123tail', ' -456tail']
+        i = 0
+        total = 0
+        while i < 20000
+          total += values[i & 1].to_i
+          i += 1
+        end
+        raise 'wrong integer parsing' unless total == -3330000
+        ''')
+        self.assert_nonforcing_helper(traces, 'scan_integer_prefix')
+
     def assert_nonforcing_helper(self, traces, helper):
         calls = [op for trace in traces for op in trace.trace.operations
                  if 'call' in op.name and op.args and helper in op.args[0]]

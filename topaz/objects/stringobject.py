@@ -148,6 +148,35 @@ def expand_tr_set(space, source, allow_negate):
     return chars, negate
 
 
+@jit.dont_look_inside
+def scan_integer_prefix(s, radix, is_radix):
+    i = 0
+    length = len(s)
+    while i < length:
+        if not s[i].isspace():
+            break
+        i += 1
+    neg = i < length and s[i] == "-"
+    if neg:
+        i += 1
+    if i < length and s[i] == "+":
+        i += 1
+    if i < length and s[i] == "0":
+        if i + 1 < length:
+            try:
+                r = RADIX_MAP[s[i + 1]]
+            except KeyError:
+                if radix == 0:
+                    radix = 8
+            else:
+                if not is_radix or radix == r or radix == 0:
+                    radix = r
+                    i += 2
+    if radix == 0:
+        radix = 10
+    return neg, i, radix
+
+
 def utf8_char_length(string, pos):
     """The number of bytes in the UTF-8 character at `pos`, or 1."""
     if pos >= len(string):
@@ -1509,30 +1538,7 @@ class W_StringObject(W_Object):
             is_radix = True
             radix = Coerce.int(space, w_radix)
         s = space.str_w(self)
-        i = 0
-        length = len(s)
-        while i < length:
-            if not s[i].isspace():
-                break
-            i += 1
-        neg = i < length and s[i] == "-"
-        if neg:
-            i += 1
-        if i < length and s[i] == "+":
-            i += 1
-        if i < length and s[i] == "0":
-            if i + 1 < length:
-                try:
-                    r = RADIX_MAP[s[i + 1]]
-                except KeyError:
-                    if radix == 0:
-                        radix = 8
-                else:
-                    if not is_radix or radix == r or radix == 0:
-                        radix = r
-                        i += 2
-        if radix == 0:
-            radix = 10
+        neg, i, radix = scan_integer_prefix(s, radix, is_radix)
         if not 2 <= radix <= 36:
             raise space.error(space.w_ArgumentError, "invalid radix %d" % radix)
         try:
