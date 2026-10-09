@@ -50,6 +50,11 @@ To run Topaz directly on top of Python (very slowly) you can do::
 
     $ PYTHONPATH=/path/to/pypy pypy -m topaz /path/to/file.rb
 
+GitHub Actions runs the unit tests, builds a JIT-enabled ``bin/topaz``, and
+then runs ``tests/jit`` on every push and pull request. The workflow in
+``.github/workflows/ci.yml`` pins PyPy and the RPython checkout and applies
+``tools/rpython-patches`` before testing. It can also be run manually.
+
 Heap dumps
 ----------
 

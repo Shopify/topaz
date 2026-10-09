@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Unit tests, JIT build, and JIT tests
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      CC: gcc-12
+      PYTHONPATH: ${{ github.workspace }}/.ci/pypy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out RPython
+        uses: actions/checkout@v4
+        with:
+          repository: pypy/pypy
+          # Keep the toolchain reproducible; update together with the patches.
+          ref: 45493605961da9e962534ed8299e6668a0007d3e
+          path: .ci/pypy
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: pypy2.7-v7.3.17
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential gcc-12 libffi-dev zlib1g-dev pkg-config
+
+      - name: Apply RPython patches
+        run: git -C .ci/pypy apply "$GITHUB_WORKSPACE"/tools/rpython-patches/*.patch
+
+      - name: Unit tests
+        # Use RPython's bundled pytest, which supports these Python 2 tests.
+        run: pypy .ci/pypy/pytest.py -q tests --ignore=tests/jit
+
+      - name: Build JIT binary
+        run: pypy .ci/pypy/rpython/bin/rpython --batch -Ojit targettopaz.py
+
+      - name: JIT tests
+        run: pypy .ci/pypy/pytest.py -q tests/jit --topaz=bin/topaz
