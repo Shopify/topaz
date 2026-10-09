@@ -570,6 +570,32 @@ class TestStringObject(BaseTopazTest):
             True, "a b",
         ]
 
+    def test_squeeze_coercion_order_and_mutation(self, space):
+        w_res = space.execute("""
+        s = 'aa'
+        set = Object.new
+        set.instance_variable_set(:@receiver, s)
+        def set.to_str
+          @receiver.replace('bbcc')
+          'b'
+        end
+        result = s.squeeze(set)
+        later = Object.new
+        def later.to_str; raise 'must not coerce'; end
+        error = nil
+        begin
+          s.squeeze('z-a', later)
+        rescue ArgumentError => e
+          error = e.message
+        end
+        return [result, s, error, ''.squeeze, 'abc'.squeeze!,
+                'aabbcc'.squeeze('a-c', '^b')]
+        """)
+        result = self.unwrap(space, w_res)
+        assert result[:2] == ['bcc', 'bbcc']
+        assert 'z-a' in result[2]
+        assert result[3:] == ['', None, 'abbc']
+
     def test_tr_s(self, space):
         w_res = space.execute("return 'hello'.tr_s('l', 'r')")
         assert space.str_w(w_res) == "hero"

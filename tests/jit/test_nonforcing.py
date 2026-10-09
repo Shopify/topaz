@@ -140,3 +140,19 @@ class TestNonforcingHelpers(BaseJITTest):
         raise 'wrong gsub' unless total == 80000
         """)
         self.assert_nonforcing_helper(traces, 'replace_string')
+
+    @pytest.mark.parametrize('arguments', ['', "'a-z'"])
+    def test_squeeze(self, topaz, tmpdir, arguments):
+        traces = self.run(topaz, tmpdir, """
+        values = ['aaabbbccc', 'dddeeefff']
+        i = 0
+        total = 0
+        while i < 20000
+          total += values[i & 1].squeeze(%s).length
+          i += 1
+        end
+        raise 'wrong squeeze' unless total == 60000
+        """ % arguments)
+        self.assert_nonforcing_helper(traces, 'squeeze_string')
+        if arguments:
+            self.assert_nonforcing_helper(traces, 'intersect_squeeze_set')

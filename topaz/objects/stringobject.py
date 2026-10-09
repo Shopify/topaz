@@ -39,6 +39,37 @@ INSPECT_ESCAPES = {
 
 HEX_DIGITS = "0123456789ABCDEF"
 
+
+@jit.dont_look_inside
+def intersect_squeeze_set(squeezable, source):
+    chars, negate = expand_tr_set_raw(source, True)
+    present = [negate] * 256
+    for c in chars:
+        present[ord(c)] = not negate
+    if squeezable is None:
+        return present
+    for i in range(256):
+        if not present[i]:
+            squeezable[i] = False
+    return squeezable
+
+
+@jit.dont_look_inside
+def squeeze_string(string, squeezable):
+    new_string = []
+    changed = False
+    has_last = False
+    last = "\0"
+    for char in string:
+        if has_last and char == last and (squeezable is None or squeezable[ord(char)]):
+            changed = True
+            continue
+        new_string.append(char)
+        has_last = True
+        last = char
+    return new_string if changed else None
+
+
 @jit.dont_look_inside
 def replace_string(string, pattern, replacement, first_only):
     result = []
@@ -191,12 +222,6 @@ def tr_range_error(space, error):
         'invalid range "%s-%s" in string transliteration' %
         (error.start, error.end))
 
-
-def expand_tr_set(space, source, allow_negate):
-    try:
-        return expand_tr_set_raw(source, allow_negate)
-    except InvalidTrRange as error:
-        raise tr_range_error(space, error)
 
 
 def expand_tr_set_raw(source, allow_negate):
@@ -1702,34 +1727,19 @@ class W_StringObject(W_Object):
         self.replace(space, new_string)
         return self
 
+    @jit.unroll_safe
     def squeeze_chars(self, space, args_w):
-        """String#squeeze: the squeezed characters, or None when nothing
-        changes. A run of a byte that is in every given set (any byte,
-        with no sets) becomes one byte. Sets are tr sets: ranges, a
-        leading ^ for negation, backslash escapes."""
-        squeezable = [True] * 256
+        # Only the argument loop is traceable. Set expansion and byte scanning
+        # stay opaque, and each set is validated before coercing the next one.
+        squeezable = None
         for w_set in args_w:
             w_set = space.convert_type(w_set, space.w_string, "to_str")
-            chars, negate = expand_tr_set(space, space.str_w(w_set), True)
-            present = [negate] * 256
-            for c in chars:
-                present[ord(c)] = not negate
-            for i in range(256):
-                if not present[i]:
-                    squeezable[i] = False
-        string = space.str_w(self)
-        new_string = []
-        changed = False
-        has_last = False
-        last = "\0"
-        for char in string:
-            if has_last and char == last and squeezable[ord(char)]:
-                changed = True
-                continue
-            new_string.append(char)
-            has_last = True
-            last = char
-        return new_string if changed else None
+            try:
+                squeezable = intersect_squeeze_set(squeezable, space.str_w(w_set))
+            except InvalidTrRange as error:
+                raise tr_range_error(space, error)
+        # Coercion may mutate the receiver; read it after all the arguments.
+        return squeeze_string(space.str_w(self), squeezable)
 
     @classdef.method("squeeze")
     def method_squeeze(self, space, args_w):
