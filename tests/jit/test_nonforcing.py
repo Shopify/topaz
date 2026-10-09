@@ -93,3 +93,20 @@ class TestNonforcingHelpers(BaseJITTest):
         raise 'wrong gcd' unless total == 199992
         ''')
         self.assert_nonforcing_helper(traces, 'gcd_positive')
+
+    def test_rindex(self, topaz, tmpdir):
+        traces = self.run(topaz, tmpdir, '''
+        values = ['abcabc', 'xbcxbc']
+        i = 0
+        total = 0
+        while i < 20000
+          total += values[i & 1].rindex('bc', 3 + (i & 1))
+          i += 1
+        end
+        raise 'wrong rindex' unless total == 50000
+        ''')
+        # RPython implements rfind through its shared search helper.
+        self.assert_nonforcing_helper(traces, '_search_elidable__str_str')
+        assert not any('method_rindex' in op.args[0]
+                       for trace in traces for op in trace.trace.operations
+                       if 'call' in op.name and op.args)

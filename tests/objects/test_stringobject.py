@@ -320,6 +320,24 @@ class TestStringObject(BaseTopazTest):
         with self.raises(space, "TypeError", "no implicit conversion of Integer into String"):
             space.execute('"hello".rindex(123)')
 
+    def test_rindex_coercion_and_match_state(self, space):
+        w_res = space.execute("""
+        s = 'ababa'
+        pos = Object.new
+        def pos.to_int; 2; end
+        sub = Object.new
+        def sub.to_str; 'ba'; end
+        a = s.rindex(sub, pos)
+        b = s.rindex(/(ba)/, 2)
+        match = $1
+        c = s.rindex('a')
+        unchanged = $1
+        s.rindex(/z/)
+        return [a, b, match, c, unchanged, $~, s.rindex('', -1),
+                s.rindex('a', -20), s.rindex('a', 99)]
+        """)
+        assert self.unwrap(space, w_res) == [1, 1, 'ba', 4, 'ba', None, 4, None, 4]
+
     def test_split(self, space):
         w_res = space.execute("return 'a b c'.split")
         assert self.unwrap(space, w_res) == ["a", "b", "c"]

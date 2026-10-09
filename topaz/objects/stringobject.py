@@ -1347,24 +1347,7 @@ class W_StringObject(W_Object):
             if pos > length:
                 pos = length
         if space.is_kind_of(w_sub, space.w_regexp):
-            ctx = w_sub.make_ctx(string)
-            idx = -1
-            start = 0
-            while start <= pos:
-                ctx.reset(start)
-                if not self.search_context(space, w_sub, ctx):
-                    break
-                if ctx.match_start > pos:
-                    break
-                idx = ctx.match_start
-                start = idx + 1
-            if idx < 0:
-                w_sub.get_match_result(space, ctx, string, found=False)
-                return space.w_nil
-            ctx.reset(idx)
-            self.search_context(space, w_sub, ctx)
-            w_sub.get_match_result(space, ctx, string, found=True)
-            return space.newint(idx)
+            return self.rindex_regexp(space, w_sub, string, pos)
         w_str = space.convert_type(w_sub, space.w_string, "to_str")
         sub = space.str_w(w_str)
         stop = pos + len(sub)
@@ -1374,6 +1357,26 @@ class W_StringObject(W_Object):
         idx = string.rfind(sub, 0, stop)
         if idx < 0:
             return space.w_nil
+        return space.newint(idx)
+
+    def rindex_regexp(self, space, w_sub, string, pos):
+        ctx = w_sub.make_ctx(string)
+        idx = -1
+        start = 0
+        while start <= pos:
+            ctx.reset(start)
+            if not self.search_context(space, w_sub, ctx):
+                break
+            if ctx.match_start > pos:
+                break
+            idx = ctx.match_start
+            start = idx + 1
+        if idx < 0:
+            w_sub.get_match_result(space, ctx, string, found=False)
+            return space.w_nil
+        ctx.reset(idx)
+        self.search_context(space, w_sub, ctx)
+        w_sub.get_match_result(space, ctx, string, found=True)
         return space.newint(idx)
 
     @classdef.method("split", limit="int")
