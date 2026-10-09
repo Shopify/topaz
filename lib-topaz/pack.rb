@@ -453,14 +453,7 @@ module Topaz
             result << s
           when "H", "h"
             digits = count == :star ? (len - pos) * 2 : [count || 1, (len - pos) * 2].min
-            s = ""
-            i = 0
-            while i < digits
-              byte = str.getbyte(pos + i / 2)
-              nibble = (d == "H") == i.even? ? byte >> 4 : byte & 15
-              s << HEX_DIGITS[nibble]
-              i += 1
-            end
+            s = str.__topaz_unpack_hex(pos, digits, d == "H")
             pos += (digits + 1) / 2
             result << s
           when "m"

@@ -199,6 +199,27 @@ def ascii_only_list(value):
     return True
 
 
+@specialize.argtype(0)
+@jit.dont_look_inside
+def unpack_hex(value, pos, digits, high_first):
+    # Specialize for raw str/list storage, but keep data-dependent iteration
+    # out of the caller's trace. Mutable storage must be read on every call.
+    alphabet = "0123456789abcdef"
+    first_shift = 4 if high_first else 0
+    second_shift = 4 - first_shift
+    builder = StringBuilder(digits)
+    pairs = digits // 2
+    end = pos + pairs
+    while pos < end:
+        byte = ord(value[pos])
+        builder.append(alphabet[(byte >> first_shift) & 15])
+        builder.append(alphabet[(byte >> second_shift) & 15])
+        pos += 1
+    if digits & 1:
+        builder.append(alphabet[(ord(value[pos]) >> first_shift) & 15])
+    return builder.build()
+
+
 class StringStrategy(object):
     def __init__(self, space):
         pass
@@ -223,6 +244,9 @@ class ConstantStringStrategy(StringStrategy):
 
     def ascii_only(self, storage):
         return ascii_only_str(self.unerase(storage))
+
+    def unpack_hex(self, storage, pos, digits, high_first):
+        return unpack_hex(self.unerase(storage), pos, digits, high_first)
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
@@ -276,6 +300,9 @@ class MutableStringStrategy(StringStrategy):
 
     def ascii_only(self, storage):
         return ascii_only_list(self.unerase(storage))
+
+    def unpack_hex(self, storage, pos, digits, high_first):
+        return unpack_hex(self.unerase(storage), pos, digits, high_first)
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
@@ -867,6 +894,15 @@ class W_StringObject(W_Object):
     @classdef.method("ascii_only?")
     def method_ascii_only(self, space):
         return space.newbool(self.strategy.ascii_only(self.str_storage))
+
+    @classdef.method("__topaz_unpack_hex", pos="int", digits="int")
+    def method_unpack_hex(self, space, pos, digits, w_high_first):
+        length = self.length()
+        if pos < 0 or pos > length or digits < 0 or digits > (length - pos) * 2:
+            raise space.error(space.w_ArgumentError, "invalid hexadecimal slice")
+        value = self.strategy.unpack_hex(
+            self.str_storage, pos, digits, space.is_true(w_high_first))
+        return space.newstr_fromstr(value)
 
     @classdef.method("__topaz_unpack_utf8", count="int")
     def method_unpack_utf8(self, space, count):

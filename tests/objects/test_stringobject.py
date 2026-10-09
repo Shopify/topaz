@@ -864,3 +864,64 @@ class TestStringAsciiOnly(BaseTopazTest):
         return result
         ''')
         assert self.unwrap(space, w_res) == [True, False, True, False, True, False, True, True]
+
+
+class TestStringUnpackHex(BaseTopazTest):
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_unpack_hex_storage(self, space, mutable):
+        value = ''.join(chr(i) for i in range(256))
+        if mutable:
+            w_str = space.newstr_fromchars(list(value))
+        else:
+            w_str = space.newstr_fromstr(value)
+        for high_first in [False, True]:
+            for pos in [0, 1, 255, 256]:
+                for digits in [0, 1, 3, 2 * (256 - pos)]:
+                    if digits > 2 * (256 - pos):
+                        continue
+                    pairs = ['%02x' % ord(c) for c in value[pos:]]
+                    if not high_first:
+                        pairs = [s[::-1] for s in pairs]
+                    expected = ''.join(pairs)[:digits]
+                    w_result = space.send(w_str, '__topaz_unpack_hex', [
+                        space.newint(pos), space.newint(digits),
+                        space.newbool(high_first)])
+                    assert space.str_w(w_result) == expected
+
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_unpack_hex_formats(self, space, mutable):
+        w_res = space.execute('''
+        s = "\\x12\\xab\\xff"
+        %s
+        seen = []
+        block_result = s.unpack('H2H2') { |part| seen << part }
+        return [s.unpack('H*'), s.unpack('h*'), s.unpack('H3C'),
+                s.unpack('H0h0C'), s.unpack('H99'), s.unpack('H'),
+                s.unpack('h'), s.unpack('H*H2'), ''.unpack('H*'),
+                s.unpack('H3', offset: 1), s.unpack('xH2Xh2'),
+                s.unpack1('H3'), s.unpack1('h*', offset: 1),
+                block_result, seen]
+        ''' % ("s << ''" if mutable else ''))
+        assert self.unwrap(space, w_res) == [
+            ['12abff'], ['21baff'], ['12a', 255], ['', '', 18],
+            ['12abff'], ['1'], ['2'], ['12abff', ''], [''],
+            ['abf'], ['ab', 'ba'], '12a', 'baff', None, ['12', 'ab']]
+
+    def test_unpack_hex_mutation(self, space):
+        w_res = space.execute('''
+        s = "\\x12\\xab"
+        first = s.unpack1('H*')
+        s.setbyte(0, 255)
+        second = s.unpack1('H*')
+        s.replace("\\x01")
+        third = s.unpack1('h*')
+        s.clear
+        return [first, second, third, s.unpack1('H*')]
+        ''')
+        assert self.unwrap(space, w_res) == ['12ab', 'ffab', '10', '']
+
+    def test_unpack_hex_invalid_slice(self, space):
+        for pos, digits in [(-1, 0), (2, 0), (0, -1), (0, 3)]:
+            with self.raises(space, 'ArgumentError', 'invalid hexadecimal slice'):
+                space.send(space.newstr_fromstr('a'), '__topaz_unpack_hex', [
+                    space.newint(pos), space.newint(digits), space.w_true])

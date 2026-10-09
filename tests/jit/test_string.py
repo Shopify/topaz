@@ -158,3 +158,33 @@ class TestString(BaseJITTest):
         end
         raise 'cached mutable scan' unless count == 10000
         ''')
+
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_unpack_hex(self, topaz, tmpdir, mutable):
+        traces = self.run(topaz, tmpdir, '''
+        def hex_loop(s, expected)
+          i = 0
+          while i < 10000
+            result = s.__topaz_unpack_hex(0, 128, true)
+            raise 'wrong hex' unless result == expected
+            i += 1
+          end
+        end
+        s = "\\x12\\xab" * 32
+        %s
+        hex_loop(s, '12ab' * 32)
+        s.setbyte(0, 255)
+        hex_loop(s, 'ffab' + '12ab' * 31)
+        ''' % ("s << ''" if mutable else ''))
+        matches = [trace for trace in traces
+                   if 'in hex_loop' in trace.trace.comment
+                   and 'loop with' in trace.trace.comment]
+        assert matches
+        for trace in matches:
+            loop = trace.loop
+            assert any('call' in op.name and 'unpack_hex' in op.args[0]
+                       for op in loop)
+            # Hex digit selection and input scanning belong inside the helper.
+            assert not [op for op in loop if op.name in
+                        ('strgetitem', 'getarrayitem_gc_i', 'int_rshift', 'int_and')]
+            assert not [op for op in loop if op.name == 'newstr']
