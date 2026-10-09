@@ -881,6 +881,21 @@ class TestInterpreter(BaseTopazTest):
         with self.raises(space, "SyntaxError"):
             space.execute("/(/")
 
+    def test_class_variable_in_singleton_scope(self, space):
+        w_res = space.execute('''
+        class Counter
+          @@count = 1
+          class << self
+            def increment
+              @@count += 1
+            end
+          end
+          def value; @@count; end
+        end
+        return [Counter.increment, Counter.new.value, Counter.increment]
+        ''')
+        assert self.unwrap(space, w_res) == [2, 2, 3]
+
     def test_class_variable_from_module_accessed_from_instance_side(self, space):
         w_res = space.execute("""
         module A
