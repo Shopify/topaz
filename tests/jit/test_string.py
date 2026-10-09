@@ -88,15 +88,43 @@ class TestString(BaseJITTest):
         ''')
         self.assert_no_temporary_character_strings(traces, 'in append_characters')
 
-    def test_base64_character_appends(self, topaz, tmpdir):
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_base64_native(self, topaz, tmpdir, mutable):
         traces = self.run(topaz, tmpdir, '''
-        source = 'foobar' * 3000
-        encoded = [source].pack('m0')
-        raise 'wrong base64' unless encoded == 'Zm9vYmFy' * 3000
+        def encode_loop(source, expected)
+          i = 0
+          while i < 10000
+            raise 'wrong base64' unless [source].pack('m0') == expected
+            i += 1
+          end
+        end
+        source = 'foobar' * 32
+        %s
+        encode_loop(source, 'Zm9vYmFy' * 32)
+        source.setbyte(0, 103)
+        encode_loop(source, 'Z29vYmFy' + 'Zm9vYmFy' * 31)
         raise 'wrong padding' unless ['f'].pack('m0') == 'Zg=='
         raise 'wrong padding' unless ['fo'].pack('m0') == 'Zm8='
+        ''' % ("source << ''" if mutable else ''))
+        assert any('call' in op.name and 'base64_encode__' in op.args[0]
+                   for trace in traces for op in trace.trace.operations)
+        # There must be no traced Ruby byte loop in the Base64 wrapper.
+        assert not [trace for trace in traces
+                    if 'in base64_encode' in trace.trace.comment
+                    and 'loop with' in trace.trace.comment]
+
+    def test_base64_in_place_mutation(self, topaz, tmpdir):
+        self.run(topaz, tmpdir, '''
+        s = "\\x00\\x00\\x00"
+        s << ''
+        i = 0
+        while i < 10000
+          s.setbyte(0, i & 1)
+          expected = (i & 1) == 0 ? 'AAAA' : 'AQAA'
+          raise 'cached base64 result' unless [s].pack('m0') == expected
+          i += 1
+        end
         ''')
-        self.assert_no_temporary_character_strings(traces, 'in base64_encode')
 
     def assert_no_temporary_character_strings(self, traces, location):
         loops = [trace.loop for trace in traces

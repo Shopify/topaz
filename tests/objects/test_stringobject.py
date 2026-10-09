@@ -991,3 +991,55 @@ class TestStringUnpackInteger(BaseTopazTest):
                     space.newint(pos), space.newint(size), space.w_true, space.w_false])
         assert space.send(w_str, '__topaz_unpack_integer', [
             space.newint(0), space.newint(2), space.w_true, space.w_false]) is space.w_nil
+
+
+class TestStringBase64Encode(BaseTopazTest):
+    @pytest.mark.parametrize('mutable', [False, True])
+    def test_base64_storage(self, space, mutable):
+        import base64
+        value = ''.join(chr(i) for i in range(256))
+        w_str = (space.newstr_fromchars(list(value)) if mutable
+                 else space.newstr_fromstr(value))
+        for pos in [0, 1, 127, 253, 254, 255, 256]:
+            for length in [0, 1, 2, 3, 4, 5, 256 - pos]:
+                if length > 256 - pos:
+                    continue
+                w_res = space.send(w_str, '__topaz_base64_encode', [
+                    space.newint(pos), space.newint(length)])
+                assert space.str_w(w_res) == base64.b64encode(value[pos:pos + length])
+
+    def test_base64_padding_and_wrapping(self, space):
+        w_res = space.execute('''
+        return [ [''].pack('m0'), ['f'].pack('m0'), ['fo'].pack('m0'),
+                 ['foo'].pack('m0'), ['foob'].pack('m0'), ['fooba'].pack('m0'),
+                 ['foobar'].pack('m0'), [''].pack('m'), ['f'].pack('m'),
+                 ['foobar'].pack('m3'), ['foobar'].pack('m4'),
+                 ['foobar'].pack('m*'), ['f', 'oo'].pack('m0m0'),
+                 ['f'].pack('m0', buffer: 'prefix:') ]
+        ''')
+        assert self.unwrap(space, w_res) == [
+            '', 'Zg==', 'Zm8=', 'Zm9v', 'Zm9vYg==', 'Zm9vYmE=',
+            'Zm9vYmFy', '', 'Zg==\n', 'Zm9v\nYmFy\n', 'Zm9v\nYmFy\n',
+            'Zm9vYmFy\n', 'Zg==b28=', 'prefix:Zg==']
+
+    def test_base64_mutation_and_coercion(self, space):
+        w_res = space.execute('''
+        class Base64Source
+          def to_str; 'foo'; end
+        end
+        s = 'foo'
+        a = [s].pack('m0')
+        s.setbyte(0, 103)
+        b = [s].pack('m0')
+        s.replace('f')
+        c = [s].pack('m0')
+        s.clear
+        return [a, b, c, [s].pack('m0'), [Base64Source.new].pack('m0')]
+        ''')
+        assert self.unwrap(space, w_res) == ['Zm9v', 'Z29v', 'Zg==', '', 'Zm9v']
+
+    def test_base64_invalid_slice(self, space):
+        for pos, length in [(-1, 0), (2, 0), (0, -1), (0, 2)]:
+            with self.raises(space, 'ArgumentError', 'invalid base64 slice'):
+                space.send(space.newstr_fromstr('a'), '__topaz_base64_encode', [
+                    space.newint(pos), space.newint(length)])

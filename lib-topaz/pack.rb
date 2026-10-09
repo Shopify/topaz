@@ -286,19 +286,7 @@ module Topaz
     end
 
     def self.base64_encode(s, pos, len)
-      out = ""
-      stop = pos + len
-      while pos < stop
-        b0 = s.getbyte(pos)
-        b1 = pos + 1 < stop ? s.getbyte(pos + 1) : nil
-        b2 = pos + 2 < stop ? s.getbyte(pos + 2) : nil
-        out << BASE64[b0 >> 2]
-        out << BASE64[((b0 & 3) << 4) | ((b1 || 0) >> 4)]
-        out << (b1 ? BASE64[((b1 & 15) << 2) | ((b2 || 0) >> 6)] : "=")
-        out << (b2 ? BASE64[b2 & 63] : "=")
-        pos += 3
-      end
-      out
+      s.__topaz_base64_encode(pos, len)
     end
 
     def self.uu_encode(s, pos, len)

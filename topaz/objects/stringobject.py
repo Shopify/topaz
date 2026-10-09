@@ -237,6 +237,38 @@ def unpack_integer(value, pos, size, big):
     return result
 
 
+@specialize.argtype(0)
+@jit.dont_look_inside
+def base64_encode(value, pos, length):
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    groups = length // 3
+    tail = length % 3
+    capacity = ovfcheck((groups + (tail != 0)) * 4)
+    builder = StringBuilder(capacity)
+    end = pos + groups * 3
+    while pos < end:
+        b0 = ord(value[pos])
+        b1 = ord(value[pos + 1])
+        b2 = ord(value[pos + 2])
+        builder.append(alphabet[b0 >> 2])
+        builder.append(alphabet[((b0 & 3) << 4) | (b1 >> 4)])
+        builder.append(alphabet[((b1 & 15) << 2) | (b2 >> 6)])
+        builder.append(alphabet[b2 & 63])
+        pos += 3
+    if tail:
+        b0 = ord(value[pos])
+        builder.append(alphabet[b0 >> 2])
+        if tail == 1:
+            builder.append(alphabet[(b0 & 3) << 4])
+            builder.append("==")
+        else:
+            b1 = ord(value[pos + 1])
+            builder.append(alphabet[((b0 & 3) << 4) | (b1 >> 4)])
+            builder.append(alphabet[(b1 & 15) << 2])
+            builder.append("=")
+    return builder.build()
+
+
 class StringStrategy(object):
     def __init__(self, space):
         pass
@@ -267,6 +299,9 @@ class ConstantStringStrategy(StringStrategy):
 
     def unpack_integer(self, storage, pos, size, big):
         return unpack_integer(self.unerase(storage), pos, size, big)
+
+    def base64_encode(self, storage, pos, length):
+        return base64_encode(self.unerase(storage), pos, length)
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
@@ -326,6 +361,9 @@ class MutableStringStrategy(StringStrategy):
 
     def unpack_integer(self, storage, pos, size, big):
         return unpack_integer(self.unerase(storage), pos, size, big)
+
+    def base64_encode(self, storage, pos, length):
+        return base64_encode(self.unerase(storage), pos, length)
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
@@ -917,6 +955,16 @@ class W_StringObject(W_Object):
     @classdef.method("ascii_only?")
     def method_ascii_only(self, space):
         return space.newbool(self.strategy.ascii_only(self.str_storage))
+
+    @classdef.method("__topaz_base64_encode", pos="int", length="int")
+    def method_base64_encode(self, space, pos, length):
+        if pos < 0 or pos > self.length() or length < 0 or length > self.length() - pos:
+            raise space.error(space.w_ArgumentError, "invalid base64 slice")
+        try:
+            value = self.strategy.base64_encode(self.str_storage, pos, length)
+        except OverflowError:
+            raise space.error(space.w_RangeError, "base64 output too large")
+        return space.newstr_fromstr(value)
 
     @classdef.method("__topaz_unpack_integer", pos="int", size="int")
     def method_unpack_integer(self, space, pos, size, w_big, w_signed):
