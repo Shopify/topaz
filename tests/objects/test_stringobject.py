@@ -745,3 +745,63 @@ class TestStringEncoding(BaseTopazTest):
             space.execute('"abc".freeze.force_encoding("ASCII-8BIT")')
         with self.raises(space, "ArgumentError", "unknown encoding name - nope"):
             space.execute('"abc".force_encoding("nope")')
+
+class TestStringAffixes(BaseTopazTest):
+    @pytest.mark.parametrize('mutable_receiver', [False, True])
+    @pytest.mark.parametrize('mutable_affix', [False, True])
+    @pytest.mark.parametrize('method', ['start_with?', 'end_with?'])
+    def test_affix_storage(self, space, mutable_receiver, mutable_affix, method):
+        def string(value, mutable):
+            if mutable:
+                return space.newstr_fromchars(list(value))
+            return space.newstr_fromstr(value)
+        w_string = string('abc\x00abc', mutable_receiver)
+        for affix, expected in [('abc', True), ('ab', method == 'start_with?'),
+                                ('bc', method == 'end_with?'), ('', True),
+                                ('abc\x00abc', True), ('abc\x00abcd', False),
+                                ('abd', False), ('\x00abc', method == 'end_with?')]:
+            w_affix = string(affix, mutable_affix)
+            assert space.send(w_string, method, [w_affix]) is space.newbool(expected)
+
+    @pytest.mark.parametrize('method', ['start_with?', 'end_with?'])
+    def test_affix_multiple_and_conversion(self, space, method):
+        w_res = space.execute('''
+        class Affix
+          def initialize(s); @s = s; end
+          def to_str; @s; end
+        end
+        class BadAffix
+          def to_str; raise 'must not be called'; end
+        end
+        s = 'abcabc'
+        return [s.%s(), s.%s('x', 'abc'), s.%s('x', 'y'),
+                s.%s('', BadAffix.new), s.%s(Affix.new('abc')),
+                s.%s(Object.new, Affix.new(nil), 'abc')]
+        ''' % ((method,) * 6))
+        assert self.unwrap(space, w_res) == [False, True, False, True, True, True]
+        with self.raises(space, 'TypeError'):
+            space.execute("class BadAffix; def to_str; 12; end; end; 'abc'.%s(BadAffix.new)" % method)
+        with self.raises(space, 'RuntimeError'):
+            space.execute("class BadAffix; def to_str; raise 'conversion'; end; end; 'abc'.%s(BadAffix.new)" % method)
+
+    @pytest.mark.parametrize('method', ['start_with?', 'end_with?'])
+    def test_affix_coercion_mutates_receiver(self, space, method):
+        w_res = space.execute('''
+        class MutatingAffix
+          def initialize(s); @s = s; end
+          def to_str; @s.replace('z'); 'z'; end
+        end
+        s = 'abc'
+        return s.%s(MutatingAffix.new(s))
+        ''' % method)
+        assert w_res is space.w_true
+
+    def test_affix_bytes_and_long_strings(self, space):
+        w_res = space.execute('''
+        s = "\\xc3\\xa9\\x00\\xff".b
+        long = 'a' * 1000
+        return [s.start_with?("\\xc3\\xa9".b), s.end_with?("\\x00\\xff".b),
+                s.start_with?("\\xff".b), long.start_with?('a' * 999),
+                long.end_with?('a' * 999), long.end_with?('a' * 999 + 'b')]
+        ''')
+        assert self.unwrap(space, w_res) == [True, True, False, True, True, False]

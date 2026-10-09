@@ -42,26 +42,6 @@ class String
     short ? -1 : (long ? 1 : 0)
   end
 
-  def start_with?(*prefixes)
-    prefixes.any? do |prefix|
-      prefix = Topaz.try_convert_type(prefix, String, :to_str)
-      next false unless prefix
-      prelen = prefix.length
-      next false if prelen > self.length
-      0.upto(prelen - 1).all? { |index| self[index] == prefix[index] }
-    end
-  end
-
-  def end_with?(*suffixes)
-    suffixes.any? do |suffix|
-      suffix = Topaz.try_convert_type(suffix, String, :to_str)
-      next false unless suffix
-      suflen = suffix.length
-      next false if suflen > self.length
-      (-suflen).upto(-1).all? { |index| self[index] == suffix[index] }
-    end
-  end
-
   # match is in RPython (stringobject.py), so that it sets the caller's $~.
 
   def chomp(sep = $/)

@@ -3,12 +3,12 @@ import string
 import math
 
 from rpython.rlib import jit
-from rpython.rlib.objectmodel import newlist_hint, compute_hash
+from rpython.rlib.objectmodel import newlist_hint, compute_hash, specialize
 from rpython.rlib.rarithmetic import intmask, ovfcheck
 from rpython.rlib.rbigint import rbigint
 from rpython.rlib.rerased import new_static_erasing_pair
 from rpython.rlib.rsre import rsre_core
-from rpython.rlib.rstring import split, StringBuilder
+from rpython.rlib.rstring import split, startswith, StringBuilder
 
 from topaz.coerce import Coerce
 from topaz.module import ClassDef, check_frozen
@@ -168,6 +168,19 @@ def utf8_char_length(string, pos):
     assert n >= 1
     return n
 
+
+@specialize.argtype(0, 1)
+@jit.dont_look_inside
+def compare_affix(value, affix, offset):
+    # Three mutable-storage specializations (str/list, list/str, list/list).
+    # Keep character-dependent exits out of the JIT trace.
+    # Not elidable: either storage may be a list mutated in place.
+    for i in range(len(affix)):
+        if value[offset + i] != affix[i]:
+            return False
+    return True
+
+
 class StringStrategy(object):
     def __init__(self, space):
         pass
@@ -192,6 +205,16 @@ class ConstantStringStrategy(StringStrategy):
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
+
+    def compare_affix(self, storage, w_affix, offset):
+        value = self.unerase(storage)
+        strategy = w_affix.strategy
+        if isinstance(strategy, ConstantStringStrategy):
+            # Both storages are immutable: the existing RPython helper is
+            # elidable, while its character loop stays outside the trace.
+            return startswith(value, strategy.unerase(w_affix.str_storage), offset)
+        assert isinstance(strategy, MutableStringStrategy)
+        return compare_affix(value, strategy.unerase(w_affix.str_storage), offset)
 
     def getslice(self, space, storage, start, end):
         return space.newstr_fromstr(self.unerase(storage)[start:end])
@@ -227,6 +250,14 @@ class MutableStringStrategy(StringStrategy):
 
     def getitem(self, storage, idx):
         return self.unerase(storage)[idx]
+
+    def compare_affix(self, storage, w_affix, offset):
+        value = self.unerase(storage)
+        strategy = w_affix.strategy
+        if isinstance(strategy, ConstantStringStrategy):
+            return compare_affix(value, strategy.unerase(w_affix.str_storage), offset)
+        assert isinstance(strategy, MutableStringStrategy)
+        return compare_affix(value, strategy.unerase(w_affix.str_storage), offset)
 
     def getslice(self, space, storage, start, end):
         return space.newstr_fromchars(self.unerase(storage)[start:end])
@@ -758,6 +789,43 @@ class W_StringObject(W_Object):
     @classdef.method("length")
     def method_length(self, space):
         return space.newint(self.length())
+
+    @classdef.method("start_with?")
+    def method_start_with(self, space, args_w):
+        if len(args_w) == 1:
+            return space.newbool(self.matches_affix(space, args_w[0], False))
+        return space.newbool(self.matches_any_affix(space, args_w, False))
+
+    @classdef.method("end_with?")
+    def method_end_with(self, space, args_w):
+        if len(args_w) == 1:
+            return space.newbool(self.matches_affix(space, args_w[0], True))
+        return space.newbool(self.matches_any_affix(space, args_w, True))
+
+    @jit.look_inside_iff(lambda self, space, args_w, from_end:
+                         jit.isconstant(len(args_w)) and len(args_w) <= 4)
+    def matches_any_affix(self, space, args_w, from_end):
+        for w_affix in args_w:
+            if self.matches_affix(space, w_affix, from_end):
+                return True
+        return False
+
+    def matches_affix(self, space, w_affix, from_end):
+        if not isinstance(w_affix, W_StringObject):
+            # Keep the permissive conversion of the former Ruby methods.
+            w_affix = space.convert_type(
+                w_affix, space.w_string, "to_str", raise_error=False)
+            if w_affix is space.w_nil:
+                return False
+            assert isinstance(w_affix, W_StringObject)
+        # Conversion may have mutated the receiver; read lengths afterwards.
+        length = w_affix.length()
+        offset = self.length() - length
+        if offset < 0:
+            return False
+        if not from_end:
+            offset = 0
+        return self.strategy.compare_affix(self.str_storage, w_affix, offset)
 
     @classdef.method("hash")
     def method_hash(self, space):
