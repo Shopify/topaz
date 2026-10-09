@@ -83,6 +83,8 @@ module SQLite3
     TEXT = 3
     BLOB = 4
     NULL = 5
+    INT64_MIN = -9223372036854775808
+    INT64_MAX = 9223372036854775807
     # SQLITE_TRANSIENT: sqlite copies bound values.
     TRANSIENT = FFI::Pointer.new(-1)
 
@@ -385,7 +387,7 @@ module SQLite3
                    LibSQLite.sqlite3_bind_text(st, index, LibSQLite.buffer(text), text.bytesize, LibSQLite::TRANSIENT)
                  end
                when Integer
-                 if value >= -(2**63) && value < 2**63
+                 if value >= LibSQLite::INT64_MIN && value <= LibSQLite::INT64_MAX
                    LibSQLite.sqlite3_bind_int64(st, index, value)
                  else
                    LibSQLite.sqlite3_bind_double(st, index, value.to_f)
