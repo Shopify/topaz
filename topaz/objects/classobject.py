@@ -79,6 +79,7 @@ class W_ClassObject(W_ModuleObject):
             w_res = self.superclass.find_const(space, name, autoload=autoload)
         return w_res
 
+    @jit.unroll_safe
     def find_scoped_const(self, space, name, autoload=True):
         # `Klass::Name` looks in the class and its ancestors, but only
         # reaches Object's constants for Object itself.
