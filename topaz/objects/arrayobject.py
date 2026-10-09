@@ -804,7 +804,7 @@ class W_ArrayObject(W_Object):
             uniq_block_driver.jit_merge_point(bytecode=bytecode)
             w_item = self.items_w[i]
             w_key = space.invoke_block(block, [w_item])
-            if not w_seen.strategy.contains(w_seen.dict_storage, w_key):
+            if not w_seen.contains(w_key):
                 w_seen.setitem(w_key, space.w_nil)
                 result_w.append(w_item)
             i += 1
@@ -814,7 +814,7 @@ class W_ArrayObject(W_Object):
         while i < len(self.items_w):
             uniq_plain_driver.jit_merge_point()
             w_item = self.items_w[i]
-            if not w_seen.strategy.contains(w_seen.dict_storage, w_item):
+            if not w_seen.contains(w_item):
                 w_seen.setitem(w_item, space.w_nil)
                 result_w.append(w_item)
             i += 1
@@ -834,7 +834,7 @@ class W_ArrayObject(W_Object):
         while i < len(self.items_w):
             difference_driver.jit_merge_point()
             w_item = self.items_w[i]
-            if not w_seen.strategy.contains(w_seen.dict_storage, w_item):
+            if not w_seen.contains(w_item):
                 result_w.append(w_item)
             i += 1
         return space.newarray(result_w)

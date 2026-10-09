@@ -3,18 +3,51 @@ from collections import OrderedDict
 
 from rpython.rlib import jit
 from rpython.rlib.rarithmetic import intmask
-from rpython.rlib.objectmodel import r_ordereddict
+from rpython.rlib.objectmodel import r_ordereddict, we_are_translated
 from rpython.rlib.rerased import new_static_erasing_pair
 
 from topaz.module import ClassDef, check_frozen
 from topaz.modules.enumerable import Enumerable
 from topaz.objects.objectobject import W_Object
 from topaz.objects.procobject import W_ProcObject
+from topaz.objects.symbolobject import W_SymbolObject
+
+
+def untranslated_dict_items(storage, keys):
+    """NOT_RPYTHON"""
+    # RPython's ordered-dict iterators allow deletion during iteration;
+    # the host Python OrderedDict iterator raises RuntimeError instead.
+    # Snapshot keys only, so callbacks still see current values and deletions.
+    for key in keys:
+        try:
+            value = storage[key]
+        except KeyError:
+            continue
+        yield key, value
 
 
 class BaseDictStrategy(object):
     def __init__(self, space):
+        self.space = space
+
+    def prepare_key(self, w_hash, w_key):
         pass
+
+    def next_entry(self, iterator, w_hash):
+        if self is w_hash.strategy:
+            return self.iternext(iterator)
+        return self.next_entry_after_transition(iterator, w_hash)
+
+    def next_entry_after_transition(self, iterator, w_hash):
+        # A non-symbol lookup can change storage without changing the
+        # Ruby hash. Iterators created before that must see later updates.
+        while True:
+            w_key, w_value = self.iternext(iterator)
+            try:
+                w_value = w_hash.getitem(w_key)
+            except KeyError:
+                continue
+            return w_key, w_value
 
 
 class TypedDictStrategyMixin(object):
@@ -62,7 +95,10 @@ class TypedDictStrategyMixin(object):
         return self.unerase(storage).values()
 
     def iteritems(self, storage):
-        return self.iter_erase(self.unerase(storage).iteritems())
+        data = self.unerase(storage)
+        if not we_are_translated():
+            return self.iter_erase(untranslated_dict_items(data, data.keys()))
+        return self.iter_erase(data.iteritems())
 
     def iternext(self, storage):
         key, value = self.iter_unerase(storage).next()
@@ -95,6 +131,39 @@ class IdentityDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
 
     def unwrap(self, w_key):
         return w_key
+
+
+class SymbolDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
+    """Interned symbols need no Ruby hash/eql? callbacks.
+
+    Start empty hashes here too. Any non-symbol key, including a lookup,
+    falls back to the generic strategy: custom objects can equal a symbol.
+    This is an implementation detail, not Ruby's compare_by_identity mode.
+    """
+    erase, unerase = new_static_erasing_pair("SymbolDictStrategy")
+    iter_erase, iter_unerase = new_static_erasing_pair("SymbolDictStrategyIterator")
+
+    def get_empty_storage(self, space):
+        return self.erase(OrderedDict())
+
+    def wrap(self, w_key):
+        return w_key
+
+    def unwrap(self, w_key):
+        return w_key
+
+    def prepare_key(self, w_hash, w_key):
+        if isinstance(w_key, W_SymbolObject):
+            return
+        self.switch_to_object_strategy(w_hash)
+
+    def switch_to_object_strategy(self, w_hash):
+        strategy = self.space.fromcache(ObjectDictStrategy)
+        storage = strategy.get_empty_storage(self.space)
+        for w_symbol, w_value in self.unerase(w_hash.dict_storage).iteritems():
+            strategy.setitem(storage, w_symbol, w_value)
+        w_hash.strategy = strategy
+        w_hash.dict_storage = storage
 
 
 def get_each_location(bytecode):
@@ -147,7 +216,7 @@ class W_HashObject(W_Object):
 
     def __init__(self, space, klass=None):
         W_Object.__init__(self, space, klass)
-        self.strategy = space.fromcache(ObjectDictStrategy)
+        self.strategy = space.fromcache(SymbolDictStrategy)
         self.dict_storage = self.strategy.get_empty_storage(space)
         self.w_default = space.w_nil
         self.default_proc = None
@@ -158,7 +227,7 @@ class W_HashObject(W_Object):
 
     def __deepcopy__(self, memo):
         obj = super(W_HashObject, self).__deepcopy__(memo)
-        obj.strategy = copy.deepcopy(self.strategy)
+        obj.strategy = copy.deepcopy(self.strategy, memo)
         obj.dict_storage = self.strategy.copy(self.dict_storage)
         obj.w_default = self.w_default
         obj.default_proc = copy.deepcopy(self.default_proc)
@@ -166,13 +235,20 @@ class W_HashObject(W_Object):
         return obj
 
     def getitem(self, w_key):
+        self.strategy.prepare_key(self, w_key)
         return self.strategy.getitem(self.dict_storage, w_key)
 
     def setitem(self, w_key, w_value):
+        self.strategy.prepare_key(self, w_key)
         return self.strategy.setitem(self.dict_storage, w_key, w_value)
 
     def delete(self, w_key):
+        self.strategy.prepare_key(self, w_key)
         return self.strategy.pop(self.dict_storage, w_key, None)
+
+    def contains(self, w_key):
+        self.strategy.prepare_key(self, w_key)
+        return self.strategy.contains(self.dict_storage, w_key)
 
     def is_empty_keywords(self):
         return self.is_keywords and self.size() == 0
@@ -358,7 +434,7 @@ class W_HashObject(W_Object):
         while True:
             each_driver.jit_merge_point(bytecode=bytecode)
             try:
-                w_key, w_value = strategy.iternext(iterator)
+                w_key, w_value = strategy.next_entry(iterator, self)
             except StopIteration:
                 break
             space.invoke_block(block, [space.newarray([w_key, w_value])])
@@ -376,7 +452,7 @@ class W_HashObject(W_Object):
         while True:
             each_with_object_driver.jit_merge_point(bytecode=bytecode)
             try:
-                w_key, w_value = strategy.iternext(iterator)
+                w_key, w_value = strategy.next_entry(iterator, self)
             except StopIteration:
                 break
             space.invoke_block(block, [space.newarray([w_key, w_value]), w_memo])
@@ -394,7 +470,7 @@ class W_HashObject(W_Object):
         while True:
             reject_bang_driver.jit_merge_point(bytecode=bytecode, keep=keep)
             try:
-                w_key, w_value = strategy.iternext(iterator)
+                w_key, w_value = strategy.next_entry(iterator, self)
             except StopIteration:
                 break
             if space.is_true(space.invoke_block(block, [w_key, w_value])) != keep:
@@ -458,7 +534,7 @@ class W_HashObject(W_Object):
         iterator = strategy.iteritems(w_other.dict_storage)
         while True:
             try:
-                w_key, w_value = strategy.iternext(iterator)
+                w_key, w_value = strategy.next_entry(iterator, w_other)
             except StopIteration:
                 break
             self.method_subscript_assign(space, w_key, w_value)
@@ -470,10 +546,10 @@ class W_HashObject(W_Object):
         while True:
             merge_driver.jit_merge_point(bytecode=bytecode)
             try:
-                w_key, w_value = strategy.iternext(iterator)
+                w_key, w_value = strategy.next_entry(iterator, w_other)
             except StopIteration:
                 break
-            if self.strategy.contains(self.dict_storage, w_key):
+            if self.contains(w_key):
                 w_value = space.invoke_block(
                     block, [w_key, self.getitem(w_key), w_value])
             self.method_subscript_assign(space, w_key, w_value)
@@ -489,7 +565,7 @@ class W_HashObject(W_Object):
         while True:
             hash_driver.jit_merge_point()
             try:
-                w_key, w_value = strategy.iternext(iterator)
+                w_key, w_value = strategy.next_entry(iterator, self)
             except StopIteration:
                 break
             pair = intmask(space.hash_w(w_key) * 1000003) ^ space.hash_w(w_value)
@@ -515,10 +591,10 @@ class W_HashObject(W_Object):
         iterator = strategy.iteritems(self.dict_storage)
         while True:
             try:
-                w_key, w_value = strategy.iternext(iterator)
+                w_key, w_value = strategy.next_entry(iterator, self)
             except StopIteration:
                 break
-            if w_mapping.strategy.contains(w_mapping.dict_storage, w_key):
+            if w_mapping.contains(w_key):
                 w_key = w_mapping.getitem(w_key)
             w_result.method_subscript_assign(space, w_key, w_value)
 
@@ -529,11 +605,11 @@ class W_HashObject(W_Object):
         while True:
             transform_keys_driver.jit_merge_point(bytecode=bytecode)
             try:
-                w_key, w_value = strategy.iternext(iterator)
+                w_key, w_value = strategy.next_entry(iterator, self)
             except StopIteration:
                 break
             if (w_mapping is not None and
-                    w_mapping.strategy.contains(w_mapping.dict_storage, w_key)):
+                    w_mapping.contains(w_key)):
                 w_key = w_mapping.getitem(w_key)
             else:
                 w_key = space.invoke_block(block, [w_key])
@@ -562,7 +638,7 @@ class W_HashObject(W_Object):
     @classdef.method("member?")
     @classdef.method("include?")
     def method_includep(self, space, w_key):
-        return space.newbool(self.strategy.contains(self.dict_storage, w_key))
+        return space.newbool(self.contains(w_key))
 
 
 class W_HashIterator(W_Object):
@@ -578,6 +654,7 @@ class W_HashIterator(W_Object):
     @classdef.method("initialize")
     def method_initialize(self, w_obj):
         assert isinstance(w_obj, W_HashObject)
+        self.w_hash = w_obj
         self.strategy = w_obj.strategy
         self.iterator = self.strategy.iteritems(w_obj.dict_storage)
         return self
@@ -585,7 +662,7 @@ class W_HashIterator(W_Object):
     @classdef.method("next")
     def method_next(self, space):
         try:
-            w_k, w_v = self.strategy.iternext(self.iterator)
+            w_k, w_v = self.strategy.next_entry(self.iterator, self.w_hash)
         except StopIteration:
             raise space.error(space.w_StopIteration)
         return space.newarray([w_k, w_v])

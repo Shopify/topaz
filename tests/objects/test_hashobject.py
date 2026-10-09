@@ -261,3 +261,131 @@ class TestHashObject(BaseTopazTest):
             space.execute("{a: 1}.freeze.reject! { true }")
         with self.raises(space, "FrozenError"):
             space.execute("{a: 1}.freeze.keep_if { true }")
+
+    def test_filter_storage_transition(self, space):
+        w_res = space.execute('''
+        result = []
+        [:reject!, :delete_if, :select!, :keep_if].each do |method|
+          h = {a: 1, b: 2, c: 3}
+          seen = []
+          h.send(method) do |key, value|
+            seen << [key, value]
+            if key == :a
+              h[Object.new]
+              h[:b] = 20
+              h.delete(:c)
+            end
+            method == :select! || method == :keep_if
+          end
+          result << seen << h
+        end
+        return result
+        ''')
+        assert self.unwrap(space, w_res) == [
+            [['a', 1], ['b', 20]], {'a': 1, 'b': 20}] * 4
+
+    def test_iteration_observes_deletions_and_updates(self, space):
+        w_res = space.execute('''
+        results = []
+        [{a: 1, b: 2, c: 3}, {a: 1, b: 2, c: 3}.compare_by_identity,
+         {1 => 1, 2 => 2, 3 => 3}].each do |h|
+          keys = h.keys
+          seen = []
+          h.each do |key, value|
+            seen << value
+            if key == keys[0]
+              h.delete(keys[0])
+              h[keys[1]] = 20
+              h.delete(keys[2])
+            end
+          end
+          results << seen
+        end
+        return results
+        ''')
+        assert self.unwrap(space, w_res) == [[1, 20]] * 3
+
+    def test_symbol_storage(self, space):
+        from topaz.objects.hashobject import SymbolDictStrategy, ObjectDictStrategy
+        w_hash = space.execute('return {a: 1, b: 2}')
+        assert w_hash.strategy is space.fromcache(SymbolDictStrategy)
+        assert self.unwrap(space, w_hash.getitem(space.newsymbol('a'))) == 1
+        assert not w_hash.contains(space.newsymbol('missing'))
+        w_hash.setitem(space.newsymbol('a'), space.newint(3))
+        assert self.unwrap(space, space.send(w_hash, 'keys')) == ['a', 'b']
+        assert w_hash.strategy is space.fromcache(SymbolDictStrategy)
+        w_hash.setitem(space.newint(42), space.newint(4))
+        assert w_hash.strategy is space.fromcache(ObjectDictStrategy)
+        assert self.unwrap(space, space.send(w_hash, 'keys')) == ['a', 'b', 42]
+        assert self.unwrap(space, space.send(w_hash, 'values')) == [3, 2, 4]
+
+    def test_symbol_custom_key_fallback(self, space):
+        w_res = space.execute('''
+        class SymbolAlias
+          def hash; :a.hash; end
+          def eql?(other); other == :a; end
+        end
+        key = SymbolAlias.new
+        result = []
+        result << {a: 7}[key]
+        result << {a: 7}.key?(key)
+        result << {a: 7}.delete(key)
+        h = {a: 7, b: 8}
+        h[key] = 9
+        result << h.keys << h.values
+        result << {a: 7}.merge({key => 2}) { |k, old, new| old + new }.values
+        result << {key => 7}.transform_keys({a: :renamed}).keys
+        return result
+        ''')
+        assert self.unwrap(space, w_res) == [7, True, 7, ['a', 'b'], [9, 8], [9], ['renamed']]
+
+    def test_symbol_storage_copy_and_identity(self, space):
+        from topaz.objects.hashobject import SymbolDictStrategy, IdentityDictStrategy
+        w_hash = space.execute('return {a: 1, b: 2}.dup.rehash')
+        assert w_hash.strategy is space.fromcache(SymbolDictStrategy)
+        assert space.send(w_hash, 'compare_by_identity?') is space.w_false
+        w_copy = w_hash.copy_keywords(space)
+        w_copy.delete(space.newsymbol('a'))
+        assert w_hash.size() == 2
+        assert w_copy.size() == 1
+        space.send(w_hash, 'compare_by_identity')
+        assert w_hash.strategy is space.fromcache(IdentityDictStrategy)
+        assert self.unwrap(space, space.send(w_hash, 'keys')) == ['a', 'b']
+
+    def test_symbol_storage_transition_during_iteration(self, space):
+        w_res = space.execute('''
+        h = {a: 1, b: 2, c: 3}
+        seen = []
+        h.each do |key, value|
+          seen << [key, value]
+          if key == :a
+            h[Object.new] # read-only operation switches storage
+            h[:b] = 20
+            h.delete(:c)
+          end
+        end
+        h = {a: 1, b: 2}
+        iter = Topaz::HashIterator.new(h)
+        first = iter.next
+        h[Object.new]
+        h[:b] = 20
+        return [seen, first, iter.next]
+        ''')
+        assert self.unwrap(space, w_res) == [[['a', 1], ['b', 20]], ['a', 1], ['b', 20]]
+
+    def test_symbol_storage_frozen_lookup_and_identity_custom_key(self, space):
+        w_res = space.execute('''
+        class SymbolAlias
+          def hash; :a.hash; end
+          def eql?(other); other == :a; end
+        end
+        key = SymbolAlias.new
+        h = {a: 7}.freeze
+        result = [h[key], h.key?(key), h.frozen?]
+        h = {a: 7}.compare_by_identity
+        result << h[key] << h.key?(key)
+        h[key] = 8
+        result << h[:a] << h[key] << h.size << h.compare_by_identity?
+        return result
+        ''')
+        assert self.unwrap(space, w_res) == [7, True, True, None, False, 7, 8, 2, True]

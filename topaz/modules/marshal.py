@@ -99,7 +99,7 @@ class Marshal(object):
             bytes += Marshal.integer2bytes(hash_len)
             for w_key in hash_keys_w:
                 bytes += Marshal.dump(space, w_key)
-                w_value = w_obj.strategy.getitem(w_obj.dict_storage, w_key)
+                w_value = w_obj.getitem(w_key)
                 bytes += Marshal.dump(space, w_value)
         else:
             raise NotImplementedError(type(w_obj))
