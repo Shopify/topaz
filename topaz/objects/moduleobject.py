@@ -272,14 +272,14 @@ class W_ModuleObject(W_RootObject):
             method = method.with_visibility(W_FunctionObject.PRIVATE)
         if name == "initialize" or name == "initialize_copy":
             method = method.with_visibility(W_FunctionObject.PRIVATE)
-        self.mutated()
-        self.methods_w[name] = method
         if isinstance(method, W_UserFunction):
             if method.w_owner is None:
-                method.w_owner = self
+                method = method.with_owner(self)
         elif isinstance(method, DefineMethodBlock):
             if method.w_owner is None:
                 method.w_owner = self
+        self.mutated()
+        self.methods_w[name] = method
         self.shadow_hidden_subclasses(name)
         if not space.bootstrap:
             if isinstance(method, UndefMethod):

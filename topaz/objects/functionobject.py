@@ -79,18 +79,17 @@ class W_VisibilityFunction(W_FunctionObject):
 
 
 class W_UserFunction(W_FunctionObject):
-    # w_owner is written once, by define_method right after `def` creates
-    # the function (and on fresh copies): quasi-immutable, so that traces
-    # calling a known method get its owner (for super and Method#owner) as
-    # a constant instead of a getfield and a guard per call.
-    _immutable_fields_ = ["bytecode", "lexical_scope", "w_owner?"]
+    # define_method installs an owned copy of a newly built function.
+    # Immutable ownership lets calls to known methods fold the owner
+    # without a read-then-write quasi-immutable abort during definition.
+    _immutable_fields_ = ["bytecode", "lexical_scope", "w_owner"]
 
-    def __init__(self, name, bytecode, lexical_scope, visibility=W_FunctionObject.PUBLIC):
+    def __init__(self, name, bytecode, lexical_scope, visibility=W_FunctionObject.PUBLIC, w_owner=None):
         W_FunctionObject.__init__(self, name, visibility=visibility)
         self.bytecode = bytecode
         self.lexical_scope = lexical_scope
         # The module the method was first defined in (see define_method).
-        self.w_owner = None
+        self.w_owner = w_owner
 
     def __deepcopy__(self, memo):
         obj = super(W_UserFunction, self).__deepcopy__(memo)
@@ -100,9 +99,12 @@ class W_UserFunction(W_FunctionObject):
         return obj
 
     def with_visibility(self, visibility):
-        w_copy = W_UserFunction(self.name, self.bytecode, self.lexical_scope, visibility)
-        w_copy.w_owner = self.w_owner
-        return w_copy
+        return W_UserFunction(
+            self.name, self.bytecode, self.lexical_scope, visibility, self.w_owner)
+
+    def with_owner(self, w_owner):
+        return W_UserFunction(
+            self.name, self.bytecode, self.lexical_scope, self.visibility, w_owner)
 
     def call(self, space, w_receiver, args_w, block):
         return self.call_with_super(space, w_receiver, args_w, block, 0)

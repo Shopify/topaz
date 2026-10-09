@@ -102,6 +102,41 @@ class TestModuleObject(BaseTopazTest):
         """)
         assert self.unwrap(space, w_res) == 3
 
+    def test_user_function_owner_survives_alias_and_visibility(self, space):
+        w_res = space.execute("""
+        class Parent
+          def f; 10; end
+        end
+        class Child < Parent
+          def f; super + 1; end
+        end
+        class Grandchild < Child
+          alias_method :g, :f
+          private :g
+          def call_g; g; end
+        end
+        return [Grandchild.new.call_g, Child.new.f,
+                Grandchild.private_instance_methods(false).include?(:g)]
+        """)
+        assert self.unwrap(space, w_res) == [11, 11, True]
+        w_child = self.find_const(space, "Child")
+        w_grandchild = self.find_const(space, "Grandchild")
+        assert w_child.find_method(space, "f").w_owner is w_child
+        assert w_grandchild.find_method(space, "g").w_owner is w_child
+
+    def test_bare_module_function_owners(self, space):
+        w_mod = space.execute("""
+        module OwnerModule
+          module_function
+          def f; 123; end
+        end
+        return OwnerModule
+        """)
+        w_singleton = space.getsingletonclass(w_mod)
+        assert w_mod.find_method(space, "f").w_owner is w_mod
+        assert w_singleton.find_method(space, "f").w_owner is w_singleton
+        assert space.int_w(space.send(w_mod, "f")) == 123
+
     def test_alias_method_builtin(self, space):
         w_res = space.execute("""
         class Integer
