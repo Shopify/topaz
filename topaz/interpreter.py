@@ -857,7 +857,7 @@ class Interpreter(object):
             return pc
 
     def JUMP_IF_KWARG_GIVEN(self, space, bytecode, frame, pc, target_pc, idx):
-        if frame.kwargs_given & (1 << idx):
+        if frame.is_kwarg_given(space, idx):
             return target_pc
         return pc
 

@@ -10,7 +10,7 @@ class TestBasic(BaseJITTest):
         end
         """)
         self.assert_matches(self.ruby_loop(traces), """
-        label(p0, p1, p2, p4, p5, p6, p8, p9, i10, i39, p19, p21, p32, descr=TargetToken(132797350705824))
+        label(p0, p1, p2, p4, p5, p6, p8, p9, i39, p19, p21, p32, descr=TargetToken(132797350705824))
         debug_merge_point(0, 0, '<main> at LOAD_DEREF')
         guard_not_invalidated(descr=<Guard0x78c74ae67790>)
         debug_merge_point(0, 0, '<main> at LOAD_CONST')
@@ -30,7 +30,7 @@ class TestBasic(BaseJITTest):
         debug_merge_point(0, 0, '<main> at JUMP')
         debug_merge_point(0, 0, '<main> at LOAD_DEREF')
         setfield_gc(p21, 32, descr=<FieldS topaz.executioncontext.ExecutionContext.inst_last_instr 24>)
-        jump(p0, p1, p2, p4, p5, p6, p8, p9, i10, i48, p19, p21, p32, descr=TargetToken(132797350705824))
+        jump(p0, p1, p2, p4, p5, p6, p8, p9, i48, p19, p21, p32, descr=TargetToken(132797350705824))
         """)
 
     def test_constant_string(self, topaz, tmpdir):
@@ -41,7 +41,7 @@ class TestBasic(BaseJITTest):
         end
         """)
         self.assert_matches(self.ruby_loop(traces), """
-        label(p0, p1, p2, p4, p5, p6, p8, p9, i10, i40, p19, p21, p32, descr=TargetToken(130685221100192))
+        label(p0, p1, p2, p4, p5, p6, p8, p9, i40, p19, p21, p32, descr=TargetToken(130685221100192))
         debug_merge_point(0, 0, '<main> at LOAD_DEREF')
         guard_not_invalidated(descr=<Guard0x76db862a5740>)
         debug_merge_point(0, 0, '<main> at LOAD_CONST')
@@ -64,7 +64,7 @@ class TestBasic(BaseJITTest):
         debug_merge_point(0, 0, '<main> at JUMP')
         debug_merge_point(0, 0, '<main> at LOAD_DEREF')
         setfield_gc(p21, 38, descr=<FieldS topaz.executioncontext.ExecutionContext.inst_last_instr 24>)
-        jump(p0, p1, p2, p4, p5, p6, p8, p9, i10, i50, p19, p21, p32, descr=TargetToken(130685221100192))
+        jump(p0, p1, p2, p4, p5, p6, p8, p9, i50, p19, p21, p32, descr=TargetToken(130685221100192))
         """)
 
     def test_method_missing(self, topaz, tmpdir):
@@ -76,7 +76,7 @@ class TestBasic(BaseJITTest):
         end
         """)
         self.assert_matches(self.ruby_loop(traces), """
-        label(p0, p1, p2, p4, p5, p8, p9, i10, i49, p19, p21, p32, descr=TargetToken(126646298508128))
+        label(p0, p1, p2, p4, p5, p8, p9, i49, p19, p21, p32, descr=TargetToken(126646298508128))
         debug_merge_point(0, 0, '<main> at LOAD_DEREF')
         guard_not_invalidated(descr=<Guard0x732f239e7790>)
         debug_merge_point(0, 0, '<main> at LOAD_CONST')
@@ -113,5 +113,5 @@ class TestBasic(BaseJITTest):
         debug_merge_point(0, 0, '<main> at JUMP')
         debug_merge_point(0, 0, '<main> at LOAD_DEREF')
         setfield_gc(p21, 45, descr=<FieldS topaz.executioncontext.ExecutionContext.inst_last_instr 24>)
-        jump(p0, p1, p2, p4, p5, p8, p9, i10, i62, p19, p21, p32, descr=TargetToken(126646298508128))
+        jump(p0, p1, p2, p4, p5, p8, p9, i62, p19, p21, p32, descr=TargetToken(126646298508128))
         """)

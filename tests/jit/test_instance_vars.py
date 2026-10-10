@@ -58,7 +58,7 @@ class TestInstanceVars(BaseJITTest):
         end
         """)
         self.assert_matches(self.ruby_loop(traces), """
-        label(p0, p1, p2, p4, p5, p8, p9, i10, i47, p19, p21, p23, p34, descr=TargetToken(132283683470176))
+        label(p0, p1, p2, p4, p5, p8, p9, i47, p19, p21, p23, p34, descr=TargetToken(132283683470176))
         debug_merge_point(0, 0, '<main> at LOAD_DEREF')
         guard_not_invalidated(descr=<Guard0x784fb1f27790>)
         debug_merge_point(0, 0, '<main> at LOAD_CONST')
@@ -99,7 +99,7 @@ class TestInstanceVars(BaseJITTest):
         debug_merge_point(0, 0, '<main> at JUMP')
         debug_merge_point(0, 0, '<main> at LOAD_DEREF')
         setfield_gc(p23, 55, descr=<FieldS topaz.executioncontext.ExecutionContext.inst_last_instr 24>)
-        jump(p0, p1, p2, p4, p5, p8, p9, i10, i62, p19, p21, p23, p34, descr=TargetToken(132283683470176))
+        jump(p0, p1, p2, p4, p5, p8, p9, i62, p19, p21, p23, p34, descr=TargetToken(132283683470176))
         """)
 
     def test_unboxed_int_storage(self, topaz, tmpdir):
@@ -110,7 +110,7 @@ class TestInstanceVars(BaseJITTest):
         end
         """)
         self.assert_matches(self.ruby_loop(traces), """
-        label(p0, p1, p2, p4, p5, p6, p8, p9, i10, p19, p27, f39, p31, descr=TargetToken(140079171533664))
+        label(p0, p1, p2, p4, p5, p6, p8, p9, p19, p27, f39, p31, descr=TargetToken(140079171533664))
         debug_merge_point(0, 0, '<main> at LOAD_SELF')
         guard_not_invalidated(descr=<Guard0x7f66b93f76a0>)
         debug_merge_point(0, 0, '<main> at LOAD_INSTANCE_VAR')
@@ -137,7 +137,7 @@ class TestInstanceVars(BaseJITTest):
         i51 = arraylen_gc(p27, descr=<ArrayF 8>)
         setfield_gc(p19, 36, descr=<FieldS topaz.executioncontext.ExecutionContext.inst_last_instr 24>)
         setarrayitem_gc(p27, 0, f50, descr=<ArrayF 8>)
-        jump(p0, p1, p2, p4, p5, p6, p8, p9, i10, p19, p27, f50, p31, descr=TargetToken(140079171533664))
+        jump(p0, p1, p2, p4, p5, p6, p8, p9, p19, p27, f50, p31, descr=TargetToken(140079171533664))
         """)
 
     def test_unboxed_float_storage(self, topaz, tmpdir):
@@ -148,7 +148,7 @@ class TestInstanceVars(BaseJITTest):
         end
         """)
         self.assert_matches(self.ruby_loop(traces), """
-        label(p0, p1, p2, p4, p5, p6, p8, p9, i10, p19, p27, f37, p30, descr=TargetToken(123277409680160))
+        label(p0, p1, p2, p4, p5, p6, p8, p9, p19, p27, f37, p30, descr=TargetToken(123277409680160))
         debug_merge_point(0, 0, '<main> at LOAD_SELF')
         guard_not_invalidated(descr=<Guard0x701ec23376a0>)
         debug_merge_point(0, 0, '<main> at LOAD_INSTANCE_VAR')
@@ -173,5 +173,5 @@ class TestInstanceVars(BaseJITTest):
         i47 = arraylen_gc(p27, descr=<ArrayF 8>)
         setfield_gc(p19, 36, descr=<FieldS topaz.executioncontext.ExecutionContext.inst_last_instr 24>)
         setarrayitem_gc(p27, 0, f46, descr=<ArrayF 8>)
-        jump(p0, p1, p2, p4, p5, p6, p8, p9, i10, p19, p27, f46, p30, descr=TargetToken(123277409680160))
+        jump(p0, p1, p2, p4, p5, p6, p8, p9, p19, p27, f46, p30, descr=TargetToken(123277409680160))
         """)

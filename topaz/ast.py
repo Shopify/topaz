@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 from rpython.rlib.objectmodel import we_are_translated
+from rpython.rlib.rarithmetic import LONG_BIT
 
 from topaz import consts
 from topaz.astcompiler import CompilerContext, BlockSymbolTable, CompilerError
@@ -497,8 +498,9 @@ class AbstractCallable(Node):
         for arg in kwargs:
             assert isinstance(arg, Argument)
             if arg.defl is not None:
-                if kw_index >= 62:
-                    raise CompilerError("too many keyword arguments with defaults")
+                if kw_index >= LONG_BIT:
+                    raise CompilerError(
+                        "too many keyword arguments with defaults (maximum %d)" % LONG_BIT)
                 skip = code_ctx.new_block()
                 code_ctx.emit_jump(consts.JUMP_IF_KWARG_GIVEN, skip, kw_index)
                 arg.defl.compile(code_ctx)

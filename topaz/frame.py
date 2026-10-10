@@ -1,4 +1,5 @@
 from rpython.rlib import jit
+from rpython.rlib.rarithmetic import intmask, r_uint
 
 from topaz.closure import BaseCell, ClosureCell, LOCAL_CELL
 from topaz.objects.hashobject import W_HashObject
@@ -34,7 +35,7 @@ class Frame(BaseFrame):
     _virtualizable_ = [
         "bytecode", "localsstack_w[*]", "stackpos", "w_self", "block",
         "lexical_scope", "last_instr",
-        "parent_interp", "top_parent_interp", "kwargs_given",
+        "parent_interp", "top_parent_interp",
     ]
 
     @jit.unroll_safe
@@ -48,15 +49,16 @@ class Frame(BaseFrame):
         # dispatches on the cell type, not the Ruby value's type.
         num_locals = len(bytecode.cellvars)
         cells_start = num_locals + bytecode.max_stackdepth
-        self.localsstack_w = [None] * (
-            cells_start + num_locals + len(bytecode.freevars))
+        size = cells_start + num_locals + len(bytecode.freevars)
+        # Optional keyword bookkeeping occupies a private trailing slot,
+        # outside the locals, operand stack, and cells. None means no bits.
+        if bytecode.num_kw_defaults > 0:
+            size += 1
+        self.localsstack_w = [None] * size
         for i in xrange(num_locals):
             self.localsstack_w[cells_start + i] = LOCAL_CELL
         self.stackpos = len(bytecode.cellvars)
         self.last_instr = 0
-        # One bit per keyword argument with a default that was passed:
-        # the code's prologue computes the others' defaults.
-        self.kwargs_given = 0
         self.regexp_match_cell = regexp_match_cell
         self.w_self = w_self
         self.lexical_scope = lexical_scope
@@ -244,6 +246,7 @@ class Frame(BaseFrame):
             w_splat_args = space.newarray(splat_args_w)
             self._set_arg(space, bytecode.splat_arg_pos, w_splat_args)
 
+        kwargs_given = r_uint(0)
         for i, name in enumerate(bytecode.kwarg_names):
             w_key = space.newsymbol(name)
             w_value = None
@@ -257,7 +260,7 @@ class Frame(BaseFrame):
             # index error here, we're missing a required keyword argument
             if w_value is not None:
                 if i < bytecode.num_kw_defaults:
-                    self.kwargs_given |= 1 << i
+                    kwargs_given |= r_uint(1) << i
             elif i < bytecode.num_kw_defaults:
                 # The code's prologue computes the default.
                 continue
@@ -300,6 +303,23 @@ class Frame(BaseFrame):
             else:
                 w_block = block.copy(space)
             self._set_arg(space, bytecode.block_arg_pos, w_block)
+
+        if bytecode.num_kw_defaults > 0:
+            index = len(self.localsstack_w) - 1
+            assert index >= 0
+            w_bits = None
+            if kwargs_given:
+                # Preserve the highest bit in a signed Fixnum. Box only
+                # once, after collecting all supplied optional keywords.
+                w_bits = space.newint(intmask(kwargs_given))
+            self.localsstack_w[index] = w_bits
+
+    def is_kwarg_given(self, space, index):
+        slot = len(self.localsstack_w) - 1
+        assert slot >= 0
+        w_bits = self.localsstack_w[slot]
+        return (w_bits is not None and
+                bool(r_uint(space.int_w(w_bits)) & (r_uint(1) << index)))
 
     def push(self, w_obj):
         stackpos = jit.promote(self.stackpos)

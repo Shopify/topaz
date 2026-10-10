@@ -8,7 +8,7 @@ class TestArray(BaseJITTest):
         10000.times { arr[0] = true }
         """)
         self.assert_matches(self.ruby_loop(traces, "times"), """
-        label(p0, p1, p2, p4, p5, p6, p8, p9, i10, p13, i81, p21, p23, p25, i42, p39, p60, p65, p73, p58, p77, descr=TargetToken(136973925417888))
+        label(p0, p1, p2, p4, p5, p6, p8, p9, p13, i81, p21, p23, p25, i42, p39, p60, p65, p73, p58, p77, descr=TargetToken(136973925417888))
         debug_merge_point(0, 0, 'times at LOAD_DEREF')
         guard_not_invalidated(descr=<Guard0x7c93ba3377e0>)
         debug_merge_point(0, 0, 'times at LOAD_SELF')
@@ -44,7 +44,7 @@ class TestArray(BaseJITTest):
         i96 = arraylen_gc(p58, descr=<ArrayP 8>)
         i97 = arraylen_gc(p77, descr=<ArrayP 8>)
         setfield_gc(p25, 60, descr=<FieldS topaz.executioncontext.ExecutionContext.inst_last_instr 24>)
-        jump(p0, p1, p2, p4, p5, p6, p8, p9, i10, p13, i95, p21, p23, p25, i42, p39, p60, p65, p73, p58, p77, descr=TargetToken(136973925417888))
+        jump(p0, p1, p2, p4, p5, p6, p8, p9, p13, i95, p21, p23, p25, i42, p39, p60, p65, p73, p58, p77, descr=TargetToken(136973925417888))
         """)
 
     def test_bsearch_index(self, topaz, tmpdir):
