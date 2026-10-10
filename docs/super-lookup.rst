@@ -12,7 +12,8 @@ Ancestor entries
 
 Each module or class has an ``origin_entry`` for its own method table, plus
 ``included_entries`` and ``prepended_entries`` arrays. An ``AncestorEntry``
-identifies one occurrence and references its module. Superclasses contribute
+identifies one occurrence and references its module and the class or module
+whose local chain contains it. Superclasses contribute
 their existing entries to a subclass's chain.
 
 Includes and prepends insert new entries without replacing existing ones.
@@ -22,8 +23,9 @@ independent local entries. The parallel module arrays remain available to
 ordinary method lookup and the Ruby ``ancestors`` API.
 
 Entries do not freeze a chain or contain immutable next pointers. Super lookup
-finds the captured entry by identity in the receiver's current ancestor chain
-and searches after it. Inserting a module before that entry cannot move the
+finds the captured entry by identity in its owning ancestor chain and searches
+after it. Changing the receiver with ``instance_exec`` does not change this
+destination. Inserting a module before that entry cannot move the
 starting point to a different occurrence. Inserting a module after it remains
 visible, as do method redefinitions.
 
@@ -36,9 +38,9 @@ original name from their bytecode. Aliases preserve the function's original
 super metadata: invoking an alias resolves the original owner's occurrence
 at that time, while a block from an executed alias retains the resolved entry.
 
-Class methods use their owner's origin context directly. Module methods
-resolve a context for the appropriate occurrence in the receiver's chain
-before running the body. This happens on both ordinary calls and the fast
+Methods defined on classes use their owner's origin context directly. Methods
+defined on modules resolve a context for the appropriate occurrence in the
+receiver's chain before running the body. This happens on both ordinary calls and the fast
 argument path in ``send_valuestack``. A super call passes the next selected
 entry explicitly to the callee, distinguishing repeated occurrences.
 

@@ -116,3 +116,36 @@ class TestStableSuper(BaseTopazTest):
           return User.new.f
         ''')
         assert self.unwrap(space, result) == ['repeat', 'base']
+
+    @pytest.mark.parametrize('body, capture, expected', [
+        ('[:repeat] + super', 'object.method(:g)', ['repeat', 'repeat', 'base']),
+        ('proc { super }', 'object.g', ['base']),
+    ])
+    def test_alias_resolves_original_owner_when_invoked(self, space, body, capture, expected):
+        # A saved alias method resolves the original owner when called; a
+        # block from an already executed alias has captured that occurrence.
+        result = space.execute('''
+          module Repeat; def f; %s; end; end
+          class Base; def f; [:base]; end; end
+          class User < Base
+            include Repeat
+            alias g f
+          end
+          object = User.new
+          saved = %s
+          User.prepend(Repeat)
+          return saved.call
+        ''' % (body, capture))
+        assert self.unwrap(space, result) == expected
+
+    def test_captured_entry_keeps_its_chain_when_receiver_changes(self, space):
+        result = space.execute('''
+          module Repeat; def f; proc { super() }; end; end
+          class Base; def f; :original_base; end; end
+          class User < Base; include Repeat; end
+          class OtherBase; def f; :other_base; end; end
+          class Other < OtherBase; include Repeat; end
+          saved = User.new.f
+          return Other.new.instance_exec(&saved)
+        ''')
+        assert self.unwrap(space, result) == 'original_base'

@@ -39,5 +39,7 @@ class TestAncestorEntries(BaseTopazTest):
         original = w_original.ancestor_entries()
         copied = w_copy.ancestor_entries()
         assert copied[0].w_module is w_copy
+        assert copied[0].w_chain_owner is w_copy
+        assert copied[1].w_chain_owner is w_copy
         assert copied[1].w_module is original[1].w_module
         assert copied[1] is not original[1]
