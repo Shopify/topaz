@@ -21,10 +21,10 @@ BYTECODES = [
     ("LOAD_CLOSURE", 1, +1),
 
     ("LOAD_CONSTANT", 1, 0),
-    ("STORE_CONSTANT", 1, 0),
+    ("STORE_CONSTANT", 1, -1),
     ("DEFINED_CONSTANT", 1, 0),
 
-    ("LOAD_LOCAL_CONSTANT", 1, +1),
+    ("LOAD_LOCAL_CONSTANT", 1, 0),
     ("DEFINED_LOCAL_CONSTANT", 1, 0),
 
     ("LOAD_INSTANCE_VAR", 1, 0),
@@ -75,11 +75,8 @@ BYTECODES = [
     ("SEND_SUPER_BLOCK_SPLAT", 2, SEND_EFFECT),
     ("DEFINED_SUPER", 1, 0),
 
-    ("SETUP_LOOP", 1, 0),
-    ("SETUP_EXCEPT", 1, 0),
-    ("SETUP_FINALLY", 1, 0),
-    ("END_FINALLY", 0, -2),
-    ("POP_BLOCK", 0, 0),
+    ("END_FINALLY", 1, -2),
+    ("CLEAR_STACK", 1, 0),
 
     ("JUMP", 1, 0),
     ("JUMP_IF_TRUE", 1, -1),
@@ -95,7 +92,7 @@ BYTECODES = [
     ("ROT_THREE", 0, 0),
 
     ("YIELD", 1, ARRAY_EFFECT),
-    ("YIELD_SPLAT", 1, SEND_EFFECT),
+    ("YIELD_SPLAT", 1, ARRAY_EFFECT),
     ("DEFINED_YIELD", 0, +1),
 
     ("RETURN", 0, -1),
@@ -117,3 +114,10 @@ for i, (name, num_args, stack_effect) in enumerate(BYTECODES):
     BYTECODE_STACK_EFFECT.append(stack_effect)
 
 UNROLLING_BYTECODES = unrolling_iterable(enumerate(BYTECODE_NAMES))
+
+# Compiler-only scope markers. Never emitted into executable bytecode.
+SETUP_LOOP = -1
+SETUP_EXCEPT = -2
+SETUP_FINALLY = -3
+POP_BLOCK = -4
+END_RESCUE = -5

@@ -1,5 +1,5 @@
 from topaz import consts
-from topaz.objects.codeobject import W_CodeObject
+from topaz.objects.codeobject import W_CodeObject, UnwindHandler, UnwindInterval
 
 
 class BaseSymbolTable(object):
@@ -148,8 +148,10 @@ class CompilerContext(object):
                 assert False
 
         blocks = self.first_block.post_order()
+        depth, handlers = self.analyze_unwind(blocks)
+        self.lower_unwind(blocks)
         code, lineno_table = self.get_code_lineno_table(blocks)
-        depth = self.count_stackdepth(blocks)
+        unwind_handlers, intervals = self.build_unwind_tables(blocks, handlers)
         # Where to start when k optional positional arguments were passed.
         default_entry_pcs = [self.block_offsets[b] for b in self.default_entry_blocks]
         return W_CodeObject(
@@ -171,6 +173,8 @@ class CompilerContext(object):
             freevars,
             lineno_table,
             default_entry_pcs,
+            unwind_handlers,
+            intervals,
         )
 
     def get_code_lineno_table(self, blocks):
@@ -192,33 +196,166 @@ class CompilerContext(object):
             block.get_code(code, linenos)
         return "".join(code), linenos
 
-    def count_stackdepth(self, blocks):
-        for b in blocks:
-            b.marked = False
-            b.initial_depth = -1
-        return self._count_stackdepth(blocks[0], 0, 0)
+    def analyze_unwind(self, blocks):
+        """Verify every reachable edge before assigning byte offsets.
 
-    def _count_stackdepth(self, block, depth, max_depth):
-        if block.marked or block.initial_depth >= depth:
-            return max_depth
+        The state is (relative operand depth, static handler ID). SETUP
+        markers supply exceptional edges explicitly; their targets run in
+        the parent scope. Synthetic values after terminal transfers are
+        unreachable and are removed by lowering.
+        """
+        handlers = []
+        pending = [(self.first_block, 0, -1)]
+        for block in self.default_entry_blocks:
+            pending.append((block, 0, -1))
+        entries = {}
+        maximum = 0
+        while pending:
+            block, depth, head = pending.pop()
+            if block in entries:
+                if entries[block] != (depth, head):
+                    raise CompilerError("inconsistent stack or handler context at join in %s" % self.code_name)
+                continue
+            entries[block] = (depth, head)
+            maximum = max(maximum, depth)
+            falls_through = True
+            for instr in block.instrs:
+                instr.reachable = True
+                instr.handler = head
+                instr.depth = depth
+                op = instr.opcode
+                if op in (consts.SETUP_LOOP, consts.SETUP_EXCEPT,
+                          consts.SETUP_FINALLY):
+                    if op == consts.SETUP_LOOP:
+                        kind = UnwindHandler.LOOP
+                        payload = 1
+                    elif op == consts.SETUP_EXCEPT:
+                        kind = UnwindHandler.RESCUE
+                        payload = 2
+                    else:
+                        kind = UnwindHandler.ENSURE
+                        payload = 3
+                    handler = CompilerHandler(kind, instr.jump, head, depth)
+                    pending.append((instr.jump, depth + payload, head))
+                    head = len(handlers)
+                    handlers.append(handler)
+                elif op == consts.POP_BLOCK:
+                    if head < 0:
+                        raise CompilerError("scope exit without a handler")
+                    handler = handlers[head]
+                    retained = handler.stackdepth
+                    if handler.kind != UnwindHandler.LOOP:
+                        retained += 1
+                    depth = min(depth, retained)
+                    instr.cleanup_depth = depth
+                    instr.push_nil = handler.kind == UnwindHandler.ENSURE
+                    if instr.push_nil:
+                        depth += 1
+                    head = handler.parent
+                else:
+                    if op == consts.END_RESCUE:
+                        depth -= 2
+                    else:
+                        effect = self._instr_stack_effect(instr)
+                        if depth < self._instr_stack_inputs(instr, effect):
+                            raise CompilerError("operand stack underflow")
+                        depth += effect
+                    if depth < 0:
+                        raise CompilerError("operand stack underflow")
+                    if op == consts.CONTINUE_LOOP:
+                        loop = head
+                        while loop >= 0 and handlers[loop].kind != UnwindHandler.LOOP:
+                            loop = handlers[loop].parent
+                        if loop < 0:
+                            raise CompilerError("next without a loop")
+                        pending.append((instr.jump, handlers[loop].stackdepth, loop))
+                    elif instr.has_jump():
+                        pending.append((instr.jump, depth, head))
+                    if op in (consts.JUMP, consts.RETURN, consts.RAISE_RETURN,
+                              consts.BREAK_LOOP, consts.RAISE_BREAK,
+                              consts.CONTINUE_LOOP, consts.END_RESCUE):
+                        falls_through = False
+                        break
+                maximum = max(maximum, depth)
+            if falls_through and block.next_block is not None:
+                pending.append((block.next_block, depth, head))
+        self.compiler_handlers = handlers
+        return maximum, handlers
 
-        block.marked = True
-        block.initial_depth = depth
+    def lower_unwind(self, blocks):
+        for block in blocks:
+            lowered = []
+            for instr in block.instrs:
+                if not instr.reachable:
+                    continue
+                op = instr.opcode
+                if op in (consts.SETUP_LOOP, consts.SETUP_EXCEPT,
+                          consts.SETUP_FINALLY):
+                    # Exceptional reachability was resolved by analysis.
+                    continue
+                if op == consts.POP_BLOCK:
+                    if instr.depth != instr.cleanup_depth:
+                        cleanup = Instruction(consts.CLEAR_STACK,
+                                              instr.cleanup_depth, -1, instr.lineno)
+                        cleanup.handler = instr.handler
+                        lowered.append(cleanup)
+                    if instr.push_nil:
+                        sentinel = Instruction(consts.LOAD_CONST,
+                            self.create_const(self.space.w_nil), -1, instr.lineno)
+                        # This instruction belongs to the parent scope.
+                        sentinel.handler = self._parent_handler(instr.handler)
+                        lowered.append(sentinel)
+                    continue
+                if op in (consts.END_FINALLY, consts.END_RESCUE):
+                    instr.opcode = consts.END_FINALLY
+                    # Zero encodes the empty chain; other IDs are biased by one.
+                    instr.arg0 = instr.handler + 1
+                lowered.append(instr)
+            block.instrs = lowered
 
-        for instr in block.instrs:
-            depth += self._instr_stack_effect(instr)
-            max_depth = max(max_depth, depth)
-            if instr.has_jump():
-                target_depth = depth
-                jump_op = instr.opcode
-                if jump_op in [consts.SETUP_FINALLY, consts.SETUP_EXCEPT]:
-                    target_depth += 3
-                    max_depth = max(max_depth, target_depth)
-                max_depth = self._count_stackdepth(instr.jump, target_depth, max_depth)
-        if block.next_block is not None:
-            max_depth = self._count_stackdepth(block.next_block, depth, max_depth)
-        block.marked = False
-        return max_depth
+    def _parent_handler(self, head):
+        return self.compiler_handlers[head].parent
+
+    def build_unwind_tables(self, blocks, handlers):
+        result = []
+        for handler in handlers:
+            target = self.block_offsets[handler.target]
+            if target >= 1 << 16:
+                raise CompilerError("code too large to compile (handler target)")
+            result.append(UnwindHandler(handler.kind, target, handler.parent,
+                                        handler.stackdepth))
+        intervals = []
+        pc = 0
+        start = 0
+        previous = -1
+        for block in blocks:
+            for instr in block.instrs:
+                if instr.handler != previous:
+                    if previous != -1:
+                        intervals.append(UnwindInterval(start, pc, previous))
+                    start = pc
+                    previous = instr.handler
+                pc += 1 + 2 * consts.BYTECODE_NUM_ARGS[instr.opcode]
+        if previous != -1:
+            intervals.append(UnwindInterval(start, pc, previous))
+        return result, intervals
+
+    def _instr_stack_inputs(self, instr, effect):
+        op = instr.opcode
+        if op in (consts.DUP_TOP, consts.UNPACK_SEQUENCE,
+                  consts.UNPACK_SEQUENCE_SPLAT):
+            return 1
+        if op in (consts.DUP_TWO, consts.ROT_TWO, consts.END_FINALLY):
+            return 2
+        if op == consts.ROT_THREE:
+            return 3
+        if op in (consts.JUMP, consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE,
+                  consts.JUMP_IF_KWARG_GIVEN, consts.DISCARD_TOP,
+                  consts.RETURN, consts.RAISE_RETURN, consts.RAISE_BREAK,
+                  consts.CONTINUE_LOOP, consts.BREAK_LOOP):
+            return -effect
+        # All other executable instructions produce one value.
+        return max(0, 1 - effect)
 
     def _instr_stack_effect(self, instr):
         stack_effect = consts.BYTECODE_STACK_EFFECT[instr.opcode]
@@ -266,7 +403,8 @@ class CompilerContext(object):
             num_args += 1
             if arg1 != -1:
                 num_args += 1
-        assert num_args == consts.BYTECODE_NUM_ARGS[opcode]
+        if opcode >= 0:
+            assert num_args == consts.BYTECODE_NUM_ARGS[opcode]
         instr = Instruction(opcode, arg0, arg1, self.current_lineno)
         self.current_block.instrs.append(instr)
         self.last_lineno = self.current_lineno
@@ -294,6 +432,14 @@ class CompilerContext(object):
 
     def create_symbol_const(self, symbol):
         return self.create_const(self.space.newsymbol(symbol))
+
+
+class CompilerHandler(object):
+    def __init__(self, kind, target, parent, stackdepth):
+        self.kind = kind
+        self.target = target
+        self.parent = parent
+        self.stackdepth = stackdepth
 
 
 class Block(object):
@@ -339,8 +485,16 @@ class Instruction(object):
         self.arg1 = arg1
         self.lineno = lineno
         self.jump = None
+        self.reachable = False
+        self.handler = -1
+        self.depth = 0
+        self.cleanup_depth = 0
+        self.push_nil = False
 
     def emit(self, code, linenos):
+        assert self.opcode >= 0
+        if self.arg0 >= 1 << 16 or self.arg1 >= 1 << 16:
+            raise CompilerError("code too large to compile (operand)")
         code.append(chr(self.opcode))
         linenos.append(self.lineno)
         if self.arg0 != -1:

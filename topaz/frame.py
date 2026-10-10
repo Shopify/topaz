@@ -33,7 +33,7 @@ class BaseFrame(object):
 class Frame(BaseFrame):
     _virtualizable_ = [
         "bytecode", "localsstack_w[*]", "stackpos", "w_self", "block",
-        "lastblock", "lexical_scope", "last_instr",
+        "lexical_scope", "last_instr",
         "parent_interp", "top_parent_interp", "kwargs_given",
     ]
 
@@ -63,7 +63,6 @@ class Frame(BaseFrame):
         self.block = block
         self.parent_interp = parent_interp
         self.top_parent_interp = top_parent_interp
-        self.lastblock = None
         # The module that owns the running method, for `super`; None when
         # not known (then the lexical scope is used).
         self.w_owner = None
@@ -336,24 +335,6 @@ class Frame(BaseFrame):
         stackpos = jit.promote(self.stackpos) - 1 - index_from_top
         assert stackpos >= 0
         return self.localsstack_w[stackpos]
-
-    def popblock(self):
-        lastblock = self.lastblock
-        if lastblock is not None:
-            self.lastblock = lastblock.lastblock
-        return lastblock
-
-    @jit.unroll_safe
-    def unrollstack(self, kind):
-        while self.lastblock is not None:
-            block = self.popblock()
-            if block.handling_mask & kind:
-                return block
-            block.cleanupstack(self)
-
-    def unrollstack_and_jump(self, space, unroller):
-        block = self.unrollstack(unroller.kind)
-        return block.handle(space, self, unroller)
 
     def has_contents(self):
         return True

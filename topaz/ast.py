@@ -268,7 +268,7 @@ class TryExcept(Node):
             ctx.use_next_block(next_except)
 
         if self.except_handlers:
-            ctx.emit(consts.END_FINALLY)
+            ctx.emit(consts.END_RESCUE)
         ctx.use_next_block(else_block)
         if isinstance(self.else_body, Nil):
             # No else clause: the value is the body's.
@@ -352,7 +352,7 @@ class TryFinally(Node):
         with ctx.enter_frame_block(ctx.F_BLOCK_FINALLY_END, end):
             self.finally_body.compile(ctx)
             ctx.emit(consts.DISCARD_TOP)
-            ctx.emit(consts.END_FINALLY)
+            ctx.emit(consts.END_FINALLY, 0)
 
 
 class BaseModule(Node):

@@ -10,7 +10,7 @@ class TestCompiler(object):
         self.assert_compiled(bc, expected_bytecode_str)
         return bc
 
-    def get_lines(self, bc):
+    def get_lines(self, bc, include_unwind=False):
         actual = []
         i = 0
         while i < len(bc.code):
@@ -22,6 +22,14 @@ class TestCompiler(object):
                 line += " %s" % v
                 i += 2
             actual.append(line)
+        if include_unwind:
+            for idx, handler in enumerate(bc.unwind_handlers):
+                actual.append("HANDLER %d kind=%d target=%d parent=%d depth=%d" % (
+                    idx, handler.kind, handler.target_pc, handler.parent,
+                    handler.stackdepth))
+            for interval in bc.unwind_intervals:
+                actual.append("UNWIND [%d, %d) -> %d" % (
+                    interval.start, interval.end, interval.handler))
         return actual
 
     def assert_compiled(self, bc, expected_bytecode_str):
@@ -223,60 +231,48 @@ class TestCompiler(object):
 
     def test_while(self, space):
         self.assert_compiles(space, "while true do end", """
-        SETUP_LOOP 20
         LOAD_CONST 0
-        JUMP_IF_FALSE 16
+        JUMP_IF_FALSE 13
         LOAD_CONST 1
         DISCARD_TOP
-        JUMP 3
-        POP_BLOCK
+        JUMP 0
         LOAD_CONST 1
-
         RETURN
         """)
 
         self.assert_compiles(space, "while true do puts 5 end", """
-        SETUP_LOOP 26
         LOAD_CONST 0
-        JUMP_IF_FALSE 22
+        JUMP_IF_FALSE 19
         LOAD_SELF
         LOAD_CONST 1
         SEND 2 1
         DISCARD_TOP
-        JUMP 3
-        POP_BLOCK
+        JUMP 0
         LOAD_CONST 3
-
         RETURN
         """)
 
         self.assert_compiles(space, "puts 5 while true", """
-        SETUP_LOOP 26
         LOAD_CONST 0
-        JUMP_IF_FALSE 22
+        JUMP_IF_FALSE 19
         LOAD_SELF
         LOAD_CONST 1
         SEND 2 1
         DISCARD_TOP
-        JUMP 3
-        POP_BLOCK
+        JUMP 0
         LOAD_CONST 3
-
         RETURN
         """)
 
         self.assert_compiles(space, "begin puts 5 end while true", """
-        SETUP_LOOP 26
         LOAD_SELF
         LOAD_CONST 0
         SEND 1 1
         DISCARD_TOP
         LOAD_CONST 2
-        JUMP_IF_FALSE 22
-        JUMP 3
-        POP_BLOCK
+        JUMP_IF_FALSE 19
+        JUMP 0
         LOAD_CONST 3
-
         RETURN
         """)
 
@@ -332,23 +328,18 @@ class TestCompiler(object):
 
     def test_until(self, space):
         self.assert_compiles(space, "until false do 5 end", """
-        SETUP_LOOP 20
         LOAD_CONST 0
-        JUMP_IF_TRUE 16
+        JUMP_IF_TRUE 13
         LOAD_CONST 1
         DISCARD_TOP
-        JUMP 3
-        POP_BLOCK
+        JUMP 0
         LOAD_CONST 2
-
         RETURN
         """)
 
     def test_return(self, space):
         self.assert_compiles(space, "return 4", """
         LOAD_CONST 0
-        RETURN
-        # this is unreachable
         RETURN
         """)
 
@@ -586,8 +577,6 @@ class TestCompiler(object):
     def test_self(self, space):
         self.assert_compiles(space, "return self", """
         LOAD_SELF
-        RETURN
-        # this is unreachable
         RETURN
         """)
 
@@ -1141,19 +1130,17 @@ class TestCompiler(object):
         LOAD_GLOBAL 0
         STORE_DEREF 0
         DISCARD_TOP
-        SETUP_EXCEPT 25
         LOAD_CONST 1
         LOAD_CONST 2
         SEND 3 1
-        POP_BLOCK
-        JUMP 65
+        JUMP 63
         DUP_TOP
         LOAD_SCOPE
         LOAD_LOCAL_CONSTANT 4
         ROT_TWO
         SEND 5 1
-        JUMP_IF_TRUE 42
-        JUMP 64
+        JUMP_IF_TRUE 38
+        JUMP 60
         DISCARD_TOP
         DISCARD_TOP
         LOAD_SELF
@@ -1163,9 +1150,8 @@ class TestCompiler(object):
         LOAD_DEREF 0
         STORE_GLOBAL 0
         DISCARD_TOP
-        JUMP 65
-        END_FINALLY
-
+        JUMP 63
+        END_FINALLY 0
         RETURN
         """)
         self.assert_compiles(space, """
@@ -1178,19 +1164,17 @@ class TestCompiler(object):
         LOAD_GLOBAL 0
         STORE_DEREF 0
         DISCARD_TOP
-        SETUP_EXCEPT 25
         LOAD_CONST 1
         LOAD_CONST 2
         SEND 3 1
-        POP_BLOCK
-        JUMP 67
+        JUMP 65
         DUP_TOP
         LOAD_SCOPE
         LOAD_LOCAL_CONSTANT 4
         ROT_TWO
         SEND 5 1
-        JUMP_IF_TRUE 42
-        JUMP 66
+        JUMP_IF_TRUE 38
+        JUMP 62
         STORE_DEREF 1
         DISCARD_TOP
         DISCARD_TOP
@@ -1200,9 +1184,8 @@ class TestCompiler(object):
         LOAD_DEREF 0
         STORE_GLOBAL 0
         DISCARD_TOP
-        JUMP 67
-        END_FINALLY
-
+        JUMP 65
+        END_FINALLY 0
         RETURN
         """)
 
@@ -1216,21 +1199,17 @@ class TestCompiler(object):
         LOAD_GLOBAL 0
         STORE_DEREF 0
         DISCARD_TOP
-        SETUP_EXCEPT 25
         LOAD_CONST 1
         LOAD_CONST 2
         SEND 3 1
-        POP_BLOCK
-        JUMP 41
+        JUMP 36
         DISCARD_TOP
         DISCARD_TOP
         LOAD_CONST 4
         LOAD_DEREF 0
         STORE_GLOBAL 0
         DISCARD_TOP
-        JUMP 41
-        END_FINALLY
-
+        JUMP 36
         RETURN
         """)
         self.assert_compiles(space, """
@@ -1240,19 +1219,17 @@ class TestCompiler(object):
             puts "ensure"
         end
         """, """
-        SETUP_FINALLY 18
         LOAD_CONST 0
         LOAD_CONST 1
         SEND 2 1
-        POP_BLOCK
+        LOAD_CONST 3
         LOAD_CONST 3
         LOAD_SELF
         LOAD_CONST 4
         COERCE_STRING
         SEND 5 1
         DISCARD_TOP
-        END_FINALLY
-
+        END_FINALLY 0
         RETURN
         """)
 
@@ -1273,14 +1250,12 @@ class TestCompiler(object):
             nil
         end
         """, """
-        SETUP_FINALLY 10
         LOAD_CONST 0
-        POP_BLOCK
+        LOAD_CONST 0
         LOAD_CONST 0
         LOAD_CONST 0
         DISCARD_TOP
-        END_FINALLY
-
+        END_FINALLY 0
         RETURN
         """)
         assert bc.max_stackdepth == 4
@@ -1476,7 +1451,6 @@ class TestCompiler(object):
         LOAD_CLOSURE 0
         BUILD_BLOCK 1
         SEND_BLOCK 1 1
-        RETURN
         RETURN
         """)
 
@@ -1713,7 +1687,6 @@ class TestCompiler(object):
         self.assert_compiled(bc.consts_w[0], """
         LOAD_CONST 0
         RAISE_RETURN
-        RETURN
         """)
 
     def test_multi_assignment(self, space):
@@ -1962,11 +1935,6 @@ class TestCompiler(object):
         self.assert_compiled(bc.consts_w[0], """
         LOAD_CONST 0
         RETURN
-
-        LOAD_CONST 1
-        LOAD_CONST 2
-        SEND 3 1
-        RETURN
         """)
 
     def test_next_loop(self, space):
@@ -1976,20 +1944,11 @@ class TestCompiler(object):
             2 + 2
         end
         """, """
-        SETUP_LOOP 34
         LOAD_CONST 0
-        JUMP_IF_FALSE 30
-
+        JUMP_IF_FALSE 12
         LOAD_CONST 1
-        CONTINUE_LOOP 3
-        LOAD_CONST 2
-        LOAD_CONST 3
-        SEND 4 1
-        DISCARD_TOP
-        JUMP 3
-        POP_BLOCK
+        CONTINUE_LOOP 0
         LOAD_CONST 1
-
         RETURN
         """)
 
@@ -1999,17 +1958,11 @@ class TestCompiler(object):
             break 5
         end
         """, """
-        SETUP_LOOP 21
         LOAD_CONST 0
-        JUMP_IF_FALSE 17
-
+        JUMP_IF_FALSE 10
         LOAD_CONST 1
         BREAK_LOOP
-        DISCARD_TOP
-        JUMP 3
-        POP_BLOCK
         LOAD_CONST 2
-
         RETURN
         """)
 
@@ -2028,7 +1981,6 @@ class TestCompiler(object):
         self.assert_compiled(bc.consts_w[0], """
         LOAD_CONST 0
         RAISE_BREAK
-        RETURN
         """)
 
     def test_undef(self, space):

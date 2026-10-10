@@ -6,7 +6,7 @@ from topaz import consts
 from topaz.error import RubyError
 from topaz.objects.arrayobject import W_ArrayObject
 from topaz.objects.classobject import W_ClassObject
-from topaz.objects.codeobject import W_CodeObject
+from topaz.objects.codeobject import W_CodeObject, UnwindHandler
 from topaz.objects.functionobject import W_FunctionObject
 from topaz.objects.hashobject import W_HashObject
 from topaz.objects.moduleobject import W_ModuleObject
@@ -113,11 +113,11 @@ class Interpreter(object):
             bytecode.interp_instrs += 1
         prev_pc = frame.last_instr
         frame.last_instr = pc
-        if (space.getexecutioncontext().hastraceproc() and
-                bytecode.lineno_table[pc] != bytecode.lineno_table[prev_pc]):
-            space.getexecutioncontext().invoke_trace_proc(
-                space, "line", None, None, frame=frame)
         try:
+            if (space.getexecutioncontext().hastraceproc() and
+                    bytecode.lineno_table[pc] != bytecode.lineno_table[prev_pc]):
+                space.getexecutioncontext().invoke_trace_proc(
+                    space, "line", None, None, frame=frame)
             pc = self.handle_bytecode(space, pc, frame, bytecode)
         except RubyError as e:
             pc = self.handle_ruby_error(space, pc, frame, bytecode, e)
@@ -135,6 +135,7 @@ class Interpreter(object):
         return pc
 
     def handle_bytecode(self, space, pc, frame, bytecode):
+        start_pc = pc
         instr = ord(bytecode.code[pc])
         pc += 1
         num_args = consts.BYTECODE_NUM_ARGS[instr]
@@ -153,6 +154,12 @@ class Interpreter(object):
         if num_args >= 3:
             raise NotImplementedError
 
+        # Control-transfer opcodes need the instruction-start PC. Other
+        # methods retain the advanced PC used for calls and backtraces.
+        method_pc = pc
+        if instr in (consts.RETURN, consts.RAISE_RETURN, consts.RAISE_BREAK,
+                     consts.BREAK_LOOP, consts.CONTINUE_LOOP):
+            method_pc = start_pc
         try:
             if we_are_translated():
                 for i, name in consts.UNROLLING_BYTECODES:
@@ -160,11 +167,11 @@ class Interpreter(object):
                         method = getattr(self, name)
                         n = consts.BYTECODE_NUM_ARGS[i]
                         if n == 0:
-                            res = method(space, bytecode, frame, pc)
+                            res = method(space, bytecode, frame, method_pc)
                         elif n == 1:
-                            res = method(space, bytecode, frame, pc, arg0)
+                            res = method(space, bytecode, frame, method_pc, arg0)
                         else:
-                            res = method(space, bytecode, frame, pc, arg0, arg1)
+                            res = method(space, bytecode, frame, method_pc, arg0, arg1)
                         if res is not None:
                             pc = res
                         break
@@ -173,7 +180,7 @@ class Interpreter(object):
             else:
                 method = getattr(self, consts.BYTECODE_NAMES[instr])
                 args = [arg0, arg1][:num_args]
-                res = method(space, bytecode, frame, pc, *args)
+                res = method(space, bytecode, frame, method_pc, *args)
                 if res is not None:
                     pc = res
         except RaiseBreak as e:
@@ -183,32 +190,32 @@ class Interpreter(object):
         return pc
 
     def handle_ruby_error(self, space, pc, frame, bytecode, e):
-        block = frame.unrollstack(ApplicationException.kind)
+        block = self.find_handler(bytecode, frame, bytecode.handler_at(pc), ApplicationException.kind)
         if block is None:
             raise e
         unroller = ApplicationException(e)
-        return block.handle(space, frame, unroller)
+        return self.enter_handler(space, bytecode, frame, block, unroller)
 
     def handle_raise_return(self, space, pc, frame, bytecode, e):
-        block = frame.unrollstack(RaiseReturnValue.kind)
+        block = self.find_handler(bytecode, frame, bytecode.handler_at(pc), RaiseReturnValue.kind)
         if block is None:
             raise e
         unroller = RaiseReturnValue(e.parent_interp, e.w_value)
-        return block.handle(space, frame, unroller)
+        return self.enter_handler(space, bytecode, frame, block, unroller)
 
     def handle_raise_break(self, space, pc, frame, bytecode, e):
-        block = frame.unrollstack(RaiseBreakValue.kind)
+        block = self.find_handler(bytecode, frame, bytecode.handler_at(pc), RaiseBreakValue.kind)
         if block is None:
             raise e
         unroller = RaiseBreakValue(e.parent_interp, e.w_value)
-        return block.handle(space, frame, unroller)
+        return self.enter_handler(space, bytecode, frame, block, unroller)
 
     def handle_throw(self, space, pc, frame, bytecode, e):
-        block = frame.unrollstack(ThrowValue.kind)
+        block = self.find_handler(bytecode, frame, bytecode.handler_at(pc), ThrowValue.kind)
         if block is None:
             raise e
         unroller = ThrowValue(e.name, e.w_value)
-        return block.handle(space, frame, unroller)
+        return self.enter_handler(space, bytecode, frame, block, unroller)
 
     def jump(self, space, bytecode, frame, cur_pc, target_pc):
         if target_pc < cur_pc:
@@ -777,31 +784,68 @@ class Interpreter(object):
         else:
             frame.push(space.w_nil)
 
-    def SETUP_LOOP(self, space, bytecode, frame, pc, target_pc):
-        frame.lastblock = LoopBlock(target_pc, frame.lastblock, frame.stackpos)
+    @jit.unroll_safe
+    def find_handler(self, bytecode, frame, head, kind):
+        while head >= 0:
+            handler = bytecode.unwind_handlers[head]
+            if (handler.kind == UnwindHandler.ENSURE or
+                    (handler.kind == UnwindHandler.RESCUE and
+                     kind == ApplicationException.kind) or
+                    (handler.kind == UnwindHandler.LOOP and
+                     kind & (ContinueLoop.kind | BreakLoop.kind))):
+                return handler
+            self.clear_stack(frame, handler.stackdepth)
+            head = handler.parent
+        self.clear_stack(frame, 0)
+        return None
 
-    def SETUP_EXCEPT(self, space, bytecode, frame, pc, target_pc):
-        frame.lastblock = ExceptBlock(
-            target_pc, frame.lastblock, frame.stackpos)
+    def clear_stack(self, frame, depth):
+        # An interrupted instruction may already have popped its operands.
+        # Cleanup never creates missing values.
+        depth += len(frame.bytecode.cellvars)
+        if frame.stackpos > depth:
+            frame.dropvaluesuntil(depth)
 
-    def SETUP_FINALLY(self, space, bytecode, frame, pc, target_pc):
-        frame.lastblock = FinallyBlock(
-            target_pc, frame.lastblock, frame.stackpos)
+    def enter_handler(self, space, bytecode, frame, handler, unroller):
+        self.clear_stack(frame, handler.stackdepth)
+        if handler.kind == UnwindHandler.LOOP:
+            if isinstance(unroller, ContinueLoop):
+                return unroller.target_pc
+            assert isinstance(unroller, BreakLoop)
+            frame.push(unroller.w_value)
+        elif handler.kind == UnwindHandler.RESCUE:
+            assert isinstance(unroller, ApplicationException)
+            space.globals.set(space, "$!", unroller.e.w_value)
+            frame.push(unroller)
+            frame.push(unroller.e.w_value)
+        else:
+            # Both entries have [result, pending transfer, sentinel]. On
+            # exceptional entry the result is unused, but occupies a real
+            # initialized slot so nested handlers have one static depth.
+            if isinstance(unroller, ApplicationException):
+                space.globals.set(space, "$!", unroller.e.w_value)
+            frame.push(space.w_nil)
+            frame.push(unroller)
+            frame.push(space.w_nil)
+        return handler.target_pc
 
-    def END_FINALLY(self, space, bytecode, frame, pc):
+    def resume_unwind(self, space, bytecode, frame, head, unroller):
+        handler = self.find_handler(bytecode, frame, head, unroller.kind)
+        if handler is None:
+            unroller.nomoreblocks()
+            raise AssertionError("unroller returned")
+        return self.enter_handler(space, bytecode, frame, handler, unroller)
+
+    def END_FINALLY(self, space, bytecode, frame, pc, resume):
         frame.pop()
         unroller = frame.pop()
         if isinstance(unroller, SuspendedUnroller):
-            block = frame.unrollstack(unroller.kind)
-            if block is None:
-                unroller.nomoreblocks()
-            else:
-                return block.handle(space, frame, unroller)
+            target = self.resume_unwind(space, bytecode, frame, resume - 1, unroller)
+            return self.jump(space, bytecode, frame, pc, target)
         return pc
 
-    def POP_BLOCK(self, space, bytecode, frame, pc):
-        block = frame.popblock()
-        block.cleanup(space, frame)
+    def CLEAR_STACK(self, space, bytecode, frame, pc, depth):
+        self.clear_stack(frame, depth)
 
     def JUMP(self, space, bytecode, frame, pc, target_pc):
         return self.jump(space, bytecode, frame, pc, target_pc)
@@ -853,19 +897,19 @@ class Interpreter(object):
 
     def RETURN(self, space, bytecode, frame, pc):
         w_returnvalue = frame.pop()
-        block = frame.unrollstack(ReturnValue.kind)
+        block = self.find_handler(bytecode, frame, bytecode.handler_at(pc), ReturnValue.kind)
         if block is None:
             raise Return(w_returnvalue)
         unroller = ReturnValue(w_returnvalue)
-        return block.handle(space, frame, unroller)
+        return self.enter_handler(space, bytecode, frame, block, unroller)
 
     def RAISE_RETURN(self, space, bytecode, frame, pc):
         w_returnvalue = frame.pop()
-        block = frame.unrollstack(RaiseReturnValue.kind)
+        block = self.find_handler(bytecode, frame, bytecode.handler_at(pc), RaiseReturnValue.kind)
         if block is None:
             raise RaiseReturn(frame.top_parent_interp, w_returnvalue)
         unroller = RaiseReturnValue(frame.top_parent_interp, w_returnvalue)
-        return block.handle(space, frame, unroller)
+        return self.enter_handler(space, bytecode, frame, block, unroller)
 
     def YIELD(self, space, bytecode, frame, pc, n_args):
         if frame.block is None:
@@ -895,25 +939,25 @@ class Interpreter(object):
 
     def CONTINUE_LOOP(self, space, bytecode, frame, pc, target_pc):
         frame.pop()
-        new_pc = frame.unrollstack_and_jump(space, ContinueLoop(target_pc))
+        new_pc = self.resume_unwind(space, bytecode, frame, bytecode.handler_at(pc), ContinueLoop(target_pc))
         # `next` goes back to the loop's head: a loop whose iterations end
         # in `next` must count as hot too.
         return self.jump(space, bytecode, frame, pc, new_pc)
 
     def BREAK_LOOP(self, space, bytecode, frame, pc):
         w_obj = frame.pop()
-        return frame.unrollstack_and_jump(space, BreakLoop(w_obj))
+        return self.resume_unwind(space, bytecode, frame, bytecode.handler_at(pc), BreakLoop(w_obj))
 
     def RAISE_BREAK(self, space, bytecode, frame, pc):
         if frame.parent_interp.finished:
             raise space.error(
                 space.w_LocalJumpError, "break from proc-closure")
         w_value = frame.pop()
-        block = frame.unrollstack(RaiseBreakValue.kind)
+        block = self.find_handler(bytecode, frame, bytecode.handler_at(pc), RaiseBreakValue.kind)
         if block is None:
             raise RaiseBreak(frame.parent_interp, w_value)
         unroller = RaiseBreakValue(frame.parent_interp, w_value)
-        return block.handle(space, frame, unroller)
+        return self.enter_handler(space, bytecode, frame, block, unroller)
 
 
 class Return(Exception):
@@ -1012,71 +1056,3 @@ class ThrowValue(SuspendedUnroller):
 
     def nomoreblocks(self):
         raise Throw(self.name, self.w_value)
-
-
-class FrameBlock(object):
-    def __init__(self, target_pc, lastblock, stackdepth):
-        self.target_pc = target_pc
-        self.lastblock = lastblock
-        # Leave one extra item on there, as the return value from this suite.
-        self.stackdepth = stackdepth + 1
-
-    @jit.unroll_safe
-    def cleanupstack(self, frame):
-        while frame.stackpos > self.stackdepth:
-            frame.pop()
-
-
-class LoopBlock(FrameBlock):
-    handling_mask = ContinueLoop.kind | BreakLoop.kind
-
-    def cleanup(self, space, frame):
-        self.cleanupstack(frame)
-
-    def handle(self, space, frame, unroller):
-        if isinstance(unroller, ContinueLoop):
-            frame.lastblock = self
-            return unroller.target_pc
-        elif isinstance(unroller, BreakLoop):
-            self.cleanupstack(frame)
-            frame.push(unroller.w_value)
-            return self.target_pc
-        else:
-            raise SystemError
-
-
-class ExceptBlock(FrameBlock):
-    handling_mask = ApplicationException.kind
-
-    def cleanup(self, space, frame):
-        self.cleanupstack(frame)
-
-    @jit.unroll_safe
-    def handle(self, space, frame, unroller):
-        # The rescue clauses start from the stack as it was at `begin`:
-        # the exception may interrupt an expression that pushed values.
-        while frame.stackpos > self.stackdepth - 1:
-            frame.pop()
-        e = unroller.e
-        space.globals.set(space, "$!", e.w_value)
-        frame.push(unroller)
-        frame.push(e.w_value)
-        return self.target_pc
-
-
-class FinallyBlock(FrameBlock):
-    # Handles everything.
-    handling_mask = -1
-
-    def cleanup(self, space, frame):
-        self.cleanupstack(frame)
-        frame.push(space.w_nil)
-
-    def handle(self, space, frame, unroller):
-        self.cleanupstack(frame)
-        if isinstance(unroller, ApplicationException):
-            # `$!` is the exception being propagated while ensure runs.
-            space.globals.set(space, "$!", unroller.e.w_value)
-        frame.push(unroller)
-        frame.push(space.w_nil)
-        return self.target_pc

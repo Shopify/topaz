@@ -1,6 +1,6 @@
 import copy
 
-from rpython.rlib import rvmprof
+from rpython.rlib import jit, rvmprof
 
 from topaz.module import ClassDef
 from topaz.objects.objectobject import W_BaseObject
@@ -19,12 +19,35 @@ def get_vmprof_name(code):
     )
 
 
+class UnwindHandler(object):
+    LOOP = 0
+    RESCUE = 1
+    ENSURE = 2
+    _immutable_fields_ = ["kind", "target_pc", "parent", "stackdepth"]
+
+    def __init__(self, kind, target_pc, parent, stackdepth):
+        self.kind = kind
+        self.target_pc = target_pc
+        self.parent = parent
+        self.stackdepth = stackdepth
+
+
+class UnwindInterval(object):
+    _immutable_fields_ = ["start", "end", "handler"]
+
+    def __init__(self, start, end, handler):
+        self.start = start
+        self.end = end
+        self.handler = handler
+
+
 class W_CodeObject(W_BaseObject):
     _immutable_fields_ = [
         "code", "consts_w[*]", "max_stackdepth", "cellvars[*]", "freevars[*]",
         "arg_pos[*]", "defaults[*]", "block_arg_pos", "splat_arg_pos",
         "kwarg_names[*]", "kwrest_pos", "num_kw_defaults", "default_arg_begin", "num_defaults",
         "filepath", "lineno", "default_entry_pcs[*]", "fast_arity",
+        "unwind_handlers[*]", "unwind_intervals[*]",
     ]
 
     classdef = ClassDef("Code", W_BaseObject.classdef)
@@ -32,8 +55,19 @@ class W_CodeObject(W_BaseObject):
     def __init__(self, name, filepath, line, code, max_stackdepth, consts, args,
                  splat_arg, kwargs, kwrest_arg, block_arg,
                  defaults, first_default_arg, kw_defaults,
-                 cellvars, freevars, lineno_table, default_entry_pcs=None):
+                 cellvars, freevars, lineno_table, default_entry_pcs=None,
+                 unwind_handlers=None, unwind_intervals=None):
 
+        if unwind_handlers is None:
+            unwind_handlers = []
+        if unwind_intervals is None:
+            unwind_intervals = []
+        self.unwind_handlers = [None] * len(unwind_handlers)
+        for i in range(len(unwind_handlers)):
+            self.unwind_handlers[i] = unwind_handlers[i]
+        self.unwind_intervals = [None] * len(unwind_intervals)
+        for i in range(len(unwind_intervals)):
+            self.unwind_intervals[i] = unwind_intervals[i]
         self.name = name
         self.filepath = filepath
         self.lineno = line
@@ -105,6 +139,8 @@ class W_CodeObject(W_BaseObject):
 
     def __deepcopy__(self, memo):
         obj = super(W_CodeObject, self).__deepcopy__(memo)
+        obj.unwind_handlers = self.unwind_handlers
+        obj.unwind_intervals = self.unwind_intervals
         obj.name = self.name
         obj.filepath = self.filepath
         obj.lineno = self.lineno
@@ -128,6 +164,22 @@ class W_CodeObject(W_BaseObject):
         obj.kwarg_names = self.kwarg_names
         obj.ruby2_keywords = self.ruby2_keywords
         return obj
+
+    @jit.elidable
+    def handler_at(self, pc):
+        intervals = self.unwind_intervals
+        lo = 0
+        hi = len(intervals)
+        while lo < hi:
+            mid = (lo + hi) // 2
+            entry = intervals[mid]
+            if pc < entry.start:
+                hi = mid
+            elif pc >= entry.end:
+                lo = mid + 1
+            else:
+                return entry.handler
+        return -1
 
     def parameters(self, space, is_lambda):
         """Method#parameters and Proc#parameters: [type, name] pairs. A
