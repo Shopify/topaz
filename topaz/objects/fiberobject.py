@@ -121,9 +121,15 @@ class W_FiberObject(W_Object):
             global_state.space.fromcache(State).current = self
             topframeref = space.getexecutioncontext().topframeref
             if self.sthread is None:
-                self.bottomframe.handle_block_args(space, self.w_block.bytecode, args_w, self.w_block)
+                entry_pc = self.bottomframe.handle_block_args(
+                    space, self.w_block.bytecode, args_w, self.w_block)
                 sthread = self.get_sthread(space, space.getexecutioncontext())
                 self.sthread = sthread
+                # Argument coercion can resume another fiber and consume the
+                # shared handoff state. Publish our entry PC immediately
+                # before switching to the new stack.
+                global_state.space = space
+                global_state.entry_pc = entry_pc
                 self.h = sthread.new(new_stacklet_callback)
             else:
                 if len(args_w) == 1:
@@ -156,6 +162,7 @@ class GlobalState(object):
         self.w_result = None
         self.propagate_exception = None
         self.space = None
+        self.entry_pc = 0
 
 
 # This makes me sad.
@@ -164,6 +171,7 @@ global_state = GlobalState()
 
 def new_stacklet_callback(h, arg):
     space = global_state.space
+    entry_pc = global_state.entry_pc
     self = space.fromcache(State).current
     origin = self.parent_fiber
     origin.h = h
@@ -178,7 +186,7 @@ def new_stacklet_callback(h, arg):
         with self.sthread.ec.visit_frame(self.bottomframe):
             try:
                 try:
-                    global_state.w_result = space.execute_frame(self.bottomframe, self.w_block.bytecode)
+                    global_state.w_result = space.execute_frame(self.bottomframe, self.w_block.bytecode, entry_pc)
                 except RaiseReturn:
                     raise space.error(space.w_LocalJumpError, "unexpected return")
                 except RaiseBreak:

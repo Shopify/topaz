@@ -145,8 +145,8 @@ class W_UserFunction(W_FunctionObject):
             context = context.resolve(space, w_receiver, entry)
         frame.super_context = context
         with space.getexecutioncontext().visit_frame(frame):
-            frame.handle_args(space, self.bytecode, args_w, block)
-            return space.execute_frame(frame, self.bytecode)
+            entry_pc = frame.handle_args(space, self.bytecode, args_w, block)
+            return space.execute_frame(frame, self.bytecode, entry_pc)
 
     def arity(self, space):
         return space.newint(self.bytecode.arity(negative_defaults=True))

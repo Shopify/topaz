@@ -447,8 +447,8 @@ class ObjectSpace(object):
             top_parent_interp, regexp_match_cell
         )
 
-    def execute_frame(self, frame, bc):
-        return Interpreter().run(self, frame, bc)
+    def execute_frame(self, frame, bc, entry_pc=0):
+        return Interpreter().run(self, frame, bc, entry_pc)
 
     # Methods for allocating new objects.
 
@@ -890,20 +890,21 @@ class ObjectSpace(object):
             regexp_match_cell=block.regexp_match_cell,
         )
         frame.super_context = block.super_context
+        entry_pc = 0
         if block.is_lambda:
-            frame.handle_args(self, bc, args_w, block_arg)
+            entry_pc = frame.handle_args(self, bc, args_w, block_arg)
         else:
             if (len(bc.arg_pos) != 0 or bc.splat_arg_pos != -1 or
                     bc.block_arg_pos != -1):
-                frame.handle_block_args(self, bc, args_w, block_arg)
+                entry_pc = frame.handle_block_args(self, bc, args_w, block_arg)
         assert len(block.cells) == len(bc.freevars)
         for i in xrange(len(bc.freevars)):
             frame.set_cell(len(bc.cellvars) + i, block.cells[i])
 
         with self.getexecutioncontext().visit_frame(frame):
             if interp is not None:
-                return interp.run(self, frame, bc)
-            return self.execute_frame(frame, bc)
+                return interp.run(self, frame, bc, entry_pc)
+            return self.execute_frame(frame, bc, entry_pc)
 
     def invoke_function(self, w_function, w_receiver, args_w, block):
         return self._send_raw(

@@ -72,7 +72,7 @@ class ExecutionContext(object):
     def enter(self, frame):
         frame.backref = self.topframeref
         if self.last_instr != -1:
-            frame.back_last_instr = self.last_instr
+            frame.set_back_pc(self.last_instr)
         self.topframeref = jit.virtual_ref(frame)
 
     def leave(self, frame, got_exception):

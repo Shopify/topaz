@@ -29,7 +29,8 @@ of CRuby's frame representation.
 Super lookup is no longer a reduction candidate: frames and procs share a
 context containing a stable ancestor entry, with no separate occurrence
 field. Its representation and mutation rules are documented in
-:doc:`super-lookup`.
+:doc:`super-lookup`. Packed caller positions and execution entry PCs are
+documented in :doc:`frame-layout`.
 
 CRuby reference
 ---------------

@@ -32,7 +32,8 @@ maintains things like the Ruby call stack.
 -------------
 
 This contains Ruby frame objects, and associated logic for manipulating them.
-See :doc:`super-lookup` for the ancestor metadata shared by frames and blocks.
+See :doc:`frame-layout` for packed control metadata and execution entry PCs,
+and :doc:`super-lookup` for the ancestor metadata shared by frames and blocks.
 
 ``gateway.py``
 ---------------

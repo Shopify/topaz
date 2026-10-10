@@ -36,9 +36,9 @@ class TestSendValueStack(BaseTopazTest):
         monkeypatch.setattr(caller, "popitemsreverse", no_list)
         execute = space.execute_frame
 
-        def execute_checked(frame, bc):
+        def execute_checked(frame, bc, entry_pc=0):
             assert_clean(caller, depth, olddepth, space)
-            return execute(frame, bc)
+            return execute(frame, bc, entry_pc)
         monkeypatch.setattr(space, "execute_frame", execute_checked)
         result = space.send_valuestack("f", len(args), caller)
         if "proc" in source:

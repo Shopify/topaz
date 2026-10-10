@@ -6,19 +6,19 @@ from topaz.objects.hashobject import W_HashObject
 from topaz.objects.moduleobject import W_ModuleObject
 
 
-# The remaining bits hold the entry PC. These flags are not virtualizable.
+# The remaining bits hold the caller PC. These flags are not virtualizable.
 VISIBILITY_MASK = 3
 ESCAPED_FLAG = 4
-ENTRY_PC_SHIFT = 3
-FRAME_FLAGS_MASK = (1 << ENTRY_PC_SHIFT) - 1
+BACK_PC_SHIFT = 3
+FRAME_FLAGS_MASK = (1 << BACK_PC_SHIFT) - 1
 
 
 class BaseFrame(object):
-    _attrs_ = ["backref", "flags", "back_last_instr"]
+    _attrs_ = ["backref", "flags"]
 
     def __init__(self):
         self.backref = jit.vref_None
-        # Public visibility, not escaped, entry PC zero.
+        # Public visibility, not escaped, caller PC zero.
         self.flags = 0
 
     def is_escaped(self):
@@ -29,6 +29,13 @@ class BaseFrame(object):
             self.flags |= ESCAPED_FLAG
         else:
             self.flags &= ~ESCAPED_FLAG
+
+    def get_back_pc(self):
+        return self.flags >> BACK_PC_SHIFT
+
+    def set_back_pc(self, pc):
+        assert pc >= 0
+        self.flags = (self.flags & FRAME_FLAGS_MASK) | (pc << BACK_PC_SHIFT)
 
 
 class Frame(BaseFrame):
@@ -81,13 +88,6 @@ class Frame(BaseFrame):
         if cell is None:
             cell = self.regexp_match_cell = ClosureCell(None)
         return cell
-
-    def get_entry_pc(self):
-        return self.flags >> ENTRY_PC_SHIFT
-
-    def set_entry_pc(self, pc):
-        assert pc >= 0
-        self.flags = (self.flags & FRAME_FLAGS_MASK) | (pc << ENTRY_PC_SHIFT)
 
     def get_visibility(self):
         return self.flags & VISIBILITY_MASK
@@ -233,10 +233,11 @@ class Frame(BaseFrame):
 
         given_defaults = pre - len_pre_args
         # The code's prologue computes the rest.
+        entry_pc = 0
         if bytecode.num_defaults > 0:
             if given_defaults < 0:
                 given_defaults = 0
-            self.set_entry_pc(bytecode.default_entry_pcs[given_defaults])
+            entry_pc = bytecode.default_entry_pcs[given_defaults]
 
         if bytecode.splat_arg_pos != -1:
             if pre >= post:
@@ -314,6 +315,8 @@ class Frame(BaseFrame):
                 w_bits = space.newint(intmask(kwargs_given))
             self.localsstack_w[index] = w_bits
 
+        return entry_pc
+
     def is_kwarg_given(self, space, index):
         slot = len(self.localsstack_w) - 1
         assert slot >= 0
@@ -366,7 +369,7 @@ class Frame(BaseFrame):
         if prev_frame is None:
             instr = self.last_instr
         else:
-            instr = prev_frame.back_last_instr - 1
+            instr = prev_frame.get_back_pc() - 1
         try:
             return self.bytecode.lineno_table[instr]
         except IndexError:

@@ -92,7 +92,7 @@ class Interpreter(object):
         except Return as e:
             return e.w_value
 
-    def run(self, space, frame, bytecode):
+    def run(self, space, frame, bytecode, entry_pc=0):
         """Runs the frame, then marks this interpreter finished (so that a
         break from one of its blocks is known to be an orphan). The mark is
         made here, outside the JIT's portal: made in interpret's own
@@ -102,7 +102,7 @@ class Interpreter(object):
         try:
             # Past the defaults of the optional arguments that were passed:
             # the pc is an argument of the portal, so a green.
-            return self.interpret(space, frame, bytecode, frame.get_entry_pc())
+            return self.interpret(space, frame, bytecode, entry_pc)
         finally:
             self.finished = True
 
