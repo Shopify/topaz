@@ -181,9 +181,26 @@ class W_Autoload(W_RootObject):
         )
 
 
+class AncestorEntry(object):
+    """One persistent occurrence of a module in an ancestor chain.
+
+    Ancestor arrays can be spliced, but existing entries keep their identity.
+    Entries belong to the including class/module, not to the included module.
+    """
+    _immutable_fields_ = ["w_module"]
+
+    def __init__(self, w_module):
+        self.w_module = w_module
+
+
+def ancestor_entries(modules):
+    return [AncestorEntry(w_mod) for w_mod in modules]
+
+
 class W_ModuleObject(W_RootObject):
     _immutable_fields_ = ["version?", "included_modules?[*]", "prepended_modules?[*]",
-                          "klass?", "name?"]
+                          "klass?", "name?", "origin_entry",
+                          "included_entries?[*]", "prepended_entries?[*]"]
 
     classdef = ClassDef("Module", W_RootObject.classdef)
 
@@ -198,6 +215,9 @@ class W_ModuleObject(W_RootObject):
         self.class_variables = CellDict()
         self.instance_variables = CellDict()
         self.flags = CellDict()
+        self.origin_entry = AncestorEntry(self)
+        self.included_entries = []
+        self.prepended_entries = []
         self.included_modules = []
         # Modules prepended here, in lookup order (the latest first).
         self.prepended_modules = []
@@ -219,6 +239,9 @@ class W_ModuleObject(W_RootObject):
         obj.class_variables = copy.deepcopy(self.class_variables, memo)
         obj.instance_variables = copy.deepcopy(self.instance_variables, memo)
         obj.flags = copy.deepcopy(self.flags, memo)
+        obj.origin_entry = copy.deepcopy(self.origin_entry, memo)
+        obj.included_entries = copy.deepcopy(self.included_entries, memo)
+        obj.prepended_entries = copy.deepcopy(self.prepended_entries, memo)
         obj.included_modules = copy.deepcopy(self.included_modules, memo)
         obj.prepended_modules = copy.deepcopy(self.prepended_modules, memo)
         obj.descendants = [weakref.ref(copy.deepcopy(w_mod, memo))
@@ -583,6 +606,15 @@ class W_ModuleObject(W_RootObject):
         else:
             return self.prepended_modules + self.included_modules
 
+    def ancestor_entries(self):
+        return self.prepended_entries + [self.origin_entry] + self.included_entries
+
+    def set_ancestor_entries(self, included, prepended):
+        self.included_entries = included
+        self.prepended_entries = prepended
+        self.included_modules = [entry.w_module for entry in included]
+        self.prepended_modules = [entry.w_module for entry in prepended]
+
     @jit.unroll_safe
     def is_ancestor_of(self, w_cls):
         if self is w_cls:
@@ -612,7 +644,8 @@ class W_ModuleObject(W_RootObject):
         assert isinstance(w_mod, W_ModuleObject)
         if w_mod not in self.ancestors():
             additions = self._modules_to_include(w_mod)
-            self.included_modules = additions + self.included_modules
+            self.set_ancestor_entries(
+                ancestor_entries(additions) + self.included_entries, self.prepended_entries)
             self.mutated()
             self._propagate_ancestor_modules(additions, False, [])
             w_mod.included(space, self)
@@ -621,13 +654,15 @@ class W_ModuleObject(W_RootObject):
         assert isinstance(w_mod, W_ModuleObject)
         if w_mod not in self.prepended_modules:
             previous = self.prepended_modules
-            self.prepended_modules = [w_mod] + self.prepended_modules
+            self.set_ancestor_entries(
+                self.included_entries, [AncestorEntry(w_mod)] + self.prepended_entries)
             self.mutated()
             self._propagate_ancestor_modules([w_mod], True, previous)
             w_mod.add_descendant(self)
 
-    def _insert_ancestor_modules(self, modules, additions, prepend, previous, trailing):
-        result = modules
+    def _insert_ancestor_entries(self, entries, additions, prepend, previous, trailing):
+        modules = [entry.w_module for entry in entries]
+        result = entries
         # Work backwards so inserting at a later occurrence does not move
         # an earlier occurrence of this module.
         for i in range(len(modules) - 1, -1, -1):
@@ -649,7 +684,7 @@ class W_ModuleObject(W_RootObject):
                 new_modules = [w_mod for w_mod in additions if w_mod not in suffix]
             if new_modules:
                 assert pos >= 0
-                result = result[:pos] + new_modules + result[pos:]
+                result = result[:pos] + ancestor_entries(new_modules) + result[pos:]
         return result
 
     def _propagate_ancestor_modules(self, additions, prepend, previous):
@@ -665,13 +700,13 @@ class W_ModuleObject(W_RootObject):
             prepended = w_user.prepended_modules
             ancestors = w_user.ancestors()
             trailing = ancestors[len(prepended) + 1 + len(included):]
-            new_included = self._insert_ancestor_modules(
-                included, additions, prepend, previous, trailing)
-            new_prepended = self._insert_ancestor_modules(
-                prepended, additions, prepend, previous, [w_user] + included + trailing)
-            if new_included is not included or new_prepended is not prepended:
-                w_user.included_modules = new_included
-                w_user.prepended_modules = new_prepended
+            new_included = self._insert_ancestor_entries(
+                w_user.included_entries, additions, prepend, previous, trailing)
+            new_prepended = self._insert_ancestor_entries(
+                w_user.prepended_entries, additions, prepend, previous, [w_user] + included + trailing)
+            if (new_included is not w_user.included_entries or
+                    new_prepended is not w_user.prepended_entries):
+                w_user.set_ancestor_entries(new_included, new_prepended)
                 for w_mod in additions:
                     w_mod.add_descendant(w_user)
                 w_user.mutated()
@@ -684,7 +719,9 @@ class W_ModuleObject(W_RootObject):
     def extend_object(self, space, w_mod):
         if self not in w_mod.ancestors():
             self.add_descendant(w_mod)
-            w_mod.included_modules = w_mod._modules_to_include(self) + w_mod.included_modules
+            w_mod.set_ancestor_entries(
+                ancestor_entries(w_mod._modules_to_include(self)) + w_mod.included_entries,
+                w_mod.prepended_entries)
             w_mod.mutated()
 
     def visibility_names(self, space, names_w):
@@ -782,8 +819,9 @@ class W_ModuleObject(W_RootObject):
             w_value = w_other.class_variables.get(space, name)
             if w_value is not None:
                 self.class_variables.set(space, name, w_value)
-        self.included_modules = w_other.included_modules[:]
-        self.prepended_modules = w_other.prepended_modules[:]
+        self.set_ancestor_entries(
+            ancestor_entries(w_other.included_modules),
+            ancestor_entries(w_other.prepended_modules))
         # The copy must remain dependent on its ancestors after the
         # original module has been collected.
         for w_mod in self.included_modules + self.prepended_modules:

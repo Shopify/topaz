@@ -139,6 +139,12 @@ class W_ClassObject(W_ModuleObject):
             ary += self.superclass.ancestors(include_singleton)
         return ary
 
+    def ancestor_entries(self):
+        entries = W_ModuleObject.ancestor_entries(self)
+        if self.superclass is not None:
+            entries += self.superclass.ancestor_entries()
+        return entries
+
     def inherited(self, space, w_mod):
         self.add_descendant(w_mod)
         if not space.bootstrap and space.respond_to(self, "inherited"):

@@ -202,8 +202,10 @@ class W_Object(W_RootObject):
         w_copy = space.newclass(w_cls.name, w_cls, is_singleton=True, attached=self)
         w_copy.methods_w.update(w_other.methods_w)
         w_copy.constants_w.update(w_other.constants_w)
-        w_copy.included_modules = w_copy.included_modules + w_other.included_modules
-        w_copy.prepended_modules = w_other.prepended_modules[:]
+        from topaz.objects.moduleobject import ancestor_entries
+        w_copy.set_ancestor_entries(
+            w_copy.included_entries + ancestor_entries(w_other.included_modules),
+            ancestor_entries(w_other.prepended_modules))
         for w_mod in w_copy.included_modules + w_copy.prepended_modules:
             w_mod.add_descendant(w_copy)
         w_copy.mutated()
