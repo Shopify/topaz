@@ -1,6 +1,7 @@
 import copy
 
 from rpython.rlib import jit, rvmprof
+from rpython.rlib.objectmodel import not_rpython
 
 from topaz.module import ClassDef
 from topaz.objects.objectobject import W_BaseObject
@@ -164,6 +165,16 @@ class W_CodeObject(W_BaseObject):
         obj.kwarg_names = self.kwarg_names
         obj.ruby2_keywords = self.ruby2_keywords
         return obj
+
+    @not_rpython
+    def dis(self, file=None, depth=None):
+        """Print a CPython-style disassembly (an untranslated debugging aid).
+
+        Include nested code objects unless depth=0. ExceptionTable ranges
+        end at the last protected instruction's offset, inclusively.
+        """
+        from topaz.utils.disassembler import disassemble
+        disassemble(self, file=file, depth=depth)
 
     @jit.elidable
     def handler_at(self, pc):

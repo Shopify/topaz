@@ -370,6 +370,16 @@ and checks a materialized-frame/call_assembler path with a late exception.
 The compiler test display accepts ``include_unwind=True`` to show descriptors
 and intervals alongside executable instructions.
 
+For interactive inspection, ``code.dis()`` prints source lines, byte offsets,
+target markers, opcode operands and their meanings, followed by an
+``ExceptionTable:`` section and handler descriptors. Like CPython's display,
+each range ends at the offset of its last protected instruction (inclusive),
+not the exclusive byte boundary stored internally. Bracketed numbers are saved
+stack depths; handler kinds and parent IDs describe Topaz's unwind chains.
+Nested code objects are displayed recursively; ``code.dis(depth=0)`` limits
+output to the current object, and ``code.dis(file=stream)`` redirects it.
+This is an untranslated Python debugging helper, not a Ruby method.
+
 A temporary untranslated checker was run against the original interpreter at
 ``3c4ca9efadae88be0002720672fbd8a43df3e155``. It independently propagated
 symbolic handler identities and compared them with the live linked chain at
