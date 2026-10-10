@@ -12,17 +12,24 @@ Python class alone is not evidence of an improvement.
 Current representation and priorities
 -------------------------------------
 
-The remaining fields to investigate in ``topaz/frame.py`` are:
+The remaining candidates in ``topaz/frame.py`` both require a broader design
+change; neither is currently a straightforward field removal:
 
 * ``regexp_match_cell``: shared storage for the lexical regexp match state.
 * ``parent_interp`` and ``top_parent_interp``: captured interpreter identities
   used for nonlocal break and return, respectively. These are not references
   to parent frames or a dynamic caller chain.
 
-Defer regexp state until there is a broader environment design, and leave
-the interpreter destination references unchanged. These changes do not depend
-on adopting all of CRuby's frame representation. Super lookup already uses
-shared stable ancestor metadata; see :doc:`super-lookup`.
+The next investigation, if pursuing further reductions, is the ownership and
+allocation cost of a shared lexical environment for regexp state. Leave the
+interpreter destination references unchanged unless that design also provides
+a suitable activation identity. These changes do not depend on adopting all
+of CRuby's frame representation.
+
+Super lookup is no longer a reduction candidate: frames and procs share a
+context containing a stable ancestor entry, with no separate occurrence
+field. Its representation and mutation rules are documented in
+:doc:`super-lookup`.
 
 CRuby reference
 ---------------
@@ -55,6 +62,11 @@ a reference to it. ``BUILD_BLOCK`` obtains the shared cell even if no match
 has occurred, so a later match in the enclosing scope remains visible to the
 block. Removing that eager capture without another shared anchor is incorrect.
 
+``SuperContext`` cannot hold this mutable state: it is shared across distinct
+invocations of methods using the same ancestor entry. Regexp state belongs to
+an invocation and the blocks sharing its lexical scope. Any replacement must
+preserve that distinction, including recursive calls to the same method.
+
 Evaluate whether a shared lexical environment or optional scope-state wrapper
 could hold the cell without a dedicated field on every frame. Specify how
 blocks created before the first match discover later updates. Do not rely
@@ -65,8 +77,8 @@ indirections, and any unrelated data it keeps alive.
 Validation must cover matches before and after block creation, escaped blocks,
 nested methods and blocks, ``$~`` assignment, derived captures such as ``$1``
 and ``$&``, regexp callbacks, Enumerable methods acting on a block's behalf,
-and Fiber behavior. Keep this separate from method-context consolidation until
-the ownership and lifetime rules are explicit.
+and Fiber behavior. Establish the ownership and lifetime rules before changing
+the frame layout.
 
 Activation identity and nonlocal transfers
 ------------------------------------------
@@ -121,8 +133,8 @@ Removing an interpreter allocation did not establish an overall benefit.
 Do not replace interpreter references with defining-frame references. A
 CRuby-like alternative would first need an environment identity that maps
 reliably to a live activation, including recursive invocations of the same
-bytecode. It must
-also define stack-search behavior across compiled calls and Fibers. Searching
+bytecode. It must also define stack-search behavior across compiled calls and
+Fibers. Searching
 Topaz's virtual frame chain may force frames, which could outweigh any saved
 fields. Frame-layout specialization is another possibility, but its effect on
 RPython virtualizable layouts needs investigation before implementation.
