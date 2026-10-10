@@ -222,6 +222,8 @@ class CompilerContext(object):
                     changed = True
             if self.skip_unused_constants(blocks):
                 changed = True
+            if self.fold_boolean_branches(blocks):
+                changed = True
             predecessors, removed = self.remove_unreachable(blocks)
             changed = changed or removed
             for block in blocks:
@@ -302,6 +304,52 @@ class CompilerContext(object):
             blocks.insert(blocks.index(target) + 1, rest)
             jump.jump = rest
             changed = True
+        return changed
+
+    def fold_boolean_branches(self, blocks):
+        # DUP; branch L; DISCARD leaves a value only on the taken edge.
+        # If L tests and consumes that value, its outcome is already known:
+        # consume it in the first branch and bypass the second test.
+        changed = False
+        block_index = 0
+        while block_index < len(blocks):
+            block = blocks[block_index]
+            block_index += 1
+            instrs = block.instrs
+            for index in range(len(instrs) - 2):
+                dup = instrs[index]
+                branch = instrs[index + 1]
+                discard = instrs[index + 2]
+                if (dup.opcode != consts.DUP_TOP or
+                        branch.opcode not in (consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE)
+                        or discard.opcode != consts.DISCARD_TOP):
+                    continue
+                target = branch.jump
+                if not target.instrs:
+                    continue
+                test = target.instrs[0]
+                if (test.opcode not in (consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE) or
+                        (test.lineno != -1 and test.lineno != branch.lineno) or
+                        not self.can_remove(instrs, index, 1) or
+                        not self.can_remove(instrs, index + 2, 1)):
+                    continue
+                # Delete before splitting: target can be block itself.
+                del instrs[index + 2]
+                del instrs[index]
+                if test.opcode == branch.opcode:
+                    branch.jump = test.jump
+                else:
+                    # The second branch cannot be taken. Give its fallthrough
+                    # a separate entry, retaining the test for other edges.
+                    rest = Block()
+                    rest.instrs = target.instrs[1:]
+                    rest.next_block = target.next_block
+                    target.instrs = target.instrs[:1]
+                    target.next_block = rest
+                    blocks.insert(blocks.index(target) + 1, rest)
+                    branch.jump = rest
+                changed = True
+                break
         return changed
 
     def remove_unreachable(self, blocks):

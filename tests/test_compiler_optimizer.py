@@ -490,3 +490,155 @@ def test_compile_multiple_assignment_keeps_coercion(space):
       f(OptimizerArrayCoercion.new)
     ''')
     assert [space.int_w(v) for v in space.listview(result)] == [3, 4]
+
+
+@pytest.mark.parametrize('opcode', [consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE])
+@pytest.mark.parametrize('lineno', [-1, 10])
+def test_fold_consuming_boolean_branch(opcode, lineno):
+    taken = block(instruction(consts.LOAD_SELF), instruction(consts.RETURN))
+    other = block(instruction(consts.LOAD_SELF), instruction(consts.RETURN))
+    join = block(instruction(opcode, 0, taken))
+    join.next_block = other
+    first = block(instruction(consts.LOAD_SELF), instruction(consts.DUP_TOP),
+                  instruction(opcode, 0, join), instruction(consts.DISCARD_TOP),
+                  instruction(consts.LOAD_SELF), instruction(consts.JUMP, 0, join))
+    ctx = CompilerContext(None, 'test', SymbolTable(), 'test.rb')
+    ctx.first_block = first
+    blocks = first.post_order()
+    for b in blocks:
+        for instr in b.instrs:
+            instr.lineno = lineno
+    assert ctx.analyze_unwind(blocks)[0] == 2
+    ctx.optimize(blocks)
+    assert ctx.analyze_unwind(blocks)[0] == 1
+    assert first.instrs[1].opcode == opcode
+    assert first.instrs[1].jump is taken
+    assert not any(i.opcode in (consts.DUP_TOP, consts.DISCARD_TOP)
+                   for b in blocks for i in b.instrs)
+    assert sum(i.opcode == opcode for b in blocks for i in b.instrs) == 2
+    assert not ctx.optimize(blocks)
+
+
+@pytest.mark.parametrize('barrier', ['dup_line', 'discard_line', 'target_line',
+                                     'scope', 'value_used'])
+def test_consuming_boolean_branch_barriers(barrier):
+    taken = block(instruction(consts.RETURN))
+    join = block(instruction(consts.JUMP_IF_FALSE, 0, taken))
+    first = block(instruction(consts.DUP_TOP, lineno=10),
+                  instruction(consts.JUMP_IF_FALSE, 0, join, lineno=10),
+                  instruction(consts.DISCARD_TOP, lineno=10),
+                  instruction(consts.LOAD_SELF, lineno=10))
+    if barrier == 'dup_line':
+        first.instrs[0].lineno = 20
+    elif barrier == 'discard_line':
+        first.instrs[2].lineno = 20
+    elif barrier == 'target_line':
+        join.instrs[0].lineno = 20
+    elif barrier == 'scope':
+        join.instrs.insert(0, instruction(consts.POP_BLOCK))
+    else:
+        first.instrs[2].opcode = consts.STORE_DEREF
+        first.instrs[2].arg0 = 0
+    optimize(first)
+    assert first.instrs[0].opcode == consts.DUP_TOP
+    assert first.instrs[1].jump is join
+
+
+@pytest.mark.parametrize('operator', ['&&', '||'])
+@pytest.mark.parametrize('statement', ['if', 'unless'])
+def test_compile_consuming_boolean_chain(space, operator, statement):
+    source = 'def f(a, b, c); %s a %s b %s c; 7; else; 9; end; end' % (
+        statement, operator, operator)
+    code = method_code(space, source)
+    ops = [op for pc, op, args in compiled_instructions(code)]
+    assert consts.DUP_TOP not in ops
+    assert consts.DISCARD_TOP not in ops
+    assert code.max_stackdepth == 1
+    space.execute(source)
+    for a in ['nil', 'false', '0']:
+        for b in ['nil', 'false', '1']:
+            for c in ['nil', 'false', '2']:
+                if operator == '&&':
+                    truth = a == '0' and b == '1' and c == '2'
+                else:
+                    truth = a == '0' or b == '1' or c == '2'
+                expected = 7 if truth == (statement == 'if') else 9
+                assert space.int_w(space.execute('f(%s, %s, %s)' % (a, b, c))) == expected
+
+
+@pytest.mark.parametrize('opcode', [consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE])
+@pytest.mark.parametrize('inline', [False, True])
+def test_fold_opposite_consuming_boolean_branch(opcode, inline):
+    other_opcode = consts.JUMP_IF_FALSE if opcode == consts.JUMP_IF_TRUE else consts.JUMP_IF_TRUE
+    taken = block(instruction(consts.LOAD_SELF), instruction(consts.RETURN))
+    other = block(instruction(consts.LOAD_SELF), instruction(consts.RETURN))
+    join = block(instruction(other_opcode, 0, taken))
+    if inline:
+        join.instrs.extend(other.instrs)
+    else:
+        join.next_block = other
+    first = block(instruction(consts.LOAD_SELF), instruction(consts.DUP_TOP),
+                  instruction(opcode, 0, join), instruction(consts.DISCARD_TOP),
+                  instruction(consts.LOAD_SELF), instruction(consts.JUMP, 0, join))
+    ctx = CompilerContext(None, 'test', SymbolTable(), 'test.rb')
+    ctx.first_block = first
+    blocks = first.post_order()
+    assert ctx.analyze_unwind(blocks)[0] == 2
+    assert ctx.fold_boolean_branches(blocks)
+    assert first.instrs[1].jump is join.next_block
+    assert first.instrs[-1].jump is join
+    assert join.instrs[0].opcode == other_opcode
+    assert join.instrs[0].jump is taken
+    assert ctx.analyze_unwind(blocks)[0] == 1
+    ctx.optimize(blocks)
+    assert ctx.analyze_unwind(blocks)[0] == 1
+    assert not ctx.optimize(blocks)
+
+
+def test_fold_consuming_boolean_branch_to_same_block():
+    end = block(instruction(consts.LOAD_SELF), instruction(consts.RETURN))
+    loop = block(instruction(consts.JUMP_IF_FALSE, 0, end),
+                 instruction(consts.LOAD_SELF), instruction(consts.DUP_TOP))
+    backedge = instruction(consts.JUMP_IF_TRUE, 0, loop)
+    loop.instrs.extend([backedge, instruction(consts.DISCARD_TOP),
+                       instruction(consts.LOAD_SELF), instruction(consts.JUMP, 0, loop)])
+    first = block(instruction(consts.LOAD_SELF), instruction(consts.JUMP, 0, loop))
+    ctx = CompilerContext(None, 'test', SymbolTable(), 'test.rb')
+    ctx.first_block = first
+    blocks = first.post_order()
+    assert ctx.analyze_unwind(blocks)[0] == 2
+    assert ctx.fold_boolean_branches(blocks)
+    assert loop.instrs[0].opcode == consts.JUMP_IF_FALSE
+    assert backedge.jump is loop.next_block
+    assert backedge in loop.next_block.instrs
+    assert ctx.analyze_unwind(blocks)[0] == 1
+    ctx.optimize(blocks)
+    assert ctx.analyze_unwind(blocks)[0] == 1
+    assert not ctx.optimize(blocks)
+
+
+@pytest.mark.parametrize('operator', ['&&', '||'])
+def test_consuming_boolean_branch_short_circuit_and_ensure(space, operator):
+    source = '''
+      def f(a, log)
+        begin
+          if a %s (begin; log << 1; true; end)
+            return 7
+          else
+            return 9
+          end
+        ensure
+          log << 2
+        end
+      end
+    ''' % operator
+    space.execute(source)
+    for value in ['nil', 'false', 'true', '0']:
+        result = space.execute('log = []; value = f(%s, log); [value, log]' % value)
+        value_w, log_w = space.listview(result)
+        truth = value in ('true', '0')
+        evaluate_rhs = truth if operator == '&&' else not truth
+        expected = 7 if operator == '||' or truth else 9
+        assert space.int_w(value_w) == expected
+        assert [space.int_w(v) for v in space.listview(log_w)] == (
+            [1, 2] if evaluate_rhs else [2])
