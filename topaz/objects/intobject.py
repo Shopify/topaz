@@ -46,8 +46,7 @@ def pow_positive(base, exp):
 
 
 def get_step_location(bytecode):
-    return "Integer#step %s:%d:in %s" % (
-        bytecode.filepath, bytecode.lineno, bytecode.name)
+    return "Integer#step " + bytecode.get_location()
 
 
 # Integer#step's loop lives here so that the JIT traces it as its own loop

@@ -4,6 +4,83 @@ from ..base import BaseTopazTest
 
 
 class TestHashObject(BaseTopazTest):
+    def test_flat_map_results_and_arguments(self, space):
+        w_res = space.execute('''
+        h = {a: 1, b: 2}
+        converted = Object.new
+        def converted.to_ary; [3, [4]]; end
+        scalar = Object.new
+        def scalar.to_ary; nil; end
+        return [h.flat_map { |k, v| [v, [v]] },
+                h.collect_concat { |pair| pair[1] },
+                h.flat_map { |*args| [args.size, args[0].size] },
+                h.flat_map { converted },
+                h.flat_map { scalar }.all? { |v| v.equal?(scalar) },
+                h.flat_map { nil }, {}.flat_map { raise 'empty' },
+                h.flat_map.each { |k, v| [v] },
+                h.collect_concat.each { |k, v| [v] }]
+        ''')
+        assert self.unwrap(space, w_res) == [
+            [1, [1], 2, [2]], [1, 2], [1, 2, 1, 2],
+            [3, [4], 3, [4]], True, [None, None], [], [1, 2], [1, 2]]
+
+    @pytest.mark.parametrize('setup', [
+        "h = {a: 1, b: 2, c: 3}",
+        "h = {'a' => 1, 'b' => 2, 'c' => 3}",
+        "h = {1 => 1, 2 => 2, 3 => 3}",
+        "h = {'a' => 1, 'b' => 2, 'c' => 3}.compare_by_identity",
+    ])
+    def test_flat_map_mutation_and_transition(self, space, setup):
+        w_res = space.execute('''
+        %s
+        keys = h.keys
+        result = h.flat_map do |key, value|
+          if value == 1
+            h[Object.new]
+            h[keys[1]] = 20
+            h.delete(keys[2])
+          end
+          [keys.include?(key), value]
+        end
+        return result
+        ''' % setup)
+        assert self.unwrap(space, w_res) == [True, 1, True, 20]
+
+    def test_flat_map_control_flow_and_conversion_error(self, space):
+        w_res = space.execute('''
+        def early_return
+          {a: 1}.flat_map { return 7 }
+        end
+        bad = Object.new
+        def bad.to_ary; 42; end
+        error = begin
+          {a: 1}.flat_map { bad }
+          false
+        rescue TypeError
+          true
+        end
+        return [early_return, {a: 1}.flat_map { break 8 },
+                {a: 1}.flat_map { next [9] },
+                {a: 1}.flat_map(&lambda { |pair| [pair[1]] }), error]
+        ''')
+        assert self.unwrap(space, w_res) == [7, 8, [9], [1], True]
+
+    def test_flat_map_overridden_each(self, space):
+        w_res = space.execute('''
+        class CustomHash < Hash
+          def each
+            yield [:custom, 42]
+          end
+        end
+        h = {a: 1}
+        def h.each
+          yield [:singleton, 43]
+        end
+        return [CustomHash.new.flat_map { |k, v| [v] },
+                h.collect_concat { |k, v| [v] }]
+        ''')
+        assert self.unwrap(space, w_res) == [[42], [43]]
+
     @pytest.mark.parametrize('stored_mutable', [False, True])
     @pytest.mark.parametrize('lookup_mutable', [False, True])
     def test_string_storage_callbacks(self, space, monkeypatch,

@@ -53,6 +53,9 @@ class W_CodeObject(W_BaseObject):
 
     classdef = ClassDef("Code", W_BaseObject.classdef)
 
+    def get_location(self):
+        return "%s:%d:in %s" % (self.filepath, self.lineno, self.name)
+
     def __init__(self, name, filepath, line, code, max_stackdepth, consts, args,
                  splat_arg, kwargs, kwrest_arg, block_arg,
                  defaults, first_default_arg, kw_defaults,

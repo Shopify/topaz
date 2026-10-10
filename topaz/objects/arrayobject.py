@@ -20,8 +20,7 @@ BaseRubySortBy = make_timsort_class()
 
 
 def get_each_location(bytecode):
-    return "Array#each %s:%d:in %s" % (
-        bytecode.filepath, bytecode.lineno, bytecode.name)
+    return "Array#each " + bytecode.get_location()
 
 
 # Its own loop for the JIT: with each written in Ruby, every trace through
@@ -76,8 +75,7 @@ flat_map_driver = _enum_driver("flat_map")
 
 
 def get_bsearch_location(bytecode):
-    return "Array#bsearch_index %s:%d:in %s" % (
-        bytecode.filepath, bytecode.lineno, bytecode.name)
+    return "Array#bsearch_index " + bytecode.get_location()
 
 
 bsearch_driver = jit.JitDriver(

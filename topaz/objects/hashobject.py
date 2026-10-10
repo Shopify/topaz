@@ -115,6 +115,7 @@ class TypedDictStrategyMixin(object):
 
 
 class ObjectDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
+    name = "ObjectDictStrategy"
     erase, unerase = new_static_erasing_pair("ObjectDictStrategy")
     iter_erase, iter_unerase = new_static_erasing_pair("ObjectDictStrategyIterator")
 
@@ -129,6 +130,7 @@ class ObjectDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
 
 
 class IdentityDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
+    name = "IdentityDictStrategy"
     erase, unerase = new_static_erasing_pair("IdentityDictStrategy")
     iter_erase, iter_unerase = new_static_erasing_pair("IdentityDictStrategyIterator")
 
@@ -150,6 +152,7 @@ class SymbolDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
     the generic strategy: custom objects can equal a symbol.
     This is an implementation detail, not Ruby's compare_by_identity mode.
     """
+    name = "SymbolDictStrategy"
     erase, unerase = new_static_erasing_pair("SymbolDictStrategy")
     iter_erase, iter_unerase = new_static_erasing_pair("SymbolDictStrategyIterator")
 
@@ -203,6 +206,7 @@ class StringDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
     Retain the actual frozen Ruby keys for iteration. Subclasses and custom
     lookup keys need the generic callbacks, including their Ruby eql? calls.
     """
+    name = "StringDictStrategy"
     erase, unerase = new_static_erasing_pair("StringDictStrategy")
     iter_erase, iter_unerase = new_static_erasing_pair("StringDictStrategyIterator")
 
@@ -221,13 +225,21 @@ class StringDictStrategy(BaseDictStrategy, TypedDictStrategyMixin):
 
 
 def get_each_location(bytecode):
-    return "Hash#each %s:%d:in %s" % (
-        bytecode.filepath, bytecode.lineno, bytecode.name)
+    return "Hash#each " + bytecode.get_location()
 
 
 def get_merge_location(bytecode):
-    return "Hash#merge! %s:%d:in %s" % (
-        bytecode.filepath, bytecode.lineno, bytecode.name)
+    return "Hash#merge! " + bytecode.get_location()
+
+
+def get_flat_map_location(bytecode, strategy):
+    return "Hash#flat_map [%s] %s" % (strategy.name, bytecode.get_location())
+
+
+flat_map_driver = jit.JitDriver(
+    greens=["bytecode", "strategy"], reds="auto", name="Hash#flat_map",
+    get_printable_location=get_flat_map_location,
+)
 
 
 # Their own loops for the JIT, as Array#each has (see arrayobject.py): in
@@ -493,6 +505,39 @@ class W_HashObject(W_Object):
                 break
             space.invoke_block(block, [space.newarray([w_key, w_value])])
         return self
+
+    @classdef.method("collect_concat")
+    @classdef.method("flat_map")
+    def method_flat_map(self, space, block):
+        from topaz.objects.functionobject import W_BuiltinFunction
+
+        if block is None:
+            return space.send(self, "enum_for", [space.newsymbol("flat_map")])
+        w_each = space.getclass(self).find_method(space, "each")
+        if not (isinstance(w_each, W_BuiltinFunction) and
+                w_each.w_class is space.w_hash and
+                w_each.name in ("each", "each_pair")):
+            # Enumerable honors a subclass/singleton override of each.
+            return space.send_super_from(space.w_hash, self, "flat_map", [], block)
+        bytecode = block.bytecode
+        strategy = self.strategy
+        iterator = strategy.iteritems(self.dict_storage)
+        result_w = []
+        while True:
+            # Keep the initial strategy green: next_entry handles a storage
+            # transition during the callback using the original iterator.
+            flat_map_driver.jit_merge_point(bytecode=bytecode, strategy=strategy)
+            try:
+                w_key, w_value = strategy.next_entry(iterator, self)
+            except StopIteration:
+                break
+            w_res = space.invoke_block(block, [space.newarray([w_key, w_value])])
+            w_ary = space.convert_type(w_res, space.w_array, "to_ary", raise_error=False)
+            if w_ary is space.w_nil:
+                result_w.append(w_res)
+            else:
+                result_w.extend(space.listview(w_ary))
+        return space.newarray(result_w)
 
     # Enumerable#each_with_object goes through each_entry, which re-splats
     # every pair into a fresh array in a second block frame.
