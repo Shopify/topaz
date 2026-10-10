@@ -507,18 +507,24 @@ class W_HashObject(W_Object):
         return self
 
     @classdef.method("collect_concat")
+    def method_collect_concat(self, space, block):
+        return self._flat_map(space, block, "collect_concat")
+
     @classdef.method("flat_map")
     def method_flat_map(self, space, block):
+        return self._flat_map(space, block, "flat_map")
+
+    def _flat_map(self, space, block, method_name):
         from topaz.objects.functionobject import W_BuiltinFunction
 
         if block is None:
-            return space.send(self, "enum_for", [space.newsymbol("flat_map")])
+            return space.send(self, "enum_for", [space.newsymbol(method_name)])
         w_each = space.getclass(self).find_method(space, "each")
         if not (isinstance(w_each, W_BuiltinFunction) and
                 w_each.w_class is space.w_hash and
                 w_each.name in ("each", "each_pair")):
             # Enumerable honors a subclass/singleton override of each.
-            return space.send_super_from(space.w_hash, self, "flat_map", [], block)
+            return space.send_super_from(space.w_hash, self, method_name, [], block)
         bytecode = block.bytecode
         strategy = self.strategy
         iterator = strategy.iteritems(self.dict_storage)

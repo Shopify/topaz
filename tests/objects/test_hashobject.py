@@ -4,6 +4,37 @@ from ..base import BaseTopazTest
 
 
 class TestHashObject(BaseTopazTest):
+    @pytest.mark.parametrize('method, other', [
+        ('collect_concat', 'flat_map'), ('flat_map', 'collect_concat')])
+    @pytest.mark.parametrize('singleton', [False, True])
+    def test_flat_map_enumerator_keeps_method_name(self, space, method, other,
+                                                  singleton):
+        if singleton:
+            setup = 'h = {a: 1}; def h.%s; [:wrong]; end' % other
+        else:
+            setup = '''class CustomHash < Hash
+              def %s; [:wrong]; end
+            end
+            h = CustomHash.new; h[:a] = 1''' % other
+        w_res = space.execute(setup + '''
+          return h.%s.each { |key, value| [value] }
+        ''' % method)
+        assert self.unwrap(space, w_res) == [1]
+
+    @pytest.mark.parametrize('method, other', [
+        ('collect_concat', 'flat_map'), ('flat_map', 'collect_concat')])
+    def test_flat_map_each_fallback_keeps_method_name(self, space, method, other):
+        w_res = space.execute('''
+          module Enumerable
+            def %s; [:wrong]; end
+          end
+          class CustomHash < Hash
+            def each; yield [:custom, 42]; end
+          end
+          return CustomHash.new.%s { |key, value| [value] }
+        ''' % (other, method))
+        assert self.unwrap(space, w_res) == [42]
+
     def test_flat_map_results_and_arguments(self, space):
         w_res = space.execute('''
         h = {a: 1, b: 2}
