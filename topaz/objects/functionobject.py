@@ -3,6 +3,15 @@ import copy
 from topaz.objects.objectobject import W_BaseObject
 
 
+class SuperContext(object):
+    """Method-owned metadata shared by invocations and captured blocks."""
+    _immutable_fields_ = ["w_owner", "name"]
+
+    def __init__(self, w_owner, name):
+        self.w_owner = w_owner
+        self.name = name
+
+
 class W_FunctionObject(W_BaseObject):
     _immutable_fields_ = ["name", "w_class", "visibility?"]
 
@@ -82,29 +91,29 @@ class W_UserFunction(W_FunctionObject):
     # define_method installs an owned copy of a newly built function.
     # Immutable ownership lets calls to known methods fold the owner
     # without a read-then-write quasi-immutable abort during definition.
-    _immutable_fields_ = ["bytecode", "lexical_scope", "w_owner"]
+    _immutable_fields_ = ["bytecode", "lexical_scope", "super_context"]
 
-    def __init__(self, name, bytecode, lexical_scope, visibility=W_FunctionObject.PUBLIC, w_owner=None):
+    def __init__(self, name, bytecode, lexical_scope, visibility=W_FunctionObject.PUBLIC, super_context=None):
         W_FunctionObject.__init__(self, name, visibility=visibility)
         self.bytecode = bytecode
         self.lexical_scope = lexical_scope
         # The module the method was first defined in (see define_method).
-        self.w_owner = w_owner
+        self.super_context = super_context
 
     def __deepcopy__(self, memo):
         obj = super(W_UserFunction, self).__deepcopy__(memo)
         obj.bytecode = copy.deepcopy(self.bytecode, memo)
         obj.lexical_scope = copy.deepcopy(self.lexical_scope, memo)
-        obj.w_owner = copy.deepcopy(self.w_owner, memo)
+        obj.super_context = copy.deepcopy(self.super_context, memo)
         return obj
 
     def with_visibility(self, visibility):
         return W_UserFunction(
-            self.name, self.bytecode, self.lexical_scope, visibility, self.w_owner)
+            self.name, self.bytecode, self.lexical_scope, visibility, self.super_context)
 
     def with_owner(self, w_owner):
         return W_UserFunction(
-            self.name, self.bytecode, self.lexical_scope, self.visibility, w_owner)
+            self.name, self.bytecode, self.lexical_scope, self.visibility, SuperContext(w_owner, None))
 
     def call(self, space, w_receiver, args_w, block):
         return self.call_with_super(space, w_receiver, args_w, block, 0)
@@ -116,7 +125,7 @@ class W_UserFunction(W_FunctionObject):
             lexical_scope=self.lexical_scope,
             block=block,
         )
-        frame.w_owner = self.w_owner
+        frame.super_context = self.super_context
         frame.super_occurrence = occurrence
         with space.getexecutioncontext().visit_frame(frame):
             frame.handle_args(space, self.bytecode, args_w, block)

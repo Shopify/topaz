@@ -48,7 +48,7 @@ class TestInteger(BaseJITTest):
         # The block is inlined into the builtin's loop: sum, count and the
         # induction variable use checked integer adds, without calls or boxes.
         self.assert_matches(loop, """
-        label(i0, i1, i51, p3, p24, p22, p20, p18, p5, p12, p9, i13, p14, p10, p8, p6, p7, p25, p35, i40, p43, p16, descr=TargetToken(135997521828320))
+        label(i0, i1, i51, p3, p24, p22, p20, p18, p5, p12, i13, p14, p10, p8, p6, p7, p25, p35, i40, p43, p16, descr=TargetToken(135997521828320))
         debug_merge_point(0, 0, 'block in <main>')
         p55 = force_token()
         guard_not_invalidated(descr=<Guard0x7bb063fa7b50>)
@@ -81,5 +81,5 @@ class TestInteger(BaseJITTest):
         guard_true(i68, descr=<Guard0x7bb063f344b8>)
         debug_merge_point(0, 0, 'block in <main>')
         i69 = arraylen_gc(p16, descr=<ArrayP 8>)
-        jump(i0, i1, i67, p3, p24, p22, p20, p18, p5, p12, p9, i13, p14, p10, p8, p6, p7, p25, p35, i60, p43, p16, descr=TargetToken(135997521828320))
+        jump(i0, i1, i67, p3, p24, p22, p20, p18, p5, p12, i13, p14, p10, p8, p6, p7, p25, p35, i60, p43, p16, descr=TargetToken(135997521828320))
         """ % ("int_le" if step > 0 else "int_ge"))

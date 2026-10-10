@@ -121,8 +121,8 @@ class TestModuleObject(BaseTopazTest):
         assert self.unwrap(space, w_res) == [11, 11, True]
         w_child = self.find_const(space, "Child")
         w_grandchild = self.find_const(space, "Grandchild")
-        assert w_child.find_method(space, "f").w_owner is w_child
-        assert w_grandchild.find_method(space, "g").w_owner is w_child
+        assert w_child.find_method(space, "f").super_context.w_owner is w_child
+        assert w_grandchild.find_method(space, "g").super_context.w_owner is w_child
 
     def test_bare_module_function_owners(self, space):
         w_mod = space.execute("""
@@ -133,8 +133,8 @@ class TestModuleObject(BaseTopazTest):
         return OwnerModule
         """)
         w_singleton = space.getsingletonclass(w_mod)
-        assert w_mod.find_method(space, "f").w_owner is w_mod
-        assert w_singleton.find_method(space, "f").w_owner is w_singleton
+        assert w_mod.find_method(space, "f").super_context.w_owner is w_mod
+        assert w_singleton.find_method(space, "f").super_context.w_owner is w_singleton
         assert space.int_w(space.send(w_mod, "f")) == 123
 
     def test_alias_method_builtin(self, space):

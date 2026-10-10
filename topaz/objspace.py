@@ -781,7 +781,7 @@ class ObjectSpace(object):
                     except:
                         caller.dropvaluesuntil(finaldepth)
                         raise
-                    frame.w_owner = raw_method.w_owner
+                    frame.super_context = raw_method.super_context
                     for i in xrange(nargs):
                         pos = bc.arg_pos[i]
                         assert pos >= 0
@@ -883,9 +883,8 @@ class ObjectSpace(object):
             top_parent_interp=top_parent_interp,
             regexp_match_cell=block.regexp_match_cell,
         )
-        frame.w_owner = block.w_owner
+        frame.super_context = block.super_context
         frame.super_occurrence = block.super_occurrence
-        frame.super_name = block.super_name
         if block.is_lambda:
             frame.handle_args(self, bc, args_w, block_arg)
         else:

@@ -65,14 +65,16 @@ class Frame(BaseFrame):
         self.block = block
         self.parent_interp = parent_interp
         self.top_parent_interp = top_parent_interp
-        # The module that owns the running method, for `super`; None when
-        # not known (then the lexical scope is used).
-        self.w_owner = None
+        # Shared method owner and optional define_method name override.
+        self.super_context = None
         # Which occurrence of the owner supplied this call (usually the first).
         self.super_occurrence = 0
-        # The name `super` calls: set in define_method bodies, whose code
-        # was compiled inside some other method.
-        self.super_name = None
+
+    def get_super_owner(self):
+        context = self.super_context
+        if context is not None:
+            return context.w_owner
+        return None
 
     def get_regexp_match_cell(self):
         # Blocks must capture the shared cell even if no match has happened

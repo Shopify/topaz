@@ -8,7 +8,7 @@ from topaz.celldict import CellDict, VersionTag
 from topaz.coerce import Coerce
 from topaz.module import ClassDef, check_frozen
 from topaz.objects.arrayobject import W_ArrayObject
-from topaz.objects.functionobject import W_FunctionObject, W_UserFunction
+from topaz.objects.functionobject import W_FunctionObject, W_UserFunction, SuperContext
 from topaz.objects.objectobject import W_RootObject
 from topaz.objects.procobject import W_ProcObject
 from topaz.scope import StaticScope
@@ -73,18 +73,31 @@ class UndefMethod(W_FunctionObject):
 
 
 class DefineMethodBlock(W_FunctionObject):
-    _immutable_fields_ = ["name", "block"]
+    _immutable_fields_ = ["name", "block", "w_owner", "super_context"]
 
-    def __init__(self, name, block):
+    def __init__(self, name, block, w_owner=None, super_context=None):
         W_FunctionObject.__init__(self, name)
         self.name = name
         self.block = block
-        self.w_owner = None
+        # Installation owner; an uninstalled wrapper can still inherit
+        # the captured block's owner in its execution context.
+        self.w_owner = w_owner
+        if super_context is None:
+            context_owner = w_owner
+            if context_owner is None and block.super_context is not None:
+                context_owner = block.super_context.w_owner
+            super_context = SuperContext(context_owner, name)
+        self.super_context = super_context
+
+    def with_owner(self, w_owner):
+        method = DefineMethodBlock(self.name, self.block, w_owner)
+        method.visibility = self.visibility
+        return method
 
     def with_visibility(self, visibility):
-        method = DefineMethodBlock(self.name, self.block)
+        method = DefineMethodBlock(
+            self.name, self.block, self.w_owner, self.super_context)
         method.visibility = visibility
-        method.w_owner = self.w_owner
         return method
 
     def call(self, space, w_obj, args_w, block):
@@ -92,10 +105,8 @@ class DefineMethodBlock(W_FunctionObject):
 
     def call_with_super(self, space, w_obj, args_w, block, occurrence):
         method_block = self.block.copy(space, w_self=w_obj, is_lambda=True)
-        if self.w_owner is not None:
-            method_block.w_owner = self.w_owner
+        method_block.super_context = self.super_context
         method_block.super_occurrence = occurrence
-        method_block.super_name = self.name
         # The body is a lambda: its own returns end at the interpreter that
         # runs it, and a return from a block the caller passed in (headed
         # for the caller's method) propagates through.
@@ -271,11 +282,11 @@ class W_ModuleObject(W_RootObject):
         if name == "initialize" or name == "initialize_copy":
             method = method.with_visibility(W_FunctionObject.PRIVATE)
         if isinstance(method, W_UserFunction):
-            if method.w_owner is None:
+            if method.super_context is None:
                 method = method.with_owner(self)
         elif isinstance(method, DefineMethodBlock):
             if method.w_owner is None:
-                method.w_owner = self
+                method = method.with_owner(self)
         self.mutated()
         self.methods_w[name] = method
         self.shadow_hidden_subclasses(name)

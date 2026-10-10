@@ -447,9 +447,8 @@ class Interpreter(object):
             w_code, frame.w_self, frame.lexical_scope, cells, frame.block,
             self, frame.top_parent_interp or self, frame.get_regexp_match_cell()
         )
-        w_proc.w_owner = frame.w_owner
+        w_proc.super_context = frame.super_context
         w_proc.super_occurrence = frame.super_occurrence
-        w_proc.super_name = frame.super_name
         frame.push(w_proc)
 
     def BUILD_LAMBDA(self, space, bytecode, frame, pc):
@@ -708,9 +707,11 @@ class Interpreter(object):
             frame.push(space.w_nil)
 
     def _super_name(self, space, bytecode, frame, meth_idx):
-        name = frame.super_name
-        if name is not None:
-            return name
+        context = frame.super_context
+        if context is not None:
+            name = context.name
+            if name is not None:
+                return name
         return space.symbol_w(bytecode.consts_w[meth_idx])
 
     def SEND_SUPER_BLOCK(self, space, bytecode, frame, pc, meth_idx, num_args):
@@ -722,7 +723,7 @@ class Interpreter(object):
             w_block = None
         else:
             assert isinstance(w_block, W_ProcObject)
-        w_owner = frame.w_owner
+        w_owner = frame.get_super_owner()
         if w_owner is None and frame.lexical_scope is not None:
             w_owner = frame.lexical_scope.w_mod
         if w_owner is not None:
@@ -751,7 +752,7 @@ class Interpreter(object):
             w_block = None
         else:
             assert isinstance(w_block, W_ProcObject)
-        w_owner = frame.w_owner
+        w_owner = frame.get_super_owner()
         if w_owner is None and frame.lexical_scope is not None:
             w_owner = frame.lexical_scope.w_mod
         if w_owner is not None:
@@ -771,7 +772,7 @@ class Interpreter(object):
         w_obj = frame.pop()
         name = space.symbol_w(bytecode.consts_w[meth_idx])
         w_cls = space.getclass(w_obj)
-        w_owner = frame.w_owner
+        w_owner = frame.get_super_owner()
         if w_owner is None and frame.lexical_scope is not None:
             w_owner = frame.lexical_scope.w_mod
         if w_owner is not None:
