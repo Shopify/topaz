@@ -347,6 +347,18 @@ class CompilerContext(object):
         while index + 1 < len(instrs):
             load = instrs[index]
             following = instrs[index + 1]
+            if load.opcode in (consts.BUILD_ARRAY, consts.BUILD_ARRAY_SPLAT):
+                # Multiple assignment retains the original RHS with DUP_TOP
+                # before coercing the copy. Both are already known arrays.
+                coerce_index = index + 1
+                if following.opcode == consts.DUP_TOP:
+                    coerce_index += 1
+                if (coerce_index < len(instrs) and
+                        instrs[coerce_index].opcode == consts.COERCE_ARRAY and
+                        self.can_remove(instrs, coerce_index, 1)):
+                    del instrs[coerce_index]
+                    changed = True
+                    continue
             if load.opcode == consts.LOAD_CONST:
                 if (following.opcode == consts.DISCARD_TOP and
                         self.can_remove(instrs, index, 2)):
@@ -641,7 +653,7 @@ class Block(object):
         destinations describe handler entry states, not ordinary branch edges.
         """
         changed = False
-        for instr in self.instrs:
+        for index, instr in enumerate(self.instrs):
             if instr.opcode not in (consts.JUMP, consts.JUMP_IF_TRUE,
                                     consts.JUMP_IF_FALSE,
                                     consts.JUMP_IF_KWARG_GIVEN):
@@ -666,6 +678,15 @@ class Block(object):
                     break
                 if dest.opcode == consts.JUMP:
                     target = dest.jump
+                elif (instr.opcode in (consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE)
+                      and index > 0 and self.instrs[index - 1].opcode == consts.DUP_TOP
+                      and dest.opcode == consts.DUP_TOP and len(target.instrs) > 1
+                      and target.instrs[1].opcode == instr.opcode
+                      and (target.instrs[1].lineno == -1 or
+                           target.instrs[1].lineno == instr.lineno)):
+                    # The taken edge retains the tested value. Testing a copy
+                    # of it again has the same outcome and no net stack effect.
+                    target = target.instrs[1].jump
                 elif (instr.opcode == consts.JUMP and
                       dest.opcode == consts.RETURN):
                     instr.opcode = consts.RETURN

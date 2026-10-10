@@ -311,7 +311,6 @@ class TestCompiler(object):
         LOAD_CONST 1
         LOAD_CONST 2
         BUILD_ARRAY 2
-        COERCE_ARRAY 1
         BUILD_ARRAY_SPLAT 2
 
         RETURN
@@ -1677,7 +1676,6 @@ class TestCompiler(object):
         LOAD_CONST 2
         BUILD_ARRAY 3
         DUP_TOP
-        COERCE_ARRAY 0
         UNPACK_SEQUENCE_SPLAT 3 1
 
         STORE_DEREF 0
@@ -1698,7 +1696,6 @@ class TestCompiler(object):
         LOAD_CONST 1
         BUILD_ARRAY 2
         DUP_TOP
-        COERCE_ARRAY 0
         UNPACK_SEQUENCE_SPLAT 1 0
         DISCARD_TOP
 

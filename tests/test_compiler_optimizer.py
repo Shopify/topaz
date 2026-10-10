@@ -333,3 +333,132 @@ def test_jump_to_return_on_another_line_is_not_inlined():
     first.jump_thread()
     assert first.instrs[0].opcode == consts.JUMP
     assert first.instrs[0].jump is end
+
+
+@pytest.mark.parametrize('opcode', [consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE])
+def test_thread_repeated_boolean_test(opcode):
+    end = block(instruction(consts.RETURN))
+    middle = block(instruction(consts.DUP_TOP), instruction(opcode, 0, end))
+    first = block(instruction(consts.DUP_TOP), instruction(opcode, 0, middle))
+    assert first.jump_thread()
+    assert first.instrs[1].jump is end
+    # Other predecessors still need to test the value at the original target.
+    assert [i.opcode for i in middle.instrs] == [consts.DUP_TOP, opcode]
+
+
+@pytest.mark.parametrize('barrier', ['no_dup', 'opposite', 'dup_line', 'branch_line'])
+def test_repeated_boolean_test_barriers(barrier):
+    end = block(instruction(consts.RETURN))
+    middle = block(instruction(consts.DUP_TOP),
+                   instruction(consts.JUMP_IF_TRUE, 0, end))
+    first = block(instruction(consts.DUP_TOP, lineno=10),
+                  instruction(consts.JUMP_IF_TRUE, 0, middle, lineno=10))
+    if barrier == 'no_dup':
+        first.instrs.pop(0)
+    elif barrier == 'opposite':
+        middle.instrs[1].opcode = consts.JUMP_IF_FALSE
+    elif barrier == 'dup_line':
+        middle.instrs[0].lineno = 20
+    else:
+        middle.instrs[1].lineno = 20
+    first.jump_thread()
+    assert first.instrs[-1].jump is middle
+
+
+def test_repeated_boolean_test_cycle():
+    first = block(instruction(consts.DUP_TOP))
+    second = block(instruction(consts.DUP_TOP),
+                   instruction(consts.JUMP_IF_FALSE, 0, first))
+    first.instrs.append(instruction(consts.JUMP_IF_FALSE, 0, second))
+    first.jump_thread()
+    second.jump_thread()
+    assert first.instrs[1].jump in (first, second)
+    assert second.instrs[1].jump in (first, second)
+
+
+@pytest.mark.parametrize('operator', ['&&', '||'])
+def test_compile_boolean_chain(space, operator):
+    # The shape used by Comparable#clamp and Encoding.find.
+    source = 'def f(a, b, c); a %s b %s c; end' % (operator, operator)
+    code = method_code(space, source)
+    instrs = compiled_instructions(code)
+    by_pc = dict((pc, op) for pc, op, args in instrs)
+    branches = [(op, args) for pc, op, args in instrs
+                if op in (consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE)]
+    assert len(branches) == 2
+    assert all(by_pc[args[0]] != consts.DUP_TOP for op, args in branches)
+    space.execute(source)
+    for a in ['nil', 'false', '0']:
+        for b in ['nil', 'false', '1']:
+            result = space.execute('f(%s, %s, 2)' % (a, b))
+            if operator == '&&':
+                expected = a if a != '0' else b if b != '1' else '2'
+            else:
+                expected = a if a == '0' else b if b == '1' else '2'
+            assert space.is_true(space.send(
+                result, 'equal?', [space.execute(expected)]))
+    # A skipped operand must not be evaluated.
+    if operator == '&&':
+        expression = 'false && raise("bad") && raise("bad")'
+    else:
+        expression = 'true || raise("bad") || raise("bad")'
+    space.execute(expression)
+
+
+@pytest.mark.parametrize('producer', [consts.BUILD_ARRAY, consts.BUILD_ARRAY_SPLAT])
+@pytest.mark.parametrize('duplicate', [False, True])
+@pytest.mark.parametrize('nil_is_empty', [0, 1])
+def test_remove_known_array_coercion(producer, duplicate, nil_is_empty):
+    instrs = [instruction(producer, 2)]
+    if duplicate:
+        instrs.append(instruction(consts.DUP_TOP))
+    instrs.extend([instruction(consts.COERCE_ARRAY, nil_is_empty),
+                   instruction(consts.RETURN)])
+    first = block(*instrs)
+    optimize(first)
+    assert consts.COERCE_ARRAY not in [i.opcode for i in first.instrs]
+    assert first.instrs[0].opcode == producer
+    assert (consts.DUP_TOP in [i.opcode for i in first.instrs]) == duplicate
+
+
+@pytest.mark.parametrize('barrier', ['unknown_value', 'scope', 'line'])
+def test_known_array_coercion_barriers(barrier):
+    instrs = [instruction(consts.BUILD_ARRAY, 0)]
+    if barrier == 'unknown_value':
+        instrs.append(instruction(consts.LOAD_DEREF, 0))
+    elif barrier == 'scope':
+        instrs.append(instruction(consts.POP_BLOCK))
+    instrs.extend([instruction(consts.COERCE_ARRAY, 0,
+                              lineno=20 if barrier == 'line' else -1),
+                   instruction(consts.RETURN, lineno=30)])
+    first = block(*instrs)
+    optimize(first)
+    assert consts.COERCE_ARRAY in [i.opcode for i in first.instrs]
+
+
+def test_compile_array_swap(space):
+    # Array#shuffle! uses this indexed multiple-assignment shape.
+    source = 'def f(a, i, j); a[i], a[j] = a[j], a[i]; end'
+    code = method_code(space, source)
+    ops = [op for pc, op, args in compiled_instructions(code)]
+    assert consts.COERCE_ARRAY not in ops
+    assert any(ops[i:i + 3] == [consts.BUILD_ARRAY, consts.DUP_TOP,
+                              consts.UNPACK_SEQUENCE]
+               for i in range(len(ops) - 2))
+    result = space.execute(source + '; a = [1, 2]; value = f(a, 0, 1); [a, value]')
+    assert [[space.int_w(v) for v in space.listview(row)]
+            for row in space.listview(result)] == [[2, 1], [2, 1]]
+
+
+def test_compile_multiple_assignment_keeps_coercion(space):
+    source = 'def f(value); a, b = value; [a, b]; end'
+    code = method_code(space, source)
+    ops = [op for pc, op, args in compiled_instructions(code)]
+    assert consts.COERCE_ARRAY in ops
+    result = space.execute(source + '''
+      class OptimizerArrayCoercion
+        def to_ary; [3, 4]; end
+      end
+      f(OptimizerArrayCoercion.new)
+    ''')
+    assert [space.int_w(v) for v in space.listview(result)] == [3, 4]
