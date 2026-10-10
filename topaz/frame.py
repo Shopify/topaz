@@ -65,10 +65,8 @@ class Frame(BaseFrame):
         self.block = block
         self.parent_interp = parent_interp
         self.top_parent_interp = top_parent_interp
-        # Shared method owner and optional define_method name override.
+        # Shared stable ancestor entry and optional define_method name override.
         self.super_context = None
-        # Which occurrence of the owner supplied this call (usually the first).
-        self.super_occurrence = 0
 
     def get_super_owner(self):
         context = self.super_context

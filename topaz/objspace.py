@@ -890,7 +890,6 @@ class ObjectSpace(object):
             regexp_match_cell=block.regexp_match_cell,
         )
         frame.super_context = block.super_context
-        frame.super_occurrence = block.super_occurrence
         if block.is_lambda:
             frame.handle_args(self, bc, args_w, block_arg)
         else:

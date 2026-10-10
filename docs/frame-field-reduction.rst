@@ -2,8 +2,7 @@ Reducing per-frame state
 ========================
 
 This document describes candidates for reducing the fields carried by every
-``Frame``: the owner occurrence used by ``super``, regexp match state, and
-nonlocal control-flow destinations.
+``Frame``: regexp match state and nonlocal control-flow destinations.
 
 The objective is to reduce allocation and retained memory when frames
 materialize, without introducing compensating allocations on ordinary calls.
@@ -15,16 +14,15 @@ Current representation and priorities
 
 The remaining fields to investigate in ``topaz/frame.py`` are:
 
-* ``super_occurrence``: the occurrence of the owner that supplied this call.
 * ``regexp_match_cell``: shared storage for the lexical regexp match state.
 * ``parent_interp`` and ``top_parent_interp``: captured interpreter identities
   used for nonlocal break and return, respectively. These are not references
   to parent frames or a dynamic caller chain.
 
-Investigate folding ``super_occurrence`` into shared metadata next, without
-per-call allocation. Defer regexp state until there is a broader environment
-design, and leave the interpreter destination references unchanged. These
-changes do not depend on adopting all of CRuby's frame representation.
+Defer regexp state until there is a broader environment design, and leave
+the interpreter destination references unchanged. These changes do not depend
+on adopting all of CRuby's frame representation. Super lookup already uses
+shared stable ancestor metadata; see :doc:`super-lookup`.
 
 CRuby reference
 ---------------
@@ -40,47 +38,6 @@ The environment has slots for flags, a block handler or enclosing environment,
 and method-entry or lexical-scope metadata. Some of those slots can instead
 refer to a wrapper containing additional state. This sharing of storage is
 central to the comparisons below. See `CRuby frame and environment layout`_.
-
-Super owner occurrence
-----------------------
-
-CRuby obtains a callable method entry through the environment. The entry
-contains ``owner`` and ``defined_class``; its method definition contains
-``original_id``. Super lookup uses the original name and begins after the
-appropriate ancestor position represented by ``defined_class``. Included
-modules have ICLASS nodes in the ancestor chain, so that position need not be
-encoded as a separate numeric occurrence on each frame. See `CRuby method
-entries`_ and ``vm_search_super_method`` in `CRuby instruction helpers`_.
-
-``super_occurrence`` identifies which occurrence of the owner supplied this
-call. Folding it into ``SuperContext`` would remove another field from frames
-and procs. A function alone does not identify the occurrence: the same
-function can participate in different lookup paths.
-
-Explore occurrence-specific variants of the existing context. Ordinary calls
-should reuse a context with occurrence zero. Nonzero occurrences could use
-cached variants keyed by the base context and occurrence, selected when
-entering the method and retained by blocks it creates. Keep the variants
-immutable so a later call cannot change an escaped block's destination.
-
-Alternatively, an existing resolved-method or lookup-cache entry could own
-the context variant. Avoid allocating a fresh context on every call. Audit
-both the normal call path and the fast argument path in
-``ObjectSpace.send_valuestack``, as well as method objects, ``define_method``,
-and block creation and invocation.
-
-Define how context remains valid across method redefinition, aliasing,
-include/prepend changes, and calls through previously obtained method objects.
-Cache invalidation must preserve the intended lookup semantics, rather than
-merely retain a convenient old ancestor position. Preserve lexical ownership
-when a block escapes and later executes ``super``.
-
-Validation must cover inheritance, aliases, singleton methods, include and
-prepend chains, repeated occurrences of a module, bound and unbound methods,
-explicit and implicit super arguments, ``defined?(super)``, and nested or
-escaped blocks from ``define_method``. Trace ordinary calls as well as super
-calls; eliminating the occurrence field is useful only if the replacement
-does not add routine allocations or frame forcing.
 
 Regexp match state
 ------------------
@@ -197,7 +154,6 @@ Once a change is adopted, document how its representation works in the
 implementation documentation.
 
 .. _CRuby frame and environment layout: https://github.com/ruby/ruby/blob/334b4ffa7fa75c5e347799a7609c252abe68df30/vm_core.h
-.. _CRuby method entries: https://github.com/ruby/ruby/blob/334b4ffa7fa75c5e347799a7609c252abe68df30/method.h
 .. _CRuby instruction helpers: https://github.com/ruby/ruby/blob/334b4ffa7fa75c5e347799a7609c252abe68df30/vm_insnhelper.c
 .. _CRuby special-variable storage: https://github.com/ruby/ruby/blob/334b4ffa7fa75c5e347799a7609c252abe68df30/internal/imemo.h
 .. _CRuby environment escape handling: https://github.com/ruby/ruby/blob/334b4ffa7fa75c5e347799a7609c252abe68df30/vm.c

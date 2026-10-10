@@ -448,7 +448,6 @@ class Interpreter(object):
             self, frame.top_parent_interp or self, frame.get_regexp_match_cell()
         )
         w_proc.super_context = frame.super_context
-        w_proc.super_occurrence = frame.super_occurrence
         frame.push(w_proc)
 
     def BUILD_LAMBDA(self, space, bytecode, frame, pc):
