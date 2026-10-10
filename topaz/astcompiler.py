@@ -196,6 +196,132 @@ class CompilerContext(object):
             block.get_code(code, linenos)
         return "".join(code), linenos
 
+    def optimize(self, blocks):
+        """Simplify the CFG before lowering scope markers or assigning PCs.
+
+        As in PyPy's assembler, keep the original layout and empty dead blocks
+        instead of reordering the graph. Default-argument entries are additional
+        roots; SETUP markers keep unwind-only destinations reachable.
+        """
+        any_changed = False
+        changed = True
+        while changed:
+            changed = False
+            for block in blocks:
+                if block.jump_thread():
+                    changed = True
+                if self.optimize_local(block):
+                    changed = True
+            predecessors, removed = self.remove_unreachable(blocks)
+            changed = changed or removed
+            for block in blocks:
+                # Only merge a fallthrough with no other entry. In particular,
+                # never pull a default prologue or handler into its predecessor.
+                target = block.next_block
+                if (target is not None and target is not block and
+                        predecessors.get(target, 0) == 1):
+                    block.instrs.extend(target.instrs)
+                    block.next_block = target.next_block
+                    target.instrs = []
+                    target.next_block = None
+                    changed = True
+            # A jump to the next emitted block can fall through instead.
+            following = None
+            for index in range(len(blocks) - 1, -1, -1):
+                block = blocks[index]
+                if not block.instrs:
+                    continue
+                last = block.instrs[-1]
+                if (last.opcode == consts.JUMP and last.jump is following and
+                        (last.lineno == -1 or
+                         last.lineno == following.instrs[0].lineno)):
+                    block.instrs.pop()
+                    block.next_block = following
+                    changed = True
+                if block.instrs:
+                    following = block
+            any_changed = any_changed or changed
+        return any_changed
+
+    def remove_unreachable(self, blocks):
+        predecessors = {self.first_block: 1}
+        pending = [self.first_block]
+        for block in self.default_entry_blocks:
+            predecessors[block] = predecessors.get(block, 0) + 1
+            pending.append(block)
+        seen = {}
+        changed = False
+        while pending:
+            block = pending.pop()
+            if block in seen:
+                continue
+            seen[block] = True
+            for index, instr in enumerate(block.instrs):
+                if instr.jump is not None:
+                    target = instr.jump
+                    predecessors[target] = predecessors.get(target, 0) + 1
+                    pending.append(target)
+                if instr.is_terminal():
+                    if index + 1 < len(block.instrs):
+                        del block.instrs[index + 1:]
+                        changed = True
+                    if block.next_block is not None:
+                        block.next_block = None
+                        changed = True
+                    break
+            if block.next_block is not None:
+                target = block.next_block
+                predecessors[target] = predecessors.get(target, 0) + 1
+                pending.append(target)
+        for block in blocks:
+            if block not in seen:
+                if block.instrs or block.next_block is not None:
+                    block.instrs = []
+                    block.next_block = None
+                    changed = True
+        return predecessors, changed
+
+    def optimize_local(self, block):
+        changed = False
+        instrs = block.instrs
+        index = 0
+        while index + 1 < len(instrs):
+            load, following = instrs[index:index + 2]
+            if load.opcode == consts.LOAD_CONST:
+                if (following.opcode == consts.DISCARD_TOP and
+                        self.can_remove(instrs, index, 2)):
+                    del instrs[index:index + 2]
+                    changed = True
+                    continue
+                if following.opcode in (consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE):
+                    taken = self.space.is_true(self.consts[load.arg0])
+                    if following.opcode == consts.JUMP_IF_FALSE:
+                        taken = not taken
+                    if taken and (load.lineno == -1 or load.lineno == following.lineno):
+                        following.opcode = consts.JUMP
+                        del instrs[index]
+                        changed = True
+                        continue
+                    if not taken and self.can_remove(instrs, index, 2):
+                        del instrs[index:index + 2]
+                        changed = True
+                        continue
+            index += 1
+        return changed
+
+    @staticmethod
+    def can_remove(instrs, start, count):
+        # Don't erase an independently observable source line. Synthetic
+        # instructions have no line; a real line must survive on the next op.
+        following_line = -1
+        if start + count < len(instrs):
+            following_line = instrs[start + count].lineno
+        for index in range(start, start + count):
+            line = instrs[index].lineno
+            if line != -1 and line != following_line:
+                return False
+        return True
+
     def analyze_unwind(self, blocks):
         """Verify every reachable edge before assigning byte offsets.
 
@@ -448,6 +574,52 @@ class Block(object):
         self.marked = False
         self.next_block = None
 
+    def jump_thread(self):
+        """Thread ordinary branches, retaining source lines like PyPy's assembler.
+
+        Scope markers and unwind transfers are deliberately not threaded: their
+        destinations describe handler entry states, not ordinary branch edges.
+        """
+        changed = False
+        for instr in self.instrs:
+            if instr.opcode not in (consts.JUMP, consts.JUMP_IF_TRUE,
+                                    consts.JUMP_IF_FALSE,
+                                    consts.JUMP_IF_KWARG_GIVEN):
+                continue
+            seen = {}
+            target = instr.jump
+            while target is not None and target not in seen:
+                seen[target] = True
+                if not target.instrs:
+                    if target.next_block is None:
+                        break
+                    target = target.next_block
+                    continue
+                dest = target.instrs[0]
+                if dest is instr:
+                    break
+                same_target_line = (
+                    dest.opcode == consts.JUMP and dest.jump.instrs and
+                    dest.jump.instrs[0].lineno == dest.lineno)
+                if (dest.lineno != -1 and dest.lineno != instr.lineno and
+                        not same_target_line):
+                    break
+                if dest.opcode == consts.JUMP:
+                    target = dest.jump
+                elif (instr.opcode == consts.JUMP and
+                      dest.opcode == consts.RETURN):
+                    instr.opcode = consts.RETURN
+                    instr.arg0 = instr.arg1 = -1
+                    target = None
+                    changed = True
+                    break
+                else:
+                    break
+            if instr.jump is not target:
+                instr.jump = target
+                changed = True
+        return changed
+
     def post_order(self):
         blocks = []
         self._post_order(blocks)
@@ -490,6 +662,11 @@ class Instruction(object):
         self.depth = 0
         self.cleanup_depth = 0
         self.push_nil = False
+
+    def is_terminal(self):
+        return self.opcode in (consts.JUMP, consts.RETURN, consts.RAISE_RETURN,
+                              consts.BREAK_LOOP, consts.RAISE_BREAK,
+                              consts.CONTINUE_LOOP, consts.END_RESCUE)
 
     def emit(self, code, linenos):
         assert self.opcode >= 0
