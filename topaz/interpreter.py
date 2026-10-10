@@ -730,7 +730,7 @@ class Interpreter(object):
             w_res = space.send_super_from(
                 w_owner, w_receiver,
                 self._super_name(space, bytecode, frame, meth_idx), args_w,
-                block=w_block, occurrence=frame.super_occurrence)
+                block=w_block, context=frame.super_context)
         else:
             w_res = space.send_super(
                 space.getclass(w_receiver), w_receiver,
@@ -759,7 +759,7 @@ class Interpreter(object):
             w_res = space.send_super_from(
                 w_owner, w_receiver,
                 self._super_name(space, bytecode, frame, meth_idx), args_w,
-                block=w_block, occurrence=frame.super_occurrence)
+                block=w_block, context=frame.super_context)
         else:
             w_res = space.send_super(
                 space.getclass(w_receiver), w_receiver,
@@ -776,8 +776,10 @@ class Interpreter(object):
         if w_owner is None and frame.lexical_scope is not None:
             w_owner = frame.lexical_scope.w_mod
         if w_owner is not None:
-            w_method = w_cls.find_method_after(
-                space, w_owner, name, frame.super_occurrence)
+            entry = None
+            if frame.super_context is not None:
+                entry = frame.super_context.entry
+            w_method = w_cls.find_method_after(space, w_owner, name, entry)
         else:
             w_method = w_cls.find_method_super(space, name)
         if w_method is not None:

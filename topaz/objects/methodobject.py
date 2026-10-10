@@ -36,7 +36,7 @@ def create_source_location(classdef):
 
 
 class W_MethodObject(W_Object):
-    _immutable_fields_ = ["w_owner", "w_function", "w_receiver"]
+    _immutable_fields_ = ["w_owner", "w_function", "w_receiver", "entry"]
     classdef = ClassDef("Method", W_Object.classdef)
 
     def __init__(self, space, w_owner, w_function, w_receiver):
@@ -44,6 +44,7 @@ class W_MethodObject(W_Object):
         self.w_owner = w_owner
         self.w_function = w_function
         self.w_receiver = w_receiver
+        self.entry = space.getclass(w_receiver).resolve_method_entry(w_owner)
 
     method_allocate = classdef.undefine_allocator()
     method_owner = create_owner(classdef)
@@ -57,11 +58,12 @@ class W_MethodObject(W_Object):
         # Promote the function, not the Method: a Method made in the trace
         # (obj.method(:m).call) is virtual, and promoting a virtual makes
         # the trace invalid.
-        return space.invoke_function(
-            jit.promote(self.w_function),
+        return jit.promote(self.w_function).call_with_super(
+            space,
             self.w_receiver,
             args_w,
-            block
+            block,
+            jit.promote(self.entry)
         )
 
     @classdef.method("unbind")

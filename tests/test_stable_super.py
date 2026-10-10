@@ -75,3 +75,44 @@ class TestStableSuper(BaseTopazTest):
           return saved.call
         ''')
         assert self.unwrap(space, result) == ['after', 'base']
+
+    @pytest.mark.parametrize('capture', [
+        'User.instance_method(:f)', 'object.method(:f).unbind'])
+    def test_unbound_method_selects_current_entry_when_bound(self, space, capture):
+        result = space.execute('''
+          module Repeat; def f; [:repeat] + super; end; end
+          class Base; def f; [:base]; end; end
+          class User < Base; include Repeat; end
+          object = User.new
+          saved = %s
+          User.prepend(Repeat)
+          return saved.bind(object).call
+        ''' % capture)
+        assert self.unwrap(space, result) == ['repeat', 'repeat', 'base']
+
+    def test_defined_super_uses_captured_entry(self, space):
+        result = space.execute('''
+          module Repeat
+            def f; proc { defined?(super) }; end
+          end
+          class User; include Repeat; end
+          saved = User.new.f
+          User.prepend(Repeat)
+          return saved.call
+        ''')
+        assert result is space.w_nil
+
+    def test_late_prepend_in_included_module_preserves_active_entry(self, space):
+        result = space.execute('''
+          module Before; def f; [:before] + super; end; end
+          module Repeat
+            def f
+              Repeat.prepend(Before)
+              [:repeat] + super
+            end
+          end
+          class Base; def f; [:base]; end; end
+          class User < Base; include Repeat; end
+          return User.new.f
+        ''')
+        assert self.unwrap(space, result) == ['repeat', 'base']

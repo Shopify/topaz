@@ -1,15 +1,29 @@
 import copy
 
+from rpython.rlib import jit
+
 from topaz.objects.objectobject import W_BaseObject
 
 
 class SuperContext(object):
-    """Method-owned metadata shared by invocations and captured blocks."""
-    _immutable_fields_ = ["w_owner", "name"]
+    """Ancestor-owned metadata shared by invocations and captured blocks."""
+    _immutable_fields_ = ["w_owner", "name", "entry"]
 
-    def __init__(self, w_owner, name):
+    def __init__(self, w_owner, name, entry=None):
         self.w_owner = w_owner
         self.name = name
+        if entry is None and w_owner is not None:
+            entry = w_owner.origin_entry
+        self.entry = entry
+
+    def resolve(self, space, w_receiver, entry=None):
+        if entry is not None and entry.w_module is self.w_owner:
+            return entry.get_super_context(self.name)
+        from topaz.objects.classobject import W_ClassObject
+        # A class has only one origin; normal class calls need no search.
+        if self.w_owner is None or isinstance(self.w_owner, W_ClassObject):
+            return self
+        return space.getclass(w_receiver).resolve_super_context(jit.promote(self))
 
 
 class W_FunctionObject(W_BaseObject):
@@ -42,7 +56,7 @@ class W_FunctionObject(W_BaseObject):
     def is_undefined(self):
         return False
 
-    def call_with_super(self, space, w_receiver, args_w, block, occurrence):
+    def call_with_super(self, space, w_receiver, args_w, block, entry):
         return self.call(space, w_receiver, args_w, block)
 
     def arity(self, space):
@@ -74,8 +88,8 @@ class W_VisibilityFunction(W_FunctionObject):
     def call(self, space, w_receiver, args_w, block):
         return self.method.call(space, w_receiver, args_w, block)
 
-    def call_with_super(self, space, w_receiver, args_w, block, occurrence):
-        return self.method.call_with_super(space, w_receiver, args_w, block, occurrence)
+    def call_with_super(self, space, w_receiver, args_w, block, entry):
+        return self.method.call_with_super(space, w_receiver, args_w, block, entry)
 
     def arity(self, space):
         return self.method.arity(space)
@@ -113,20 +127,23 @@ class W_UserFunction(W_FunctionObject):
 
     def with_owner(self, w_owner):
         return W_UserFunction(
-            self.name, self.bytecode, self.lexical_scope, self.visibility, SuperContext(w_owner, None))
+            self.name, self.bytecode, self.lexical_scope, self.visibility,
+            w_owner.origin_entry.get_super_context(None))
 
     def call(self, space, w_receiver, args_w, block):
-        return self.call_with_super(space, w_receiver, args_w, block, 0)
+        return self.call_with_super(space, w_receiver, args_w, block, None)
 
-    def call_with_super(self, space, w_receiver, args_w, block, occurrence):
+    def call_with_super(self, space, w_receiver, args_w, block, entry):
         frame = space.create_frame(
             self.bytecode,
             w_self=w_receiver,
             lexical_scope=self.lexical_scope,
             block=block,
         )
-        frame.super_context = self.super_context
-        frame.super_occurrence = occurrence
+        context = self.super_context
+        if context is not None:
+            context = context.resolve(space, w_receiver, entry)
+        frame.super_context = context
         with space.getexecutioncontext().visit_frame(frame):
             frame.handle_args(space, self.bytecode, args_w, block)
             return space.execute_frame(frame, self.bytecode)

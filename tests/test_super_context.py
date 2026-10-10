@@ -95,3 +95,46 @@ class TestSuperContext(BaseTopazTest):
         assert singleton_context.w_owner is singleton
         assert instance_context is not singleton_context
         assert instance_context.name == singleton_context.name == 'f'
+
+    def test_module_calls_reuse_occurrence_context(self, space, monkeypatch):
+        w_receiver = space.execute('''
+          module SharedEntryContext
+            def f; proc { 1 }; end
+          end
+          class SharedEntryUser; include SharedEntryContext; end
+          return SharedEntryUser.new
+        ''')
+        first = space.send(w_receiver, 'f')
+        context = first.super_context
+        assert context.entry.w_module is self.find_const(space, 'SharedEntryContext')
+
+        def unexpected_context(self, owner, name, entry=None):
+            raise AssertionError('allocated super context during a warmed call')
+
+        monkeypatch.setattr(SuperContext, '__init__', unexpected_context)
+        for unused in range(2):
+            proc = space.send(w_receiver, 'f')
+            assert proc.super_context is context
+        # Invalidating lookup caches must still reuse the entry's context.
+        space.execute('module SharedEntryContext; def other; 1; end; end')
+        assert space.send(w_receiver, 'f').super_context is context
+
+    def test_module_context_cache_does_not_retain_including_class(self, space):
+        import gc
+        import weakref
+
+        w_mixin = space.execute('module CollectableContext; def f; 1; end; end; return CollectableContext')
+
+        def make_class():
+            w_class = space.send(space.w_class, 'new')
+            space.send(w_class, 'include', [w_mixin])
+            # Resolve without instantiating: the unrelated mapdict class-node
+            # cache strongly retains classes whose instances it has mapped.
+            context = w_mixin.find_method(space, 'f').super_context
+            w_class.resolve_super_context(context)
+            return weakref.ref(w_class)
+
+        ref = make_class()
+        gc.collect()
+        gc.collect()
+        assert ref() is None

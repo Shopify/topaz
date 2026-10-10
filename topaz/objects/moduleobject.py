@@ -86,7 +86,10 @@ class DefineMethodBlock(W_FunctionObject):
             context_owner = w_owner
             if context_owner is None and block.super_context is not None:
                 context_owner = block.super_context.w_owner
-            super_context = SuperContext(context_owner, name)
+            if context_owner is None:
+                super_context = SuperContext(None, name)
+            else:
+                super_context = context_owner.origin_entry.get_super_context(name)
         self.super_context = super_context
 
     def with_owner(self, w_owner):
@@ -101,12 +104,11 @@ class DefineMethodBlock(W_FunctionObject):
         return method
 
     def call(self, space, w_obj, args_w, block):
-        return self.call_with_super(space, w_obj, args_w, block, 0)
+        return self.call_with_super(space, w_obj, args_w, block, None)
 
-    def call_with_super(self, space, w_obj, args_w, block, occurrence):
+    def call_with_super(self, space, w_obj, args_w, block, entry):
         method_block = self.block.copy(space, w_self=w_obj, is_lambda=True)
-        method_block.super_context = self.super_context
-        method_block.super_occurrence = occurrence
+        method_block.super_context = self.super_context.resolve(space, w_obj, entry)
         # The body is a lambda: its own returns end at the interpreter that
         # runs it, and a return from a block the caller passed in (headed
         # for the caller's method) propagates through.
@@ -131,13 +133,13 @@ class DefineMethodMethod(W_FunctionObject):
         w_bound_method = space.send(self.w_unbound_method, "bind", [w_obj])
         return space.send(w_bound_method, "call", args_w, block)
 
-    def call_with_super(self, space, w_obj, args_w, block, occurrence):
+    def call_with_super(self, space, w_obj, args_w, block, entry):
         from topaz.objects.methodobject import W_MethodObject
 
         w_bound_method = space.send(self.w_unbound_method, "bind", [w_obj])
         assert isinstance(w_bound_method, W_MethodObject)
         return w_bound_method.w_function.call_with_super(
-            space, w_obj, args_w, block, occurrence)
+            space, w_obj, args_w, block, entry)
 
     def parameters(self, space):
         return space.send(self.w_unbound_method, "parameters")
@@ -191,6 +193,23 @@ class AncestorEntry(object):
 
     def __init__(self, w_module):
         self.w_module = w_module
+        self.context = None
+        self.named_contexts = {}
+
+    @jit.elidable
+    def get_super_context(self, name):
+        # Cache on the occurrence, never on the included module: otherwise
+        # a long-lived module would keep anonymous including classes alive.
+        if name is None:
+            if self.context is None:
+                self.context = SuperContext(self.w_module, None, self)
+            return self.context
+        try:
+            return self.named_contexts[name]
+        except KeyError:
+            context = SuperContext(self.w_module, name, self)
+            self.named_contexts[name] = context
+            return context
 
 
 def ancestor_entries(modules):
@@ -210,6 +229,9 @@ class W_ModuleObject(W_RootObject):
         self.version = VersionTag()
         self.method_cache = {}
         self.method_cache_state = -1
+        self.super_context_cache = {}
+        self.super_context_cache_version = None
+        self.super_context_cache_state = -1
         self.methods_w = {}
         self.constants_w = {}
         self.class_variables = CellDict()
@@ -234,6 +256,9 @@ class W_ModuleObject(W_RootObject):
         obj.version = copy.deepcopy(self.version, memo)
         obj.method_cache = {}
         obj.method_cache_state = -1
+        obj.super_context_cache = {}
+        obj.super_context_cache_version = None
+        obj.super_context_cache_state = -1
         obj.methods_w = copy.deepcopy(self.methods_w, memo)
         obj.constants_w = copy.deepcopy(self.constants_w, memo)
         obj.class_variables = copy.deepcopy(self.class_variables, memo)
@@ -362,56 +387,73 @@ class W_ModuleObject(W_RootObject):
     def find_local_method(self, space, name):
         return self._find_method_pure(space, name, self.version)
 
-    @jit.unroll_safe
-    def find_method_after(self, space, w_owner, name, occurrence=0):
-        method, next_occurrence = self.find_method_after_with_occurrence(
-            space, w_owner, name, occurrence)
-        return method
-
-    def find_method_after_with_occurrence(self, space, w_owner, name, occurrence):
-        """The next method and its owner's occurrence number for super.
-
-        The same module can occur more than once in an ancestor chain;
-        resume after the occurrence that supplied the calling method.
-        """
-        # The walk over ancestors() cannot be folded by the JIT directly:
-        # the module lists are quasi-immutable, but RPython drops the
-        # immutability of their items because ancestors() concatenates
-        # them in place, so each step was a residual _find_method_pure
-        # call with a dict lookup (62 calls for a 30-module chain, which
-        # ActiveRecord models have). Instead the whole walk is elidable on
-        # (class, owner, occurrence, name, class version, global state): the
-        # class version covers its own methods and ancestors, and every
-        # other module in the chain has descendants, so a change to it
-        # bumps method_cache_state.state.
-        return self._find_method_after_pure(
-            space, jit.promote(w_owner), name, self.version,
-            method_cache_state.state, jit.promote(occurrence))
+    def resolve_method_entry(self, w_owner, entry=None):
+        return self._resolve_method_entry_pure(
+            w_owner, entry, self.version, method_cache_state.state)
 
     @jit.elidable
-    def _find_method_after_pure(self, space, w_owner, name, version, state, occurrence):
-        ancestors = self.ancestors()
+    def _resolve_method_entry_pure(self, w_owner, entry, version, state):
+        entries = self.ancestor_entries()
+        if entry is not None:
+            for candidate in entries:
+                if candidate is entry:
+                    return entry
+        for candidate in entries:
+            if candidate.w_module is w_owner:
+                return candidate
+        return w_owner.origin_entry
+
+    def resolve_super_context(self, context):
+        return self._resolve_super_context_pure(
+            context, self.version, method_cache_state.state)
+
+    @jit.elidable
+    def _resolve_super_context_pure(self, context, version, state):
+        return self._resolve_super_context_cached(context, version, state)
+
+    @jit.dont_look_inside
+    def _resolve_super_context_cached(self, context, version, state):
+        if (self.super_context_cache_version is not version or
+                self.super_context_cache_state != state):
+            self.super_context_cache = {}
+            self.super_context_cache_version = version
+            self.super_context_cache_state = state
+        try:
+            return self.super_context_cache[context]
+        except KeyError:
+            entry = self._resolve_method_entry_pure(
+                context.w_owner, context.entry, version, state)
+            result = entry.get_super_context(context.name)
+            self.super_context_cache[context] = result
+            return result
+
+    def find_method_after(self, space, w_owner, name, entry=None):
+        method, next_entry = self.find_method_after_with_entry(
+            space, w_owner, name, entry)
+        return method
+
+    def find_method_after_with_entry(self, space, w_owner, name, entry):
+        # Version tags cover both local changes and changes in ancestors.
+        # Folding the whole walk avoids residual lookups for every ancestor.
+        return self._find_method_after_pure(
+            space, jit.promote(w_owner), name, self.version,
+            method_cache_state.state, jit.promote(entry))
+
+    @jit.elidable
+    def _find_method_after_pure(self, space, w_owner, name, version, state, entry):
         found = False
-        owner_occurrence = 0
-        for i in range(len(ancestors)):
-            w_mod = ancestors[i]
+        for candidate in self.ancestor_entries():
             if found:
-                method = w_mod.find_local_method(space, name)
+                method = candidate.w_module.find_local_method(space, name)
                 if method is not None:
                     if isinstance(method, UndefMethod):
-                        return None, 0
-                    next_occurrence = 0
-                    for j in range(i):
-                        if ancestors[j] is w_mod:
-                            next_occurrence += 1
-                    return method, next_occurrence
-            elif w_mod is w_owner:
-                if owner_occurrence == occurrence:
-                    found = True
-                owner_occurrence += 1
+                        return None, None
+                    return method, candidate
+            elif candidate is entry or (entry is None and candidate.w_module is w_owner):
+                found = True
         if not found:
-            return w_owner.find_method_super(space, name), 0
-        return None, 0
+            return w_owner.find_method_super(space, name), None
+        return None, None
 
     @jit.unroll_safe
     def find_method_super(self, space, name):

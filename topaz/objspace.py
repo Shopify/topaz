@@ -781,7 +781,10 @@ class ObjectSpace(object):
                     except:
                         caller.dropvaluesuntil(finaldepth)
                         raise
-                    frame.super_context = raw_method.super_context
+                    context = raw_method.super_context
+                    if context is not None:
+                        context = context.resolve(self, w_receiver)
+                    frame.super_context = context
                     for i in xrange(nargs):
                         pos = bc.arg_pos[i]
                         assert pos >= 0
@@ -814,15 +817,18 @@ class ObjectSpace(object):
         return error
 
     def send_super_from(self, w_owner, w_receiver, name, args_w, block=None,
-                        occurrence=0):
+                        context=None):
         """`super` in a method defined in w_owner: the next method in the
         receiver's ancestors."""
         w_cls = self.getclass(w_receiver)
-        raw_method, next_occurrence = w_cls.find_method_after_with_occurrence(
-            self, w_owner, name, occurrence)
+        entry = None
+        if context is not None:
+            entry = context.entry
+        raw_method, next_entry = w_cls.find_method_after_with_entry(
+            self, w_owner, name, entry)
         if raw_method is not None:
             return raw_method.call_with_super(
-                self, w_receiver, args_w, block, next_occurrence)
+                self, w_receiver, args_w, block, next_entry)
         return self._send_raw(
             name, raw_method, w_receiver, w_cls, args_w, block)
 
