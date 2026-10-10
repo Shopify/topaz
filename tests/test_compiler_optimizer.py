@@ -220,6 +220,34 @@ def test_skip_discard_keeps_other_incoming_values():
     assert not any(i.opcode == consts.LOAD_CONST for i in first.instrs)
 
 
+def test_skip_unused_constant_on_self_targeting_edge():
+    loop = block(instruction(consts.DISCARD_TOP),
+                 instruction(consts.LOAD_CONST, 0))
+    loop.instrs.append(instruction(consts.JUMP, 0, loop))
+    first = block(instruction(consts.LOAD_SELF),
+                  instruction(consts.JUMP, 0, loop))
+    ctx = CompilerContext(None, 'test', SymbolTable(), 'test.rb')
+    ctx.first_block = first
+    blocks = first.post_order()
+    assert ctx.analyze_unwind(blocks)[0] == 1
+
+    assert ctx.skip_unused_constants(blocks)
+    # The incoming value is still discarded, but the back edge no longer
+    # pushes a constant or returns to that discard.
+    assert first.instrs[-1].jump is loop
+    assert [i.opcode for i in loop.instrs] == [consts.DISCARD_TOP]
+    rest = loop.next_block
+    assert [i.opcode for i in rest.instrs] == [consts.JUMP]
+    assert rest.instrs[0].jump is rest
+    assert ctx.analyze_unwind(blocks)[0] == 1
+
+    ctx.optimize(blocks)
+    assert ctx.analyze_unwind(blocks)[0] == 1
+    assert [i.opcode for b in blocks for i in b.instrs] == [
+        consts.LOAD_SELF, consts.DISCARD_TOP, consts.JUMP]
+    assert not ctx.optimize(blocks)
+
+
 def test_optimizer_is_idempotent():
     end = block(instruction(consts.LOAD_SELF), instruction(consts.RETURN))
     middle = block(instruction(consts.JUMP, 0, end))

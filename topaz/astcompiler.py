@@ -291,13 +291,15 @@ class CompilerContext(object):
             if (not target.instrs or target.instrs[0].opcode != consts.DISCARD_TOP
                     or target.instrs[0].lineno != -1):
                 continue
+            # Remove the load before splitting: on a self-targeting edge,
+            # block and target share the instruction list being split.
+            del block.instrs[-2]
             rest = Block()
             rest.instrs = target.instrs[1:]
             rest.next_block = target.next_block
             target.instrs = target.instrs[:1]
             target.next_block = rest
             blocks.insert(blocks.index(target) + 1, rest)
-            del block.instrs[-2]
             jump.jump = rest
             changed = True
         return changed
