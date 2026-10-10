@@ -185,3 +185,151 @@ def test_fold_constant_condition(space, value, opcode):
     expected = consts.LOAD_SELF if truth == (opcode == consts.JUMP_IF_TRUE) else consts.LOAD_DEREF
     assert [i.opcode for b in blocks for i in b.instrs] == [expected, consts.RETURN]
 
+
+
+def test_unused_constant_across_jump_and_branch_inversion():
+    body = block(instruction(consts.DISCARD_TOP),
+                 instruction(consts.LOAD_SELF), instruction(consts.RETURN))
+    other = block(instruction(consts.LOAD_CONST, 1), instruction(consts.RETURN))
+    first = block(instruction(consts.LOAD_DEREF, 0),
+                  instruction(consts.JUMP_IF_FALSE, 0, other),
+                  instruction(consts.LOAD_CONST, 0),
+                  instruction(consts.JUMP, 0, body))
+    first.next_block = other
+    other.next_block = body
+    blocks = optimize(first)
+    assert [i.opcode for b in blocks for i in b.instrs] == [
+        consts.LOAD_DEREF, consts.JUMP_IF_TRUE,
+        consts.LOAD_CONST, consts.RETURN,
+        consts.LOAD_SELF, consts.RETURN]
+    assert first.instrs[1].jump.instrs[0].opcode == consts.LOAD_SELF
+
+
+def test_skip_discard_keeps_other_incoming_values():
+    join = block(instruction(consts.DISCARD_TOP),
+                 instruction(consts.LOAD_SELF), instruction(consts.RETURN))
+    first = block(instruction(consts.LOAD_SELF),
+                  instruction(consts.DUP_TOP),
+                  instruction(consts.JUMP_IF_TRUE, 0, join),
+                  instruction(consts.DISCARD_TOP),
+                  instruction(consts.LOAD_CONST, 0),
+                  instruction(consts.JUMP, 0, join))
+    optimize(first)
+    # The conditional edge still has a value to discard.
+    assert first.instrs[2].jump.instrs[0].opcode == consts.DISCARD_TOP
+    assert not any(i.opcode == consts.LOAD_CONST for i in first.instrs)
+
+
+def test_optimizer_is_idempotent():
+    end = block(instruction(consts.LOAD_SELF), instruction(consts.RETURN))
+    middle = block(instruction(consts.JUMP, 0, end))
+    first = block(instruction(consts.JUMP, 0, middle))
+    ctx = CompilerContext(None, 'test', SymbolTable(), 'test.rb')
+    ctx.first_block = first
+    blocks = first.post_order()
+    assert ctx.optimize(blocks)
+    assert not ctx.optimize(blocks)
+
+
+def compiled_instructions(code):
+    result = []
+    pc = 0
+    while pc < len(code.code):
+        opcode = ord(code.code[pc])
+        args = []
+        for i in range(consts.BYTECODE_NUM_ARGS[opcode]):
+            offset = pc + 1 + 2 * i
+            args.append(ord(code.code[offset]) | ord(code.code[offset + 1]) << 8)
+        result.append((pc, opcode, args))
+        pc += 1 + 2 * len(args)
+    return result
+
+
+def method_code(space, source):
+    from topaz.objects.codeobject import W_CodeObject
+    code = space.compile(source, 'optimizer.rb')
+    return [c for c in code.consts_w if isinstance(c, W_CodeObject)][0]
+
+
+def test_compile_guard(space):
+    code = method_code(space, 'def f(block); return 7 unless block; 42; end')
+    instrs = compiled_instructions(code)
+    assert [op for pc, op, args in instrs] == [
+        consts.LOAD_DEREF, consts.JUMP_IF_TRUE,
+        consts.LOAD_CONST, consts.RETURN,
+        consts.LOAD_CONST, consts.RETURN]
+    assert code.max_stackdepth == 1
+    assert len(code.code) == len(code.lineno_table)
+    assert space.int_w(space.execute('def f(block); return 7 unless block; 42; end; f(false)')) == 7
+    assert space.int_w(space.execute('f(true)')) == 42
+
+
+def test_compile_nested_jump_threading(space):
+    code = method_code(space, '''def f(a, b)
+      c = if a
+        if b; 1; else; 2; end
+      else
+        3
+      end
+      c
+    end''')
+    instrs = compiled_instructions(code)
+    by_pc = dict((pc, op) for pc, op, args in instrs)
+    assert any(op == consts.JUMP for pc, op, args in instrs)
+    for pc, op, args in instrs:
+        if op == consts.JUMP:
+            assert by_pc[args[0]] != consts.JUMP
+
+
+def test_compile_constant_loop_with_ensure_and_break(space):
+    source = '''def f(log)
+      while true
+        begin
+          break 42
+        ensure
+          log << 7
+        end
+      end
+    end'''
+    code = method_code(space, source)
+    assert consts.JUMP_IF_FALSE not in [op for pc, op, args in compiled_instructions(code)]
+    result = space.execute(source + '; log = []; [f(log), log]')
+    values = space.listview(result)
+    assert space.int_w(values[0]) == 42
+    assert [space.int_w(v) for v in space.listview(values[1])] == [7]
+
+
+def test_compile_default_entries_and_rescue(space):
+    source = '''def f(a = (raise("a") rescue 3), b = (raise("b") rescue 4), c: 5)
+      return [a, b, c] if a
+      nil
+    end'''
+    code = method_code(space, source)
+    starts = [pc for pc, op, args in compiled_instructions(code)]
+    assert all(pc in starts for pc in code.default_entry_pcs)
+    assert all(h.target_pc in starts for h in code.unwind_handlers)
+    result = space.execute(source + '; [f, f(8), f(8, 9, c: 10)]')
+    assert [[space.int_w(v) for v in space.listview(row)]
+            for row in space.listview(result)] == [[3, 4, 5], [8, 4, 5], [8, 9, 10]]
+
+
+def test_compile_empty_infinite_loop(space):
+    code = method_code(space, 'def f; while true; end; end')
+    instrs = compiled_instructions(code)
+    assert instrs[0] == (0, consts.JUMP, [0])
+    # Keep the unwind-only loop exit even though there is no normal exit.
+    assert code.unwind_handlers[0].target_pc in [pc for pc, op, args in instrs]
+
+
+def test_compile_keeps_distinct_source_lines(space):
+    # Bare literal nodes currently carry no source line; sends do.
+    code = method_code(space, 'def f\n  1.to_s\n  2.to_s\n  3.to_s\nend')
+    assert set([2, 3, 4]).issubset(set(code.lineno_table))
+
+
+def test_jump_to_return_on_another_line_is_not_inlined():
+    end = block(instruction(consts.RETURN, lineno=20))
+    first = block(instruction(consts.JUMP, 0, end, lineno=10))
+    first.jump_thread()
+    assert first.instrs[0].opcode == consts.JUMP
+    assert first.instrs[0].jump is end

@@ -149,6 +149,14 @@ class CompilerContext(object):
 
         blocks = self.first_block.post_order()
         depth, handlers = self.analyze_unwind(blocks)
+        if self.optimize(blocks):
+            # Validate the input graph before optimization (including dead
+            # constant branches), then recompute exact depths and handler IDs
+            # for the simplified graph. Scope markers have not been lowered.
+            for block in blocks:
+                for instr in block.instrs:
+                    instr.reachable = False
+            depth, handlers = self.analyze_unwind(blocks)
         self.lower_unwind(blocks)
         code, lineno_table = self.get_code_lineno_table(blocks)
         unwind_handlers, intervals = self.build_unwind_tables(blocks, handlers)
@@ -212,6 +220,8 @@ class CompilerContext(object):
                     changed = True
                 if self.optimize_local(block):
                     changed = True
+            if self.skip_unused_constants(blocks):
+                changed = True
             predecessors, removed = self.remove_unreachable(blocks)
             changed = changed or removed
             for block in blocks:
@@ -232,7 +242,24 @@ class CompilerContext(object):
                 if not block.instrs:
                     continue
                 last = block.instrs[-1]
-                if (last.opcode == consts.JUMP and last.jump is following and
+                # if L1; jump L2; L1: ... -> unless L2; L1: ...
+                if last.opcode == consts.JUMP and len(block.instrs) >= 2:
+                    branch = block.instrs[-2]
+                    if (following is not None and
+                            branch.opcode in (consts.JUMP_IF_TRUE, consts.JUMP_IF_FALSE)
+                            and branch.jump is following and
+                            (last.lineno == -1 or last.lineno == branch.lineno)):
+                        if branch.opcode == consts.JUMP_IF_TRUE:
+                            branch.opcode = consts.JUMP_IF_FALSE
+                        else:
+                            branch.opcode = consts.JUMP_IF_TRUE
+                        branch.jump = last.jump
+                        block.instrs.pop()
+                        block.next_block = following
+                        last = branch
+                        changed = True
+                if (following is not None and last.opcode == consts.JUMP and
+                        last.jump is following and
                         (last.lineno == -1 or
                          last.lineno == following.instrs[0].lineno)):
                     block.instrs.pop()
@@ -242,6 +269,38 @@ class CompilerContext(object):
                     following = block
             any_changed = any_changed or changed
         return any_changed
+
+    def skip_unused_constants(self, blocks):
+        # A statement-valued branch often ends with LOAD_CONST nil; JUMP to
+        # a shared DISCARD_TOP. Split the join so just this edge can bypass
+        # the discard; other incoming edges (including handlers/defaults)
+        # must still pop their value. Scope markers remain barriers.
+        changed = False
+        index = 0
+        while index < len(blocks):
+            block = blocks[index]
+            index += 1
+            if len(block.instrs) < 2:
+                continue
+            load = block.instrs[-2]
+            jump = block.instrs[-1]
+            if (load.opcode != consts.LOAD_CONST or jump.opcode != consts.JUMP
+                    or load.lineno != -1):
+                continue
+            target = jump.jump
+            if (not target.instrs or target.instrs[0].opcode != consts.DISCARD_TOP
+                    or target.instrs[0].lineno != -1):
+                continue
+            rest = Block()
+            rest.instrs = target.instrs[1:]
+            rest.next_block = target.next_block
+            target.instrs = target.instrs[:1]
+            target.next_block = rest
+            blocks.insert(blocks.index(target) + 1, rest)
+            del block.instrs[-2]
+            jump.jump = rest
+            changed = True
+        return changed
 
     def remove_unreachable(self, blocks):
         predecessors = {self.first_block: 1}
@@ -286,7 +345,8 @@ class CompilerContext(object):
         instrs = block.instrs
         index = 0
         while index + 1 < len(instrs):
-            load, following = instrs[index:index + 2]
+            load = instrs[index]
+            following = instrs[index + 1]
             if load.opcode == consts.LOAD_CONST:
                 if (following.opcode == consts.DISCARD_TOP and
                         self.can_remove(instrs, index, 2)):
@@ -599,7 +659,7 @@ class Block(object):
                 if dest is instr:
                     break
                 same_target_line = (
-                    dest.opcode == consts.JUMP and dest.jump.instrs and
+                    dest.opcode == consts.JUMP and len(dest.jump.instrs) > 0 and
                     dest.jump.instrs[0].lineno == dest.lineno)
                 if (dest.lineno != -1 and dest.lineno != instr.lineno and
                         not same_target_line):

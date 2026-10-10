@@ -125,7 +125,9 @@ def test_handler_only_reachable_by_unwind(space):
 
 def test_metadata_display(space):
     from tests.test_compiler import TestCompiler
-    code = space.compile('while false; nil; end', None)
+    # Use a dynamic condition: a constant-false loop has no live protected
+    # instructions after optimization, hence no unwind interval to display.
+    code = space.compile('while gets; nil; end', None)
     lines = TestCompiler().get_lines(code, include_unwind=True)
     assert any(line.startswith('HANDLER 0 kind=0') for line in lines)
     assert any(line.startswith('UNWIND [0, ') for line in lines)

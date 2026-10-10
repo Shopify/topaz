@@ -83,10 +83,6 @@ class TestCompiler(object):
 
     def test_multiple_statements(self, space):
         self.assert_compiles(space, "1; 2; 3", """
-        LOAD_CONST 0
-        DISCARD_TOP
-        LOAD_CONST 1
-        DISCARD_TOP
         LOAD_CONST 2
         RETURN
         """)
@@ -142,36 +138,21 @@ class TestCompiler(object):
 
     def test_if(self, space):
         self.assert_compiles(space, "if 3 then puts 2 end", """
-        LOAD_CONST 0
-        JUMP_IF_FALSE 18
         LOAD_SELF
         LOAD_CONST 1
         SEND 2 1
-        JUMP 21
-        LOAD_CONST 3
-
         RETURN
         """)
 
         self.assert_compiles(space, "x = if 3 then 2 end", """
-        LOAD_CONST 0
-        JUMP_IF_FALSE 12
         LOAD_CONST 1
-        JUMP 15
-        LOAD_CONST 2
         STORE_DEREF 0
-
         RETURN
         """)
 
         self.assert_compiles(space, "x = if 3; end", """
-        LOAD_CONST 0
-        JUMP_IF_FALSE 12
-        LOAD_CONST 1
-        JUMP 15
         LOAD_CONST 1
         STORE_DEREF 0
-
         RETURN
         """)
 
@@ -180,13 +161,12 @@ class TestCompiler(object):
         LOAD_CONST 0
         LOAD_CONST 1
         SEND 2 1
-        JUMP_IF_FALSE 20
+        JUMP_IF_FALSE 18
         LOAD_CONST 3
-        JUMP 29
+        RETURN
         LOAD_SELF
         LOAD_CONST 4
         SEND 5 1
-
         RETURN
         """)
 
@@ -196,26 +176,13 @@ class TestCompiler(object):
         end
         a
         """, """
-        LOAD_CONST 0
-        JUMP_IF_FALSE 12
-        LOAD_CONST 1
-        JUMP 18
-        LOAD_CONST 2
-        STORE_DEREF 0
-        DISCARD_TOP
         LOAD_DEREF 0
-
         RETURN
         """)
 
     def test_named_constants(self, space):
         bc = self.assert_compiles(space, "false; true; nil;", """
-        LOAD_CONST 0
-        DISCARD_TOP
-        LOAD_CONST 1
-        DISCARD_TOP
         LOAD_CONST 2
-
         RETURN
         """)
         assert bc.consts_w == [space.w_false, space.w_true, space.w_nil]
@@ -231,36 +198,25 @@ class TestCompiler(object):
 
     def test_while(self, space):
         self.assert_compiles(space, "while true do end", """
-        LOAD_CONST 0
-        JUMP_IF_FALSE 13
-        LOAD_CONST 1
-        DISCARD_TOP
         JUMP 0
-        LOAD_CONST 1
         RETURN
         """)
 
         self.assert_compiles(space, "while true do puts 5 end", """
-        LOAD_CONST 0
-        JUMP_IF_FALSE 19
         LOAD_SELF
         LOAD_CONST 1
         SEND 2 1
         DISCARD_TOP
         JUMP 0
-        LOAD_CONST 3
         RETURN
         """)
 
         self.assert_compiles(space, "puts 5 while true", """
-        LOAD_CONST 0
-        JUMP_IF_FALSE 19
         LOAD_SELF
         LOAD_CONST 1
         SEND 2 1
         DISCARD_TOP
         JUMP 0
-        LOAD_CONST 3
         RETURN
         """)
 
@@ -269,10 +225,7 @@ class TestCompiler(object):
         LOAD_CONST 0
         SEND 1 1
         DISCARD_TOP
-        LOAD_CONST 2
-        JUMP_IF_FALSE 19
         JUMP 0
-        LOAD_CONST 3
         RETURN
         """)
 
@@ -328,12 +281,7 @@ class TestCompiler(object):
 
     def test_until(self, space):
         self.assert_compiles(space, "until false do 5 end", """
-        LOAD_CONST 0
-        JUMP_IF_TRUE 13
-        LOAD_CONST 1
-        DISCARD_TOP
         JUMP 0
-        LOAD_CONST 2
         RETURN
         """)
 
@@ -1133,14 +1081,13 @@ class TestCompiler(object):
         LOAD_CONST 1
         LOAD_CONST 2
         SEND 3 1
-        JUMP 63
+        RETURN
         DUP_TOP
         LOAD_SCOPE
         LOAD_LOCAL_CONSTANT 4
         ROT_TWO
         SEND 5 1
-        JUMP_IF_TRUE 38
-        JUMP 60
+        JUMP_IF_FALSE 53
         DISCARD_TOP
         DISCARD_TOP
         LOAD_SELF
@@ -1150,9 +1097,8 @@ class TestCompiler(object):
         LOAD_DEREF 0
         STORE_GLOBAL 0
         DISCARD_TOP
-        JUMP 63
-        END_FINALLY 0
         RETURN
+        END_FINALLY 0
         """)
         self.assert_compiles(space, """
         begin
@@ -1167,14 +1113,13 @@ class TestCompiler(object):
         LOAD_CONST 1
         LOAD_CONST 2
         SEND 3 1
-        JUMP 65
+        RETURN
         DUP_TOP
         LOAD_SCOPE
         LOAD_LOCAL_CONSTANT 4
         ROT_TWO
         SEND 5 1
-        JUMP_IF_TRUE 38
-        JUMP 62
+        JUMP_IF_FALSE 55
         STORE_DEREF 1
         DISCARD_TOP
         DISCARD_TOP
@@ -1184,9 +1129,8 @@ class TestCompiler(object):
         LOAD_DEREF 0
         STORE_GLOBAL 0
         DISCARD_TOP
-        JUMP 65
-        END_FINALLY 0
         RETURN
+        END_FINALLY 0
         """)
 
         self.assert_compiles(space, """
@@ -1202,14 +1146,13 @@ class TestCompiler(object):
         LOAD_CONST 1
         LOAD_CONST 2
         SEND 3 1
-        JUMP 36
+        RETURN
         DISCARD_TOP
         DISCARD_TOP
         LOAD_CONST 4
         LOAD_DEREF 0
         STORE_GLOBAL 0
         DISCARD_TOP
-        JUMP 36
         RETURN
         """)
         self.assert_compiles(space, """
@@ -1253,12 +1196,11 @@ class TestCompiler(object):
         LOAD_CONST 0
         LOAD_CONST 0
         LOAD_CONST 0
-        LOAD_CONST 0
-        DISCARD_TOP
         END_FINALLY 0
         RETURN
         """)
-        assert bc.max_stackdepth == 4
+        # The unused nil in the ensure body no longer needs a stack slot.
+        assert bc.max_stackdepth == 3
 
     def test_block_argument(self, space):
         bc = self.assert_compiles(space, """
@@ -1549,23 +1491,20 @@ class TestCompiler(object):
         LOAD_CONST 0
         ROT_TWO
         SEND 1 1
-        JUMP_IF_TRUE 17
-        JUMP 24
+        JUMP_IF_FALSE 21
         DISCARD_TOP
         LOAD_CONST 2
-        JUMP 49
+        JUMP 43
         DUP_TOP
         LOAD_SELF
         ROT_TWO
         SEND 1 1
-        JUMP_IF_TRUE 38
-        JUMP 45
+        JUMP_IF_FALSE 39
         DISCARD_TOP
         LOAD_CONST 3
-        JUMP 49
+        JUMP 43
         DISCARD_TOP
         LOAD_CONST 4
-
         RETURN
         """)
 
@@ -1580,19 +1519,17 @@ class TestCompiler(object):
         LOAD_CONST 1
         ROT_TWO
         SEND 2 1
-        JUMP_IF_TRUE 32
+        JUMP_IF_TRUE 29
         DUP_TOP
         LOAD_CONST 3
         ROT_TWO
         SEND 2 1
-        JUMP_IF_TRUE 32
-        JUMP 39
+        JUMP_IF_FALSE 36
         DISCARD_TOP
         LOAD_CONST 4
-        JUMP 43
+        JUMP 40
         DISCARD_TOP
         LOAD_CONST 5
-
         RETURN
         """)
 
@@ -1944,11 +1881,8 @@ class TestCompiler(object):
             2 + 2
         end
         """, """
-        LOAD_CONST 0
-        JUMP_IF_FALSE 12
         LOAD_CONST 1
         CONTINUE_LOOP 0
-        LOAD_CONST 1
         RETURN
         """)
 
@@ -1958,11 +1892,8 @@ class TestCompiler(object):
             break 5
         end
         """, """
-        LOAD_CONST 0
-        JUMP_IF_FALSE 10
         LOAD_CONST 1
         BREAK_LOOP
-        LOAD_CONST 2
         RETURN
         """)
 
