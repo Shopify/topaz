@@ -1,3 +1,9 @@
+Note
+====
+
+This should be considered an experimental project, not a production-ready Ruby
+implementation.
+
 Topaz
 =====
 
