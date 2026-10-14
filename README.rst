@@ -1,8 +1,8 @@
 Note
 ====
 
-This should be considered an experimental project, not a production-ready Ruby
-implementation.
+This patch series should be considered an experimental project, not a production-ready Ruby
+implementation. Please see the original `Topaz repository`_ for more information.
 
 Topaz
 =====
@@ -146,3 +146,4 @@ longer loops and also require samples from JIT-compiled Ruby code::
 
 .. _`PyPy`: https://github.com/pypy/pypy
 .. _`Prism`: https://github.com/ruby/prism
+.. _`Topaz repository`: https://github.com/topazproject/topaz
