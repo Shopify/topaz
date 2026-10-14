@@ -2,15 +2,5 @@
 Contributing to Topaz
 ======================
 
-As an open source project, Topaz welcomes contributions of many forms.
-
-Examples of contributions include:
-
-* Code patches
-* Documentation improvements
-* Bug reports and patch reviews
-
-Extensive contribution guidelines are available in the repository at
-``docs/contributing.rst``, or online at:
-
-http://docs.topazruby.com/en/latest/contributing/
+This repository is closed for contributions; it is used as an experiment.
+Please feel free to poke around, though.
